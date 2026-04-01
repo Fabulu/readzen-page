@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zen</title>
+    <meta name="description" content="A desktop workspace for reading, translating, and researching Chinese Zen literature.">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+    <!-- Landing page (default view) -->
+    <div id="landing">
+        <div class="container">
+
+            <section class="hero">
+                <h1 class="hero-title">Zen</h1>
+                <p class="hero-tagline">A desktop workspace for Chinese Zen literature. Read, translate, annotate, research, share.</p>
+            </section>
+
+            <div class="sep"></div>
+
+            <section class="download">
+                <h2>Get Zen</h2>
+                <a class="download-link" href="https://github.com/Fabulu/CBETA-Translator/releases">Download</a>
+                <p class="download-note">Available for Windows, Linux, and macOS</p>
+            </section>
+
+            <div class="sep"></div>
+
+            <section class="about">
+                <p>Zen is a free desktop tool for working with the Chinese Buddhist canon. It pairs original texts with side-by-side translation, and provides translation memory, terminology management, tagging, scholar collections, full-text search, and community sharing &mdash; everything needed to move from first reading to finished translation in one place.</p>
+            </section>
+
+        </div>
+    </div>
+
+    <!-- Passage card (shown when URL contains a file ID) -->
+    <div id="passage" style="display: none;">
+        <div class="container">
+
+            <section class="hero">
+                <h1 class="hero-title">Zen</h1>
+            </section>
+
+            <div class="passage-card">
+                <p class="passage-status">Opening in Zen<span class="passage-dots"><span>.</span><span>.</span><span>.</span></span></p>
+                <p class="passage-file-id" id="passage-file-id"></p>
+                <p class="passage-range" id="passage-range"></p>
+
+                <div class="passage-fallback" id="passage-fallback">
+                    <p>If nothing happens, you may need the desktop app.</p>
+                    <a class="download-link" href="https://github.com/Fabulu/CBETA-Translator/releases">Download Zen</a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

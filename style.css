@@ -1,0 +1,227 @@
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg: #0a0a0a;
+    --text: #e8e0d4;
+    --accent: #c4a35a;
+    --muted: #7a7268;
+    --card-bg: rgba(255, 255, 255, 0.04);
+    --card-border: rgba(255, 255, 255, 0.08);
+    --serif: Georgia, 'Noto Serif', 'Times New Roman', Times, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: Consolas, 'Fira Code', 'SF Mono', Monaco, monospace;
+}
+
+html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    background: var(--bg);
+    background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(30, 28, 25, 0.5) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 30%, rgba(25, 23, 20, 0.4) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 90%, rgba(28, 25, 22, 0.3) 0%, transparent 55%);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+}
+
+/* ── Hero ── */
+
+.hero {
+    padding: 8rem 0 4rem;
+    text-align: center;
+}
+
+.hero-title {
+    font-family: var(--serif);
+    font-size: 4.5rem;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    margin-bottom: 1.25rem;
+}
+
+.hero-tagline {
+    font-family: var(--serif);
+    font-size: 1.15rem;
+    font-weight: 400;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+    max-width: 28em;
+    margin: 0 auto;
+}
+
+/* ── Passage Card ── */
+
+.passage-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 2.5rem 2rem;
+    margin: 3rem 0;
+    text-align: center;
+}
+
+.passage-status {
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin-bottom: 1.5rem;
+    letter-spacing: 0.03em;
+}
+
+.passage-dots {
+    display: inline;
+}
+
+.passage-file-id {
+    font-family: var(--mono);
+    font-size: 1.5rem;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+}
+
+.passage-range {
+    font-family: var(--mono);
+    font-size: 1rem;
+    color: var(--muted);
+    margin-bottom: 2rem;
+}
+
+.passage-fallback {
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    margin-top: 1.5rem;
+}
+
+.passage-fallback.visible {
+    opacity: 1;
+}
+
+.passage-fallback p {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 1rem;
+}
+
+/* ── Download Section ── */
+
+.download {
+    padding: 3rem 0;
+    text-align: center;
+}
+
+.download h2 {
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--text);
+    margin-bottom: 1.25rem;
+    letter-spacing: 0.04em;
+}
+
+.download-link {
+    display: inline-block;
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 1rem;
+    padding: 0.65rem 2rem;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    transition: background 0.25s ease, color 0.25s ease;
+    letter-spacing: 0.02em;
+}
+
+.download-link:hover {
+    background: var(--accent);
+    color: var(--bg);
+}
+
+.download-note {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 1rem;
+}
+
+/* ── About ── */
+
+.about {
+    padding: 3rem 0 6rem;
+    text-align: center;
+}
+
+.about p {
+    font-family: var(--serif);
+    font-size: 0.95rem;
+    line-height: 1.8;
+    color: var(--muted);
+    max-width: 32em;
+    margin: 0 auto;
+}
+
+/* ── Separator ── */
+
+.sep {
+    width: 2rem;
+    height: 1px;
+    background: var(--card-border);
+    margin: 0 auto;
+}
+
+/* ── Dot animation ── */
+
+@keyframes dot-pulse {
+    0%, 20% { opacity: 0; }
+    40% { opacity: 1; }
+    60%, 100% { opacity: 0; }
+}
+
+.passage-dots span {
+    animation: dot-pulse 1.5s infinite;
+}
+
+.passage-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.passage-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 480px) {
+    .hero {
+        padding: 5rem 0 3rem;
+    }
+
+    .hero-title {
+        font-size: 3rem;
+    }
+
+    .hero-tagline {
+        font-size: 1rem;
+    }
+
+    .passage-card {
+        padding: 2rem 1.25rem;
+    }
+
+    .passage-file-id {
+        font-size: 1.25rem;
+    }
+}
