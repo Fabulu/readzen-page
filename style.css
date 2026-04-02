@@ -74,7 +74,7 @@ body::after {
 /* ━━ Hero ━━ */
 
 .hero {
-    padding: 10rem 0 3rem;
+    padding: 5rem 0 3rem;
     text-align: center;
     position: relative;
 }
@@ -337,7 +337,7 @@ body::after {
 /* ━━ Responsive ━━ */
 
 @media (max-width: 480px) {
-    .hero { padding: 6rem 0 2rem; }
+    .hero { padding: 3rem 0 2rem; }
     .hero--compact { padding: 4rem 0 1.5rem; }
     .hero-title { font-size: 3.5rem; }
     .hero-sub { font-size: 0.75rem; }
