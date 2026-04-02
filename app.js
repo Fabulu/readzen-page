@@ -102,7 +102,7 @@
         var passage = parsePathname();
         if (passage) {
             showPassageCard(passage);
-            document.title = 'Zen \u00B7 ' + passage.fileId;
+            document.title = 'Read Zen \u00B7 ' + passage.fileId;
         }
     }
 
