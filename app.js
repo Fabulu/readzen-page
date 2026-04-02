@@ -23,7 +23,11 @@
 
     /** Parse the current URL path for a passage link. */
     function parsePathname() {
-        var parts = window.location.pathname.split('/').filter(Boolean);
+        // Check hash first (SPA fallback from 404.html: /#/T48n2005/...)
+        var path = window.location.hash.length > 1
+            ? window.location.hash.substring(1)
+            : window.location.pathname;
+        var parts = path.split('/').filter(Boolean);
         if (parts.length === 0) return null;
 
         var fileId = parts[0];
