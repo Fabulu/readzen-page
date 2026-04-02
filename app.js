@@ -23,23 +23,37 @@
 
     /** Parse the current URL path for a passage link. */
     function parsePathname() {
-        // Check hash first (SPA fallback from 404.html: /#/T48n2005/...)
-        var path = window.location.hash.length > 1
+        // Check hash first (SPA fallback from 404.html: /#/T48n2005/0292b29?side=Translated)
+        var raw = window.location.hash.length > 1
             ? window.location.hash.substring(1)
-            : window.location.pathname;
-        var parts = path.split('/').filter(Boolean);
+            : window.location.pathname + window.location.search;
+
+        // Split path from query string (query may be embedded in hash)
+        var qIdx = raw.indexOf('?');
+        var pathPart = qIdx >= 0 ? raw.substring(0, qIdx) : raw;
+        var queryPart = qIdx >= 0 ? raw.substring(qIdx + 1) : window.location.search.substring(1);
+
+        var parts = pathPart.split('/').filter(Boolean);
         if (parts.length === 0) return null;
 
         var fileId = parts[0];
         if (!FILE_ID_PATTERN.test(fileId)) return null;
 
         var range = parts[1] || null;
-        var params = new URLSearchParams(window.location.search);
+        var params = new URLSearchParams(queryPart);
+
+        // Side can be in path (/en or /tran) or query (?side=Translated)
+        var side = params.get('side') || null;
+        if (!side && parts.length >= 3) {
+            var sideHint = parts[parts.length - 1].toLowerCase();
+            if (sideHint === 'en' || sideHint === 'translated' || sideHint === 'tran')
+                side = 'Translated';
+        }
 
         return {
             fileId: fileId,
             range: range,
-            side: params.get('side'),
+            side: side,
             highlight: params.get('highlight')
         };
     }
