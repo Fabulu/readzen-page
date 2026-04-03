@@ -100,14 +100,31 @@
             rangeEl.style.display = 'none';
         }
 
-        // Attempt launch
+        // Attempt launch via zen:// protocol
         var zenUri = buildZenUri(passage);
-        if (zenUri) {
-            window.location.href = zenUri;
-        }
+        if (!zenUri) return;
 
-        // Show fallback after delay
+        // Track whether the app opened by watching for window blur
+        var appDetected = false;
+        function onBlur() {
+            appDetected = true;
+            window.removeEventListener('blur', onBlur);
+            // App opened — update status and try to close this tab
+            var action = document.getElementById('passage-action');
+            if (action) {
+                action.innerHTML = '<p class="passage-status">Opened in Read Zen</p>';
+            }
+            // Auto-close after a brief moment (only works if JS opened the tab)
+            setTimeout(function () { window.close(); }, 800);
+        }
+        window.addEventListener('blur', onBlur);
+
+        window.location.href = zenUri;
+
+        // If app didn't open within the delay, show download fallback
         setTimeout(function () {
+            window.removeEventListener('blur', onBlur);
+            if (appDetected) return;
             var action = document.getElementById('passage-action');
             var fallback = document.getElementById('passage-fallback');
             if (action) action.style.display = 'none';
