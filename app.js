@@ -104,26 +104,53 @@
         var zenUri = buildZenUri(passage);
         if (!zenUri) return;
 
-        // Track whether the app opened by watching for window blur
+        // Detect whether the app opened using multiple signals:
+        // 1. visibilitychange — fires when OS switches to the app
+        // 2. blur — fires when browser window loses focus
+        // 3. pagehide — some browsers fire this instead
         var appDetected = false;
-        function onBlur() {
+        var launchTime = Date.now();
+
+        function onAppDetected() {
+            // Ignore spurious events before launch had time to propagate
+            if (Date.now() - launchTime < 200) return;
+            if (appDetected) return;
             appDetected = true;
-            window.removeEventListener('blur', onBlur);
-            // App opened — update status and try to close this tab
+            cleanup();
+
             var action = document.getElementById('passage-action');
             if (action) {
                 action.innerHTML = '<p class="passage-status">Opened in Read Zen</p>';
             }
-            // Auto-close after a brief moment (only works if JS opened the tab)
-            setTimeout(function () { window.close(); }, 800);
+            // Try auto-close (only works if JS opened the tab or user allows)
+            setTimeout(function () { window.close(); }, 600);
         }
-        window.addEventListener('blur', onBlur);
 
-        window.location.href = zenUri;
+        function onVisChange() {
+            if (document.hidden) onAppDetected();
+        }
+
+        function cleanup() {
+            document.removeEventListener('visibilitychange', onVisChange);
+            window.removeEventListener('blur', onAppDetected);
+        }
+
+        document.addEventListener('visibilitychange', onVisChange);
+        window.addEventListener('blur', onAppDetected);
+
+        // Use an iframe to trigger the protocol — more reliable than
+        // window.location.href which can cause browser navigation errors
+        var iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = zenUri;
+        document.body.appendChild(iframe);
+        setTimeout(function () {
+            try { document.body.removeChild(iframe); } catch (e) {}
+        }, 500);
 
         // If app didn't open within the delay, show download fallback
         setTimeout(function () {
-            window.removeEventListener('blur', onBlur);
+            cleanup();
             if (appDetected) return;
             var action = document.getElementById('passage-action');
             var fallback = document.getElementById('passage-fallback');
