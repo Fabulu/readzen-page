@@ -1,118 +1,130 @@
 (function () {
     'use strict';
 
-    // CBETA file IDs: letters + digits + 'n' + digits, optional suffix (A, B)
     var FILE_ID_PATTERN = /^[A-Za-z]{1,3}\d{1,4}n[a-z]?\d{1,5}[A-Za-z]?$/;
-    var RELEASES_URL = 'https://github.com/Fabulu/CBETA-Translator/releases';
+    var RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
     var FALLBACK_DELAY = 2500;
 
-    /**
-     * Convert a file ID like "T48n2005" to a full CBETA path.
-     * T48n2005 -> T/T48/T48n2005.xml
-     * X63n1217 -> X/X63/X63n1217.xml
-     * GA000na001 -> GA/GA000/GA000na001.xml
-     */
-    function fileIdToPath(fileId) {
-        var nIdx = fileId.indexOf('n');
-        if (nIdx < 1) return null;
-        var volume = fileId.substring(0, nIdx);
-        var canon = volume.replace(/[0-9]/g, '');
-        if (!canon) return null;
-        return canon + '/' + volume + '/' + fileId + '.xml';
-    }
-
-    /** Parse the current URL path for a passage link. */
-    function parsePathname() {
-        // Check hash first (SPA fallback from 404.html: /#/T48n2005/0292b29?side=Translated)
+    function getRawRoute() {
         var raw = window.location.hash.length > 1
             ? window.location.hash.substring(1)
             : window.location.pathname + window.location.search;
 
-        // Split path from query string (query may be embedded in hash)
-        var qIdx = raw.indexOf('?');
-        var pathPart = qIdx >= 0 ? raw.substring(0, qIdx) : raw;
-        var queryPart = qIdx >= 0 ? raw.substring(qIdx + 1) : window.location.search.substring(1);
+        if (!raw) return '';
+        if (raw[0] === '/') raw = raw.substring(1);
+        return raw;
+    }
 
-        var parts = pathPart.split('/').filter(Boolean);
-        if (parts.length === 0) return null;
-
-        var fileId = parts[0];
-        if (!FILE_ID_PATTERN.test(fileId)) return null;
-
-        var range = parts[1] || null;
-        var params = new URLSearchParams(queryPart);
-
-        // Side can be in path (/en or /tran) or query (?side=Translated)
-        var side = params.get('side') || null;
-        if (!side && parts.length >= 3) {
-            var sideHint = parts[parts.length - 1].toLowerCase();
-            if (sideHint === 'en' || sideHint === 'translated' || sideHint === 'tran')
-                side = 'Translated';
-        }
-
+    function splitRoute(rawRoute) {
+        var qIdx = rawRoute.indexOf('?');
         return {
-            fileId: fileId,
-            range: range,
-            side: side,
-            highlight: params.get('highlight')
+            pathPart: qIdx >= 0 ? rawRoute.substring(0, qIdx) : rawRoute,
+            queryPart: qIdx >= 0 ? rawRoute.substring(qIdx + 1) : ''
         };
     }
 
-    /** Build a zen:// URI from parsed passage data. */
-    function buildZenUri(passage) {
-        var fullPath = fileIdToPath(passage.fileId);
-        if (!fullPath) return null;
+    function parseRoute(rawRoute) {
+        if (!rawRoute) return null;
 
-        var uri = 'zen://' + fullPath;
-        var q = [];
+        var pieces = splitRoute(rawRoute);
+        var parts = pieces.pathPart.split('/').filter(Boolean);
+        if (parts.length === 0) return null;
 
-        if (passage.range) {
-            var bounds = passage.range.split('-');
-            q.push('from=' + encodeURIComponent(bounds[0]));
-            if (bounds.length > 1 && bounds[1]) {
-                q.push('to=' + encodeURIComponent(bounds[1]));
-            }
+        var first = parts[0];
+        if (FILE_ID_PATTERN.test(first)) {
+            return {
+                kind: 'passage',
+                title: first,
+                subtitle: parts[1] ? parts[1] : 'Passage link',
+                rawRoute: rawRoute
+            };
         }
 
-        if (passage.side) q.push('side=' + encodeURIComponent(passage.side));
-        if (passage.highlight) q.push('highlight=' + encodeURIComponent(passage.highlight));
-        if (q.length > 0) uri += '?' + q.join('&');
-
-        return uri;
+        switch (first.toLowerCase()) {
+            case 'search':
+                return {
+                    kind: 'search',
+                    title: 'Search',
+                    subtitle: decodeURIComponent((new URLSearchParams(pieces.queryPart)).get('q') || 'Saved search'),
+                    rawRoute: rawRoute
+                };
+            case 'dict':
+            case 'term':
+                return {
+                    kind: 'dictionary',
+                    title: 'Dictionary',
+                    subtitle: parts[1] ? decodeURIComponent(parts[1]) : 'Dictionary link',
+                    rawRoute: rawRoute
+                };
+            case 'scholar':
+                return {
+                    kind: 'scholar',
+                    title: 'Scholar',
+                    subtitle: parts[1] ? decodeURIComponent(parts[1]) : 'Scholar link',
+                    rawRoute: rawRoute
+                };
+            case 'tags':
+                return {
+                    kind: 'tags',
+                    title: 'Tags',
+                    subtitle: parts[1] ? decodeURIComponent(parts[1]) : 'Tag link',
+                    rawRoute: rawRoute
+                };
+            case 'master':
+                return {
+                    kind: 'master',
+                    title: 'Zen Master',
+                    subtitle: parts[1] ? decodeURIComponent(parts[1]) : 'Zen master link',
+                    rawRoute: rawRoute
+                };
+            case 'compare':
+                return {
+                    kind: 'compare',
+                    title: 'Compare',
+                    subtitle: parts[1] ? decodeURIComponent(parts[1]) : 'Comparison link',
+                    rawRoute: rawRoute
+                };
+            default:
+                return null;
+        }
     }
 
-    /** Show the passage card and attempt to launch the app. */
-    function showPassageCard(passage) {
+    function buildZenUri(route) {
+        if (!route || !route.rawRoute) return null;
+        return 'zen://' + route.rawRoute.replace(/^\/+/, '');
+    }
+
+    function showRouteCard(route) {
         document.getElementById('landing').style.display = 'none';
         document.getElementById('passage').style.display = 'block';
 
-        // File ID display
-        document.getElementById('passage-file-id').textContent = passage.fileId;
-
-        // Range display
-        var rangeEl = document.getElementById('passage-range');
-        if (passage.range) {
-            var bounds = passage.range.split('-');
-            rangeEl.textContent = bounds.length === 2
-                ? bounds[0] + ' \u2013 ' + bounds[1]
-                : bounds[0];
-        } else {
-            rangeEl.style.display = 'none';
+        var label = document.getElementById('passage-label');
+        if (label) {
+            label.textContent = route.kind === 'passage'
+                ? 'Someone shared a passage with you'
+                : 'Someone shared a Read Zen link with you';
         }
 
-        // Attempt launch via zen:// protocol
-        var zenUri = buildZenUri(passage);
+        var fileEl = document.getElementById('passage-file-id');
+        if (fileEl) fileEl.textContent = route.title;
+
+        var rangeEl = document.getElementById('passage-range');
+        if (rangeEl) {
+            if (route.subtitle) {
+                rangeEl.style.display = '';
+                rangeEl.textContent = route.subtitle;
+            } else {
+                rangeEl.style.display = 'none';
+            }
+        }
+
+        var zenUri = buildZenUri(route);
         if (!zenUri) return;
 
-        // Detect whether the app opened using multiple signals:
-        // 1. visibilitychange — fires when OS switches to the app
-        // 2. blur — fires when browser window loses focus
-        // 3. pagehide — some browsers fire this instead
         var appDetected = false;
         var launchTime = Date.now();
 
         function onAppDetected() {
-            // Ignore spurious events before launch had time to propagate
             if (Date.now() - launchTime < 200) return;
             if (appDetected) return;
             appDetected = true;
@@ -122,7 +134,6 @@
             if (action) {
                 action.innerHTML = '<p class="passage-status">Opened in Read Zen</p>';
             }
-            // Try auto-close (only works if JS opened the tab or user allows)
             setTimeout(function () { window.close(); }, 600);
         }
 
@@ -138,8 +149,6 @@
         document.addEventListener('visibilitychange', onVisChange);
         window.addEventListener('blur', onAppDetected);
 
-        // Use an iframe to trigger the protocol — more reliable than
-        // window.location.href which can cause browser navigation errors
         var iframe = document.createElement('iframe');
         iframe.style.display = 'none';
         iframe.src = zenUri;
@@ -148,7 +157,6 @@
             try { document.body.removeChild(iframe); } catch (e) {}
         }, 500);
 
-        // If app didn't open within the delay, show download fallback
         setTimeout(function () {
             cleanup();
             if (appDetected) return;
@@ -159,12 +167,11 @@
         }, FALLBACK_DELAY);
     }
 
-    /** Init: check URL and either show passage card or landing page. */
     function init() {
-        var passage = parsePathname();
-        if (passage) {
-            showPassageCard(passage);
-            document.title = 'Read Zen \u00B7 ' + passage.fileId;
+        var route = parseRoute(getRawRoute());
+        if (route) {
+            showRouteCard(route);
+            document.title = 'Read Zen � ' + route.title;
         }
     }
 
