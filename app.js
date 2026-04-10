@@ -1,183 +1,206 @@
-(function () {
-    'use strict';
+// app.js
+// Bootstrap. Parses the route, picks a view, mounts the shell, and — for
+// kinds that want app-first handoff — fires the `zen://` deep link via a
+// hidden iframe and waits 1.8s to see if the desktop app takes over.
+//
+// ES module. Loaded with <script type="module"> in index.html.
 
-    var FILE_ID_PATTERN = /^[A-Za-z]{1,3}\d{1,4}n[a-z]?\d{1,5}[A-Za-z]?$/;
-    var RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
-    var FALLBACK_DELAY = 2500;
+import { getRawRoute, parseRoute, buildZenUri } from './lib/route.js';
+import { escapeHtml } from './lib/format.js';
+import { mountShell } from './views/shell.js';
+import * as landing from './views/landing.js';
+import * as passage from './views/passage.js';
+import * as dictionary from './views/dictionary.js';
+import * as termbase from './views/termbase.js';
+import * as master from './views/master.js';
+import * as tags from './views/tags.js';
+import * as scholar from './views/scholar.js';
+import * as search from './views/search.js';
+import * as compare from './views/compare.js';
 
-    function getRawRoute() {
-        var raw = window.location.hash.length > 1
-            ? window.location.hash.substring(1)
-            : window.location.pathname + window.location.search;
+// Lookup views share a common contract: instant render, no app-first race.
+// They're dispatched before the placeholder path in `init` below.
+const LOOKUP_VIEWS = [dictionary, termbase, master, tags, scholar, search];
 
-        if (!raw) return '';
-        if (raw[0] === '/') raw = raw.substring(1);
-        return raw;
+const DESKTOP_FALLBACK_DELAY = 1800;
+const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
+
+/**
+ * Mount the correct view for the current hash and wire the app-first race.
+ */
+async function init() {
+    const root = document.getElementById('app');
+    if (!root) return;
+
+    const rawRoute = getRawRoute();
+    const route = parseRoute(rawRoute);
+    const shell = mountShell(root, route);
+
+    // No route → landing.
+    if (landing.match(route)) {
+        landing.render(route, shell.mount, shell);
+        return;
     }
 
-    function splitRoute(rawRoute) {
-        var qIdx = rawRoute.indexOf('?');
-        return {
-            pathPart: qIdx >= 0 ? rawRoute.substring(0, qIdx) : rawRoute,
-            queryPart: qIdx >= 0 ? rawRoute.substring(qIdx + 1) : ''
-        };
-    }
-
-    function parseRoute(rawRoute) {
-        if (!rawRoute) return null;
-
-        var pieces = splitRoute(rawRoute);
-        var parts = pieces.pathPart.split('/').filter(Boolean);
-        if (parts.length === 0) return null;
-
-        var first = parts[0];
-        if (FILE_ID_PATTERN.test(first)) {
-            return {
-                kind: 'passage',
-                title: first,
-                subtitle: parts[1] ? parts[1] : 'Passage link',
-                rawRoute: rawRoute
-            };
-        }
-
-        switch (first.toLowerCase()) {
-            case 'search':
-                return {
-                    kind: 'search',
-                    title: 'Search',
-                    subtitle: decodeURIComponent((new URLSearchParams(pieces.queryPart)).get('q') || 'Saved search'),
-                    rawRoute: rawRoute
-                };
-            case 'dict':
-            case 'term':
-                return {
-                    kind: 'dictionary',
-                    title: 'Dictionary',
-                    subtitle: parts[1] ? decodeURIComponent(parts[1]) : 'Dictionary link',
-                    rawRoute: rawRoute
-                };
-            case 'scholar':
-                return {
-                    kind: 'scholar',
-                    title: 'Scholar',
-                    subtitle: parts[1] ? decodeURIComponent(parts[1]) : 'Scholar link',
-                    rawRoute: rawRoute
-                };
-            case 'tags':
-                return {
-                    kind: 'tags',
-                    title: 'Tags',
-                    subtitle: parts[1] ? decodeURIComponent(parts[1]) : 'Tag link',
-                    rawRoute: rawRoute
-                };
-            case 'master':
-                return {
-                    kind: 'master',
-                    title: 'Zen Master',
-                    subtitle: parts[1] ? decodeURIComponent(parts[1]) : 'Zen master link',
-                    rawRoute: rawRoute
-                };
-            case 'compare':
-                return {
-                    kind: 'compare',
-                    title: 'Compare',
-                    subtitle: parts[1] ? decodeURIComponent(parts[1]) : 'Comparison link',
-                    rawRoute: rawRoute
-                };
-            default:
-                return null;
-        }
-    }
-
-    function buildZenUri(route) {
-        if (!route || !route.rawRoute) return null;
-        return 'zen://' + route.rawRoute.replace(/^\/+/, '');
-    }
-
-    function showRouteCard(route) {
-        document.getElementById('landing').style.display = 'none';
-        document.getElementById('passage').style.display = 'block';
-
-        var label = document.getElementById('passage-label');
-        if (label) {
-            label.textContent = route.kind === 'passage'
-                ? 'Someone shared a passage with you'
-                : 'Someone shared a Read Zen link with you';
-        }
-
-        var fileEl = document.getElementById('passage-file-id');
-        if (fileEl) fileEl.textContent = route.title;
-
-        var rangeEl = document.getElementById('passage-range');
-        if (rangeEl) {
-            if (route.subtitle) {
-                rangeEl.style.display = '';
-                rangeEl.textContent = route.subtitle;
-            } else {
-                rangeEl.style.display = 'none';
+    // Lookup views (dictionary / termbase / master): instant render, no race.
+    for (const view of LOOKUP_VIEWS) {
+        if (view.match(route)) {
+            try {
+                await view.render(route, shell.mount, shell);
+            } catch (error) {
+                shell.showError('Lookup failed', error && error.message || 'Unknown error.');
             }
+            return;
         }
+    }
 
-        var zenUri = buildZenUri(route);
-        if (!zenUri) return;
+    // Passage → app-first race then render the preview.
+    if (passage.match(route)) {
+        shell.setStatus(
+            'Opening Read Zen…',
+            'Trying the desktop app first. If nothing opens, this page will fall back to a limited preview.',
+            false
+        );
 
-        var appDetected = false;
-        var launchTime = Date.now();
-
-        function onAppDetected() {
-            if (Date.now() - launchTime < 200) return;
-            if (appDetected) return;
-            appDetected = true;
-            cleanup();
-
-            var action = document.getElementById('passage-action');
-            if (action) {
-                action.innerHTML = '<p class="passage-status">Opened in Read Zen</p>';
+        tryOpenDesktop(route, async () => {
+            try {
+                await passage.render(route, shell.mount, shell);
+            } catch (error) {
+                shell.showError('Preview failed', error && error.message || 'Unknown error.');
             }
-            setTimeout(function () { window.close(); }, 600);
-        }
-
-        function onVisChange() {
-            if (document.hidden) onAppDetected();
-        }
-
-        function cleanup() {
-            document.removeEventListener('visibilitychange', onVisChange);
-            window.removeEventListener('blur', onAppDetected);
-        }
-
-        document.addEventListener('visibilitychange', onVisChange);
-        window.addEventListener('blur', onAppDetected);
-
-        var iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.src = zenUri;
-        document.body.appendChild(iframe);
-        setTimeout(function () {
-            try { document.body.removeChild(iframe); } catch (e) {}
-        }, 500);
-
-        setTimeout(function () {
-            cleanup();
-            if (appDetected) return;
-            var action = document.getElementById('passage-action');
-            var fallback = document.getElementById('passage-fallback');
-            if (action) action.style.display = 'none';
-            if (fallback) fallback.classList.add('visible');
-        }, FALLBACK_DELAY);
+        });
+        return;
     }
 
-    function init() {
-        var route = parseRoute(getRawRoute());
-        if (route) {
-            showRouteCard(route);
-            document.title = 'Read Zen � ' + route.title;
+    // Compare → app-first race then render the 3-column diff preview.
+    if (compare.match(route)) {
+        shell.setStatus(
+            'Opening Read Zen…',
+            'Trying the desktop app first. If nothing opens, this page will fall back to a 3-column preview.',
+            false
+        );
+
+        tryOpenDesktop(route, async () => {
+            try {
+                await compare.render(route, shell.mount, shell);
+            } catch (error) {
+                shell.showError('Preview failed', error && error.message || 'Unknown error.');
+            }
+        });
+        return;
+    }
+
+    // Completely unknown kind → show the "install Read Zen" card, then
+    // fire the app-first race so the fallback block reveals itself if the
+    // desktop app doesn't take over within the grace window.
+    shell.setTitle('Read Zen');
+    shell.setContext('Someone shared a Read Zen link with you', 'Install Read Zen to open it.');
+    renderPlaceholder(route, shell.mount, {
+        heading: 'Someone shared a Read Zen link with you',
+        sub: 'Install Read Zen to open it.'
+    });
+
+    tryOpenDesktop(route, () => {
+        const fallback = document.getElementById('placeholder-fallback');
+        if (fallback) fallback.classList.add('visible');
+        shell.setStatus(
+            'Read Zen not detected',
+            'This link opens in the Read Zen desktop app. Install the app, then click the link again to open it directly.',
+            false
+        );
+    });
+}
+
+/** Renders the "install Read Zen" placeholder card used by Wave 1 for non-passage kinds. */
+function renderPlaceholder(route, mount, messages) {
+    const zenUri = buildZenUri(route) || '';
+    const routeText = route && route.rawRoute ? route.rawRoute : '';
+
+    mount.innerHTML = `
+        <div class="placeholder-card">
+            <p class="passage-label">${escapeHtml(messages.heading)}</p>
+            <p class="passage-sub">${escapeHtml(messages.sub)}</p>
+
+            <div class="passage-ref">
+                <code class="passage-raw">${escapeHtml(routeText)}</code>
+            </div>
+
+            <div class="passage-action" id="placeholder-action">
+                <p class="passage-status">Launching Read Zen<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
+            </div>
+
+            <div class="passage-fallback" id="placeholder-fallback">
+                <p class="fallback-msg">
+                    This link opens in the <strong>Read Zen</strong> desktop app.<br>
+                    If you don't have it yet, download it below — it's free.
+                </p>
+                <a class="btn" href="${RELEASES_URL}">Download Read Zen</a>
+                <p class="fallback-hint">After installing, click the shared link again to open it directly.</p>
+                ${zenUri ? `<p class="fallback-hint"><a class="text-link" href="${escapeHtml(zenUri)}">Try opening manually</a></p>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Fires a hidden iframe at the `zen://` deep link. If the tab loses
+ * visibility within the grace window, we treat that as "app took over".
+ * Otherwise, `onFallback` runs after DESKTOP_FALLBACK_DELAY ms.
+ */
+function tryOpenDesktop(route, onFallback) {
+    const zenUri = buildZenUri(route);
+    if (!zenUri) {
+        onFallback();
+        return;
+    }
+
+    const launchTime = Date.now();
+    let appDetected = false;
+
+    function onAppDetected() {
+        if (Date.now() - launchTime < 200) return;
+        if (appDetected) return;
+        appDetected = true;
+        cleanup();
+        const action = document.getElementById('placeholder-action');
+        if (action) {
+            action.innerHTML = '<p class="passage-status">Opened in Read Zen</p>';
         }
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
+    function onVisibilityChange() {
+        if (document.hidden) onAppDetected();
     }
-})();
+
+    function cleanup() {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+        window.removeEventListener('blur', onAppDetected);
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', onAppDetected);
+
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = zenUri;
+    document.body.appendChild(iframe);
+    setTimeout(() => {
+        try { document.body.removeChild(iframe); } catch {}
+    }, 500);
+
+    setTimeout(() => {
+        cleanup();
+        if (appDetected) return;
+        onFallback();
+    }, DESKTOP_FALLBACK_DELAY);
+}
+
+// Re-run init on hash changes so users navigating between links inside the
+// same tab get a fresh view.
+window.addEventListener('hashchange', () => init());
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}

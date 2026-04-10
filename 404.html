@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta http-equiv="refresh" content="0;url=/">
     <script>
-        // SPA fallback: redirect to root with the original path as a hash
-        // so app.js can parse it
+        // Cloudflare Pages fallback: redirect any non-root path to the SPA
+        // root with the original path as a hash, so app.js can parse it.
         var path = window.location.pathname + window.location.search;
         window.location.replace('/#' + path);
     </script>

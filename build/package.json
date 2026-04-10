@@ -1,0 +1,5 @@
+{
+    "type": "module",
+    "private": true,
+    "description": "ESM scope marker so build scripts in this directory can use `import`. Not published; not a real package."
+}

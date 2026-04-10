@@ -4,84 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Read Zen</title>
-    <meta name="description" content="Read Zen - a desktop workspace for reading, translating, and researching Chinese Zen literature.">
+    <meta name="description" content="Read Zen preview page for linked CBETA source texts and translations.">
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-
-    <!-- Landing page (default view) -->
-    <div id="landing">
-        <div class="container">
-
-            <header class="hero">
-                <div class="hero-mark" aria-hidden="true"></div>
-                <h1 class="hero-title">Read Zen</h1>
-                <p class="hero-sub">Read &middot; Translate &middot; Research &middot; Share</p>
-                <p class="hero-desc">A free desktop workspace for Chinese Zen literature.<br>
-                Side-by-side translation, hover dictionary, managed terminology, full-text search, tagging, scholar collections, and community sharing.</p>
-            </header>
-
-            <section class="cta">
-                <p class="cta-explain">Read Zen is a free desktop app. Download it, then click any Read Zen link to open the passage directly.</p>
-                <a class="btn" href="https://github.com/Fabulu/ReadZen/releases">Download Read Zen</a>
-                <p class="cta-note">Windows &middot; Linux &middot; macOS</p>
-            </section>
-
-            <section class="features">
-                <div class="feature">
-                    <span class="feature-label">Translate</span>
-                    <p>Side-by-side projection editor with translation memory, hover dictionary, and AI assistance.</p>
-                </div>
-                <div class="feature">
-                    <span class="feature-label">Research</span>
-                    <p>Tag passages, build scholar collections, manage terminology, compare translations across users.</p>
-                </div>
-                <div class="feature">
-                    <span class="feature-label">Share</span>
-                    <p>Sync translations, tags, termbases, and scholar collections with your community.</p>
-                </div>
-            </section>
-
-            <footer class="foot">
-                <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a></p>
-            </footer>
-
-        </div>
-    </div>
-
-    <!-- Passage card (shown when URL contains a file ID) -->
-    <div id="passage" style="display: none;">
-        <div class="container">
-
-            <header class="hero hero--compact">
-                <div class="hero-mark" aria-hidden="true"></div>
-                <h1 class="hero-title">Read Zen</h1>
-            </header>
-
-            <div class="passage-card">
-                <p class="passage-label" id="passage-label">Someone shared a passage with you</p>
-
-                <div class="passage-ref">
-                    <span class="passage-file" id="passage-file-id"></span>
-                    <span class="passage-range" id="passage-range"></span>
-                </div>
-
-                <div class="passage-action" id="passage-action">
-                    <p class="passage-status">Launching Read Zen<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
-                </div>
-
-                <div class="passage-fallback" id="passage-fallback">
-                    <p class="fallback-msg">This link opens in the <strong>Read Zen</strong> desktop app.<br>
-                    If you don't have it yet, download it below &mdash; it's free.</p>
-                    <a class="btn" href="https://github.com/Fabulu/ReadZen/releases">Download Read Zen</a>
-                    <p class="fallback-hint">After installing, click this link again to open the passage directly.</p>
-                </div>
-            </div>
-
-        </div>
-    </div>
-
-    <script src="/app.js"></script>
+    <div id="app"></div>
+    <script type="module" src="/app.js"></script>
 </body>
 </html>
-

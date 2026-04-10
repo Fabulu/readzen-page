@@ -1,0 +1,11 @@
+{
+  "name": "zenlinkpage",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/",
+    "build": "node build/build-dict-shards.js",
+    "deploy": "npm run build"
+  }
+}
