@@ -94,17 +94,22 @@ export async function render(route, mount, shell) {
         if (isRangeless) {
             // Optionally load the translation work too so outline rows can show
             // English headings when the caller asked for the bilingual mode.
+            // Try personal translation first, fall back to authoritative.
             let translationWork = null;
             if (route.mode === 'en') {
-                const translationUrl = route.translator
-                    ? communityTranslationUrl(route.workId, route.translator)
-                    : authoritativeTranslationUrl(route.workId);
-                if (translationUrl) {
+                const tCandidates = [];
+                if (route.translator) {
+                    tCandidates.push(communityTranslationUrl(route.workId, route.translator));
+                }
+                tCandidates.push(authoritativeTranslationUrl(route.workId));
+                for (const turl of tCandidates) {
+                    if (!turl) continue;
                     try {
-                        translationWork = await loadXml(translationUrl);
-                        shell.setExtraLink('Translation XML', translationUrl);
+                        translationWork = await loadXml(turl);
+                        shell.setExtraLink('Translation XML', turl);
+                        break;
                     } catch {
-                        translationWork = null;
+                        // try next
                     }
                 }
             }
@@ -280,38 +285,61 @@ async function renderTranslation(route, _sourceLines, shell) {
     const meta = document.querySelector('#translation-meta');
     const titleEl = document.querySelector('#translation-title');
 
-    const translationUrl = route.translator
-        ? communityTranslationUrl(route.workId, route.translator)
-        : authoritativeTranslationUrl(route.workId);
-
-    const labelText = route.translator
-        ? `Community Translation · ${route.translator}`
-        : 'Authoritative Translation';
-
-    label.textContent = labelText;
-    titleEl.textContent = route.hasExplicitRange ? 'English rendering' : 'English rendering · full work';
-
-    if (!translationUrl) {
-        panel.hidden = true;
-        return;
+    // Build candidate URLs in priority order. If a translator was requested,
+    // try their personal translation FIRST, then fall back to the authoritative
+    // community translation. This handles the common case where a user has
+    // translated some files but not others.
+    const candidates = [];
+    if (route.translator) {
+        candidates.push({
+            url: communityTranslationUrl(route.workId, route.translator),
+            label: `Community Translation · ${route.translator}`
+        });
+        candidates.push({
+            url: authoritativeTranslationUrl(route.workId),
+            label: `Authoritative Translation (${route.translator} hasn't translated this file)`
+        });
+    } else {
+        candidates.push({
+            url: authoritativeTranslationUrl(route.workId),
+            label: 'Authoritative Translation'
+        });
     }
 
-    try {
-        const work = await loadXml(translationUrl);
-        let lines;
-        try {
-            lines = sliceLines(work.linesById, work.lineOrder, route.startLine, route.endLine);
-        } catch {
-            lines = sliceLines(work.linesById, work.lineOrder, '', '');
-        }
-        panel.hidden = false;
-        meta.textContent = work.titleEn || work.titleZh || route.workId;
-        body.innerHTML = renderLinesHtml(lines);
+    titleEl.textContent = route.hasExplicitRange ? 'English rendering' : 'English rendering · full work';
 
-        if (shell) {
-            shell.setExtraLink('Translation XML', translationUrl);
+    let lastError = null;
+    for (const candidate of candidates) {
+        if (!candidate.url) continue;
+        try {
+            const work = await loadXml(candidate.url);
+            let lines;
+            try {
+                lines = sliceLines(work.linesById, work.lineOrder, route.startLine, route.endLine);
+            } catch {
+                lines = sliceLines(work.linesById, work.lineOrder, '', '');
+            }
+            label.textContent = candidate.label;
+            panel.hidden = false;
+            meta.textContent = work.titleEn || work.titleZh || route.workId;
+            body.innerHTML = renderLinesHtml(lines);
+
+            if (shell) {
+                shell.setExtraLink('Translation XML', candidate.url);
+            }
+            return; // success
+        } catch (err) {
+            lastError = err;
+            // Try next candidate
         }
-    } catch (error) {
+    }
+
+    // All candidates failed — render the not-available notice using the last error.
+    {
+        const error = lastError || new Error('No translation source available.');
+        label.textContent = route.translator
+            ? `Community Translation · ${route.translator}`
+            : 'Authoritative Translation';
         panel.hidden = false;
         meta.textContent = '—';
         body.innerHTML = `
