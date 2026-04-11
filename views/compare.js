@@ -22,6 +22,7 @@ import {
 } from '../lib/github.js';
 import { buildZenUri } from '../lib/route.js';
 import * as cache from '../lib/cache.js';
+import { lookupTitle } from '../lib/titles.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -48,6 +49,15 @@ export async function render(route, mount, shell) {
             ? (startLine === endLine ? startLine : `${startLine} – ${endLine}`)
             : 'Outline / full work'
     );
+
+    // Background title lookup so the header shows the human title
+    lookupTitle(workId).then((entry) => {
+        if (!entry) return;
+        const t = entry.enShort || entry.en || entry.zh || workId;
+        const sub = entry.zh && t !== entry.zh ? entry.zh : '';
+        shell.setTitle(`Compare · ${sub ? `${t} · ${sub}` : t}`);
+        try { document.title = `Compare · ${t} · Read Zen Preview`; } catch {}
+    });
     shell.setStatus('Loading compare preview…', 'Fetching the original and both translations.', false);
 
     const srcUrl = sourceXmlUrl(workId);

@@ -19,6 +19,7 @@ import {
 } from '../lib/github.js';
 import { streamJsonl } from '../lib/jsonl.js';
 import * as cache from '../lib/cache.js';
+import { lookupTitle } from '../lib/titles.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000;
 const VOCAB_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -56,6 +57,19 @@ export async function render(route, mount, shell) {
         user ? `Tags in ${workId} by ${user}` : `Tags in ${workId}`,
         tagIdFilter ? `Filtered to tag "${tagIdFilter}"` : 'Community tags from the Read Zen corpus'
     );
+
+    // Background title lookup
+    lookupTitle(workId).then((entry) => {
+        if (!entry) return;
+        const t = entry.enShort || entry.en || entry.zh || workId;
+        const sub = entry.zh && t !== entry.zh ? entry.zh : '';
+        shell.setTitle(`Tags · ${sub ? `${t} · ${sub}` : t}`);
+        shell.setContext(
+            user ? `Tags in ${t} by ${user}` : `Tags in ${t}`,
+            tagIdFilter ? `Filtered to tag "${tagIdFilter}"` : 'Community tags from the Read Zen corpus'
+        );
+        try { document.title = `Tags · ${t} · Read Zen Preview`; } catch {}
+    });
 
     if (!user) {
         shell.showError(

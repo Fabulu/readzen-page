@@ -128,15 +128,20 @@ test('parseTei: non-inline <note> is skipped', () => {
     assert.ok(text.includes('after'));
 });
 
-test('parseTei: inline <note> IS included', () => {
+test('parseTei: inline <note> is also skipped (CBETA editorial commentary)', () => {
     const xml = wrapTei(`
         <p>
-            <lb n="0001a01"/>start<note place="inline">INLINE</note>end
+            <lb n="0001a01"/>start<note place="inline">INLINE_COMMENTARY</note>end
         </p>
     `);
     const parsed = parseTei(xml);
     const text = parsed.linesById.get('0001a01').text;
-    assert.ok(text.includes('INLINE'));
+    // CBETA uses place="inline" for editorial annotations that should NOT
+    // be inlined into the body text. The desktop app shows them as separate
+    // annotations; the preview suppresses them entirely.
+    assert.ok(!text.includes('INLINE_COMMENTARY'), `got: ${JSON.stringify(text)}`);
+    assert.ok(text.includes('start'));
+    assert.ok(text.includes('end'));
 });
 
 // ---------- Titles ----------
