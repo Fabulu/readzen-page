@@ -1,14 +1,15 @@
 // views/shell.js
 // Persistent chrome shared by every view: header (logo + route chip),
-// action bar (context strip + extra link), status strip, a `main` mount
-// node that per-route views render into, the desktop-app upsell card,
-// and a footer with the auto-open toggle + optional manual launch link.
+// action bar (context strip + "Open in Read Zen" button + extra link),
+// status strip, a `main` mount node that per-route views render into,
+// the desktop-app upsell card, and a footer with the auto-open toggle.
 //
 // The shell is intentionally dumb — it owns no route state. Views call
 // `setRouteChip`, `setStatus`, etc. to update the pieces they care about.
-// There is no top-level "Open in Read Zen" button: when auto-open is on
-// (the default) the page silently launches the app via app.js, and when
-// it's off the manual launch link in the footer covers the opt-out path.
+// The top "Open in Read Zen" button is always shown on routed views (it
+// signals that the link can be handed off to the desktop app, even when
+// auto-open is on and that handoff is happening silently). It's hidden
+// on the landing page, which has its own download CTA front and center.
 
 import { escapeHtml } from '../lib/format.js';
 import { buildZenUri, describeRoute } from '../lib/route.js';
@@ -53,6 +54,7 @@ export function mountShell(root, route) {
                     <p class="context-subtitle" id="context-subtitle"></p>
                 </div>
                 <div class="shell-actions-buttons">
+                    <a class="btn btn--small" id="open-desktop" href="#" hidden>Open in Read Zen</a>
                     <a class="text-link" id="shell-extra-link" href="#" target="_blank" rel="noreferrer" hidden></a>
                 </div>
             </section>
@@ -85,9 +87,6 @@ export function mountShell(root, route) {
                 <p class="shell-foot-pref">
                     Auto-open links in the Read Zen app:
                     <a href="#" id="auto-open-toggle" class="shell-foot-toggle"></a>
-                    <span id="manual-launch-wrap" hidden>
-                        · <a href="#" id="manual-launch" class="shell-foot-toggle">open this one in Read Zen</a>
-                    </span>
                 </p>
             </footer>
         </div>
@@ -99,6 +98,7 @@ export function mountShell(root, route) {
     const actions = root.querySelector('#shell-actions');
     const ctxTitle = root.querySelector('#context-title');
     const ctxSubtitle = root.querySelector('#context-subtitle');
+    const openDesktop = root.querySelector('#open-desktop');
     const extraLink = root.querySelector('#shell-extra-link');
     const statusPanel = root.querySelector('#status-panel');
     const statusTitle = root.querySelector('#status-title');
@@ -115,6 +115,18 @@ export function mountShell(root, route) {
         // Routed views always get the desktop-app upsell card. Landing has no
         // route and skips it (it has its own download CTA).
         upsell.hidden = false;
+
+        // Top "Open in Read Zen" button: visible on every routed view as a
+        // signal that the link can be opened directly in the desktop app.
+        // Even when auto-open is on (default) and the silent launch already
+        // fires, the button stays visible — it's the affordance that
+        // communicates "this is a Read Zen link, the desktop app handles it".
+        // Hidden on landing (the else branch below leaves it hidden by default).
+        const zenUri = buildZenUri(route);
+        if (zenUri) {
+            openDesktop.href = zenUri;
+            openDesktop.hidden = false;
+        }
     }
 
     // Footer toggle: shows current auto-open state, flips on click, reloads
@@ -127,19 +139,6 @@ export function mountShell(root, route) {
             setAutoOpenEnabled(!autoOpenOn);
             window.location.reload();
         });
-    }
-
-    // Manual launch link: only relevant when auto-open is OFF and we have a
-    // routed view that resolves to a real zen:// URI. Lives next to the
-    // toggle in the footer so it stays out of the way of the upsell card.
-    const manualWrap = root.querySelector('#manual-launch-wrap');
-    const manualLink = root.querySelector('#manual-launch');
-    if (manualWrap && manualLink && route && !autoOpenOn) {
-        const zenUri = buildZenUri(route);
-        if (zenUri) {
-            manualLink.href = zenUri;
-            manualWrap.hidden = false;
-        }
     }
 
     return {
