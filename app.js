@@ -54,39 +54,25 @@ async function init() {
         }
     }
 
-    // Passage → app-first race then render the preview.
+    // Passage → fire app launch silently in background, render preview immediately.
     if (passage.match(route)) {
-        shell.setStatus(
-            'Opening Read Zen…',
-            'Trying the desktop app first. If nothing opens, this page will fall back to a limited preview.',
-            false
-        );
-
-        tryOpenDesktop(route, async () => {
-            try {
-                await passage.render(route, shell.mount, shell);
-            } catch (error) {
-                shell.showError('Preview failed', error && error.message || 'Unknown error.');
-            }
-        });
+        fireAppLaunchSilent(route);
+        try {
+            await passage.render(route, shell.mount, shell);
+        } catch (error) {
+            shell.showError('Preview failed', error && error.message || 'Unknown error.', buildZenUri(route));
+        }
         return;
     }
 
-    // Compare → app-first race then render the 3-column diff preview.
+    // Compare → fire app launch silently in background, render preview immediately.
     if (compare.match(route)) {
-        shell.setStatus(
-            'Opening Read Zen…',
-            'Trying the desktop app first. If nothing opens, this page will fall back to a 3-column preview.',
-            false
-        );
-
-        tryOpenDesktop(route, async () => {
-            try {
-                await compare.render(route, shell.mount, shell);
-            } catch (error) {
-                shell.showError('Preview failed', error && error.message || 'Unknown error.');
-            }
-        });
+        fireAppLaunchSilent(route);
+        try {
+            await compare.render(route, shell.mount, shell);
+        } catch (error) {
+            shell.showError('Preview failed', error && error.message || 'Unknown error.', buildZenUri(route));
+        }
         return;
     }
 
@@ -143,9 +129,31 @@ function renderPlaceholder(route, mount, messages) {
 }
 
 /**
+ * Fires the zen:// deep link silently in the background. If the desktop app
+ * is installed, the OS handles it and the user switches focus. If not, the
+ * iframe load fails silently and we keep showing the preview. No UI delay.
+ */
+function fireAppLaunchSilent(route) {
+    const zenUri = buildZenUri(route);
+    if (!zenUri) return;
+    try {
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = zenUri;
+        document.body.appendChild(iframe);
+        setTimeout(() => {
+            try { document.body.removeChild(iframe); } catch {}
+        }, 500);
+    } catch {
+        // Browser blocked the protocol or it doesn't exist — preview is the answer.
+    }
+}
+
+/**
  * Fires a hidden iframe at the `zen://` deep link. If the tab loses
  * visibility within the grace window, we treat that as "app took over".
  * Otherwise, `onFallback` runs after DESKTOP_FALLBACK_DELAY ms.
+ * (Used by the unknown-route placeholder fallback only.)
  */
 function tryOpenDesktop(route, onFallback) {
     const zenUri = buildZenUri(route);

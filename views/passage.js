@@ -17,6 +17,7 @@ import {
 } from '../lib/github.js';
 import { buildZenUri } from '../lib/route.js';
 import * as cache from '../lib/cache.js';
+import { lookupTitle } from '../lib/titles.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -38,6 +39,18 @@ export async function render(route, mount, shell) {
         describeRange(route),
         describeMode(route)
     );
+
+    // Look up the title from titles.jsonl in the background and update the
+    // shell + document title once it arrives. Don't block render on this.
+    lookupTitle(route.workId).then((entry) => {
+        if (!entry) return;
+        const titleText = entry.enShort || entry.en || entry.zh || route.workId;
+        const subtitle = entry.zh && titleText !== entry.zh ? entry.zh : '';
+        shell.setTitle(subtitle ? `${titleText} · ${subtitle}` : titleText);
+        try {
+            document.title = `${titleText} · Read Zen Preview`;
+        } catch {}
+    });
     shell.setStatus(
         'Loading preview…',
         'Fetching XML from GitHub and extracting the requested lines.',
