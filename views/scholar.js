@@ -35,6 +35,12 @@ export async function render(route, mount, shell) {
         user ? `Collection by ${user}` : 'Scholar collection',
         passageId ? `Passage ${passageId}` : 'Passage list'
     );
+    shell.setUpsell(
+        'This preview shows one scholar collection. The desktop app lets ' +
+        'you <strong>build your own collections</strong>, browse the ' +
+        'entire CBETA corpus to find passages, edit notes alongside the ' +
+        'source, and share collection links like this one with your community.'
+    );
 
     if (!user) {
         shell.showError(

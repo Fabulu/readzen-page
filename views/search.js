@@ -33,6 +33,13 @@ export async function render(route, mount, shell) {
         initialQuery ? `Searching for "${initialQuery}"` : 'Search the CBETA corpus',
         corpus ? `Corpus: ${corpus}` : 'Title-only search. Full-text search requires Read Zen.'
     );
+    shell.setUpsell(
+        'This is a title-only preview. The desktop app gives you ' +
+        '<strong>full-text search across every CBETA text</strong>, ' +
+        'instant jump-to-passage with ZH/EN side-by-side, the full ' +
+        'reading and translation workflow, and the ability to share ' +
+        'search links like this one.'
+    );
     shell.setExtraLink('titles.jsonl', TITLES_URL);
 
     mount.innerHTML = `

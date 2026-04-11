@@ -78,6 +78,12 @@ function applyChrome(shell, term, user) {
         term ? `Termbase · ${term}` : 'Termbase',
         user ? `Curated by ${user}` : 'Shared project termbase'
     );
+    shell.setUpsell(
+        'This preview shows one termbase entry. The desktop app lets you ' +
+        '<strong>build and manage your own termbase</strong>, see it ' +
+        'highlighted live while you read or translate, sync it with the ' +
+        'community, and share entry links like this one.'
+    );
     shell.hideStatus();
 }
 

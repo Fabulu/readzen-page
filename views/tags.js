@@ -57,6 +57,12 @@ export async function render(route, mount, shell) {
         user ? `Tags in ${workId} by ${user}` : `Tags in ${workId}`,
         tagIdFilter ? `Filtered to tag "${tagIdFilter}"` : 'Community tags from the Read Zen corpus'
     );
+    shell.setUpsell(
+        'This preview lists tags on one work. The desktop app lets you ' +
+        '<strong>create, edit, and share your own tags</strong>, browse ' +
+        'every tagged passage in context, build scholar collections from ' +
+        'them, and share tag links like this one.'
+    );
 
     // Background title lookup
     lookupTitle(workId).then((entry) => {

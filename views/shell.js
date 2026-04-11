@@ -49,6 +49,22 @@ export function mountShell(root, route) {
 
             <main class="shell-main" id="view-mount"></main>
 
+            <aside class="upsell" id="upsell" hidden>
+                <p class="upsell-kicker">This is just a preview</p>
+                <h2 class="upsell-title">Get the full Read Zen desktop app</h2>
+                <p class="upsell-desc" id="upsell-desc">
+                    Read the entire CBETA corpus, translate side-by-side with
+                    a hover dictionary and translation memory, search every
+                    text at once, build scholar collections, manage terminology,
+                    and <strong>create and share links like this one</strong>
+                    — all offline, all free.
+                </p>
+                <div class="upsell-actions">
+                    <a class="btn" id="upsell-download" href="${RELEASES_URL}">Download Read Zen</a>
+                    <p class="upsell-platforms">Free · Windows · Linux · macOS</p>
+                </div>
+            </aside>
+
             <footer class="shell-foot">
                 <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA · Non-commercial use</p>
             </footer>
@@ -66,6 +82,8 @@ export function mountShell(root, route) {
     const statusPanel = root.querySelector('#status-panel');
     const statusTitle = root.querySelector('#status-title');
     const statusDetail = root.querySelector('#status-detail');
+    const upsell = root.querySelector('#upsell');
+    const upsellDesc = root.querySelector('#upsell-desc');
 
     if (route) {
         chip.hidden = false;
@@ -73,6 +91,9 @@ export function mountShell(root, route) {
         const zenUri = buildZenUri(route);
         openDesktop.href = zenUri || RELEASES_URL;
         actions.hidden = false;
+        // Routed views always get the desktop-app upsell card. Landing has no
+        // route and skips it (it has its own download CTA).
+        upsell.hidden = false;
     } else {
         openDesktop.href = RELEASES_URL;
     }
@@ -98,6 +119,18 @@ export function mountShell(root, route) {
             statusDetail.textContent = detail || '';
         },
         hideStatus() { statusPanel.hidden = true; },
+        /**
+         * Replace the desktop-app upsell description with kind-specific copy.
+         * Pass an HTML string (already escaped where needed). The card itself
+         * stays visible — only the body paragraph is swapped.
+         */
+        setUpsell(html) {
+            if (!upsellDesc) return;
+            if (typeof html === 'string' && html.length > 0) {
+                upsellDesc.innerHTML = html;
+            }
+            upsell.hidden = false;
+        },
         showError(title, detail, zenUri) {
             this.setStatus(title, detail, true);
             // If we know the `zen://` deep link for the current route, surface

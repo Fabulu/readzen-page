@@ -49,6 +49,13 @@ export async function render(route, mount, shell) {
             ? (startLine === endLine ? startLine : `${startLine} – ${endLine}`)
             : 'Outline / full work'
     );
+    shell.setUpsell(
+        'This preview compares two translations side-by-side. ' +
+        'The desktop app lets you compare any number of translators ' +
+        '(including your own work), use the full editor with translation ' +
+        'memory and a hover dictionary, and ' +
+        '<strong>create and share compare links like this one yourself</strong>.'
+    );
 
     // Background title lookup so the header shows the human title
     lookupTitle(workId).then((entry) => {

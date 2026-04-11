@@ -48,6 +48,12 @@ function applyChrome(shell, term) {
         term ? `CC-CEDICT · ${term}` : 'Dictionary',
         'Chinese-English dictionary entry'
     );
+    shell.setUpsell(
+        'This is a single dictionary lookup. The desktop app gives you the ' +
+        'same dictionary as a <strong>hover overlay while you read</strong> ' +
+        'any CBETA text, plus full-text search, side-by-side translation, ' +
+        'and the ability to share lookup links like this one.'
+    );
     shell.hideStatus();
 }
 

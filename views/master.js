@@ -96,6 +96,12 @@ function applyChrome(shell, name, user) {
         name ? `Zen Master · ${name}` : 'Zen Master',
         user ? `Curated by ${user}` : 'Unknown curator'
     );
+    shell.setUpsell(
+        'This is a single Zen master profile. The desktop app gives you a ' +
+        'managed master-dates database, hover lookups while you read any ' +
+        'CBETA text, side-by-side translation, and the ability to ' +
+        '<strong>curate and share your own master entries</strong>.'
+    );
     shell.hideStatus();
 }
 

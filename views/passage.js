@@ -39,6 +39,12 @@ export async function render(route, mount, shell) {
         describeRange(route),
         describeMode(route)
     );
+    shell.setUpsell(
+        'This preview shows one passage. The desktop app gives you the ' +
+        'full work, every CBETA text, a hover dictionary while you read, ' +
+        'and lets you write your own translations. ' +
+        'You can also <strong>create and share links like this one yourself</strong>.'
+    );
 
     // Look up the title from titles.jsonl in the background and update the
     // shell + document title once it arrives. Don't block render on this.
@@ -105,33 +111,49 @@ export async function render(route, mount, shell) {
         const sourceWork = await loadXml(srcUrl);
 
         if (isRangeless) {
-            // Optionally load the translation work too so outline rows can show
-            // English headings when the caller asked for the bilingual mode.
-            // Try personal translation first, fall back to authoritative.
+            // CBETA's source <head> elements (the table of contents) can't
+            // legally be translated, so we can't render a useful bilingual
+            // TOC for translated works — the headings would all be in
+            // Chinese even when the body text is fully translated. Instead,
+            // show a side-by-side preview of the first N body lines, which
+            // works whether the text is translated or not and acts as
+            // proof-of-value pointing to the desktop app for the full work.
+            //
+            // Always try loading translation here (regardless of route.mode):
+            // a rangeless link to a translated work should still show the
+            // translation alongside the source.
             let translationWork = null;
-            if (route.mode === 'en') {
-                const tCandidates = [];
-                if (route.translator) {
-                    tCandidates.push(communityTranslationUrl(route.workId, route.translator));
-                }
-                tCandidates.push(authoritativeTranslationUrl(route.workId));
-                for (const turl of tCandidates) {
-                    if (!turl) continue;
-                    try {
-                        translationWork = await loadXml(turl);
-                        shell.setExtraLink('Translation XML', turl);
-                        break;
-                    } catch {
-                        // try next
-                    }
+            const tCandidates = [];
+            if (route.translator) {
+                tCandidates.push(communityTranslationUrl(route.workId, route.translator));
+            }
+            tCandidates.push(authoritativeTranslationUrl(route.workId));
+            for (const turl of tCandidates) {
+                if (!turl) continue;
+                try {
+                    translationWork = await loadXml(turl);
+                    shell.setExtraLink('Translation XML', turl);
+                    break;
+                } catch {
+                    // try next
                 }
             }
 
-            const headings = (sourceWork.headings || []).filter((h) => h.lineId);
-            if (headings.length >= 3) {
-                renderOutline(sourceWork, translationWork, headings, route, mount);
+            if (translationWork) {
+                // Translated works: side-by-side first N body lines.
+                renderRangelessBilingual(sourceWork, translationWork, route, mount);
             } else {
-                renderFirstNLines(sourceWork, 50, route, mount);
+                // Untranslated works: show the source TOC as-is. The headings
+                // are in Chinese (CBETA forbids altering them) but they're
+                // still useful navigation entry points — each row links to a
+                // ranged passage URL. Falls back to first-N-lines if the work
+                // has no usable headings.
+                const headings = (sourceWork.headings || []).filter((h) => h.lineId);
+                if (headings.length >= 3) {
+                    renderSourceOutline(sourceWork, headings, route, mount);
+                } else {
+                    renderFirstNLines(sourceWork, 30, route, mount);
+                }
             }
             shell.hideStatus();
             return;
@@ -170,48 +192,31 @@ export async function render(route, mount, shell) {
 }
 
 /**
- * Render the outline / table-of-contents view from extracted headings. Each
- * row links to `#/{workId}/{thisLb}-{nextLb}` where nextLb is the lb of the
- * following heading (or the last lb of the work for the final row).
+ * Source-only TOC for rangeless links to untranslated works. Each row is a
+ * navigable link to the ranged passage between this heading's lineId and the
+ * next heading's lineId. Headings stay in Chinese — CBETA forbids altering
+ * them — but they still act as useful navigation into the body text.
  */
-function renderOutline(sourceWork, translationWork, headings, route, mount) {
+function renderSourceOutline(sourceWork, headings, route, mount) {
     const MAX_ROWS = 30;
     const truncated = headings.length > MAX_ROWS;
     const rows = truncated ? headings.slice(0, MAX_ROWS) : headings;
 
-    // Build a lookup of heading lineId → heading text (EN side) for bilingual.
-    const enHeadingsByLineId = new Map();
-    if (translationWork && Array.isArray(translationWork.headings)) {
-        for (const h of translationWork.headings) {
-            if (h && h.lineId) enHeadingsByLineId.set(h.lineId, h.text);
-        }
-    }
-
     const lineOrder = sourceWork.lineOrder;
     const lastLineId = lineOrder.length > 0 ? lineOrder[lineOrder.length - 1] : '';
 
-    // Compute the end-lb for each heading = (lb of next heading). For the last
-    // heading we use the last lb in the document.
+    // Compute the end-lb for each heading = (lb of next heading). For the
+    // last heading we use the last lb in the document. Mode/translator
+    // suffixes are honoured so an `/en/{user}` outline keeps the same
+    // mode when the user clicks into a section.
     const modeSuffix = route.mode === 'en' ? '/en' : '';
     const translatorSuffix = route.translator ? '/' + encodeURIComponent(route.translator) : '';
 
     const rowsHtml = rows.map((h, idx) => {
         const nextHeading = headings[idx + 1];
-        let endLb;
-        if (nextHeading && nextHeading.lineId) {
-            // End one line before the next heading's lineId (still inclusive in
-            // the range slice — the reader handles overlap gracefully).
-            endLb = nextHeading.lineId;
-        } else {
-            endLb = lastLineId || h.lineId;
-        }
+        const endLb = (nextHeading && nextHeading.lineId) || lastLineId || h.lineId;
         const href = '#/' + route.workId + '/' + h.lineId + '-' + endLb + modeSuffix + translatorSuffix;
-
         const juanLabel = h.juanNumber != null ? `juan ${escapeHtml(String(h.juanNumber))}` : '';
-        const enText = enHeadingsByLineId.get(h.lineId) || '';
-        const enHtml = enText
-            ? `<div class="outline-row-en">${escapeHtml(enText)}</div>`
-            : '';
 
         return `
             <a class="outline-row" href="${escapeHtml(href)}">
@@ -219,14 +224,13 @@ function renderOutline(sourceWork, translationWork, headings, route, mount) {
                 <span class="outline-row-lb">${escapeHtml(h.lineId)}</span>
                 <span class="outline-row-text">
                     <span class="outline-row-zh">${escapeHtml(h.text)}</span>
-                    ${enHtml}
                 </span>
             </a>
         `;
     }).join('');
 
     const titleZh = sourceWork.titleZh || route.workId;
-    const titleEn = (translationWork && translationWork.titleEn) || sourceWork.titleEn || '';
+    const titleEn = sourceWork.titleEn || '';
     const titleLine = titleEn
         ? `${escapeHtml(titleZh)} <span class="outline-title-en">· ${escapeHtml(titleEn)}</span>`
         : escapeHtml(titleZh);
@@ -248,6 +252,64 @@ function renderOutline(sourceWork, translationWork, headings, route, mount) {
             ${truncatedHtml}
         </article>
     `;
+}
+
+/**
+ * Side-by-side preview of the first N body lines for a rangeless link to a
+ * translated work. Lines are paired by `lineId` so the columns line up — the
+ * preview walks the source line order, picks the first N non-empty source
+ * lines, and looks up the matching translation line by ID. (CBETA-derived
+ * translation files preserve `<lb n="...">` IDs from the source, so the
+ * pairing is exact when both sides have content for that line.)
+ */
+function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
+    const N = 30;
+    const sourceLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, N);
+
+    // Pair each source line with the matching translation line by ID.
+    const tranMap = translationWork.linesById;
+    const tranLines = sourceLines.map((src) => {
+        if (!src) return { id: '', text: '' };
+        const t = tranMap && tranMap.get ? tranMap.get(src.id) : null;
+        return { id: src.id, text: (t && t.text) || '' };
+    });
+
+    const titleZh = sourceWork.titleZh || route.workId;
+    const titleEn = translationWork.titleEn || sourceWork.titleEn || '';
+
+    const wrap = document.querySelector('#outline-wrap') || mount;
+    wrap.innerHTML = `
+        <div class="outline-banner">
+            Preview · first ${sourceLines.length} lines of the body text. Open the full
+            work in <a class="text-link text-link--accent" href="https://github.com/Fabulu/ReadZen/releases">Read Zen</a>,
+            or share a targeted link with a line range like
+            <code>#/${escapeHtml(route.workId)}/0292c22-0293a15/en</code>.
+        </div>
+        <div class="preview-grid">
+            <article class="panel">
+                <div class="panel-head">
+                    <p class="panel-label">Chinese Source</p>
+                    <p class="panel-meta">${escapeHtml(titleZh)}</p>
+                </div>
+                <div class="panel-title">Chinese source</div>
+                <div class="panel-body panel-body--source" id="source-body">
+                    ${renderLinesHtml(sourceLines)}
+                </div>
+            </article>
+            <article class="panel">
+                <div class="panel-head">
+                    <p class="panel-label">Translation</p>
+                    <p class="panel-meta">${escapeHtml(titleEn || 'Community translation')}</p>
+                </div>
+                <div class="panel-title">English rendering · preview</div>
+                <div class="panel-body" id="translation-body">
+                    ${renderLinesHtml(tranLines)}
+                </div>
+            </article>
+        </div>
+    `;
+
+    window.requestAnimationFrame(syncRowHeights);
 }
 
 /**
