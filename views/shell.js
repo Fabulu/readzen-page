@@ -45,6 +45,7 @@ export function mountShell(root, route) {
                 </div>
                 <div class="shell-route" id="shell-route-box">
                     <span class="route-chip" id="route-chip" hidden></span>
+                    <span class="route-chip route-chip--corpus" id="corpus-chip" hidden></span>
                 </div>
             </header>
 
@@ -70,7 +71,7 @@ export function mountShell(root, route) {
                 <p class="upsell-kicker">This is just a preview</p>
                 <h2 class="upsell-title">Get the full Read Zen desktop app</h2>
                 <p class="upsell-desc" id="upsell-desc">
-                    Read the entire CBETA corpus, translate side-by-side with
+                    Read both the CBETA and OpenZenTexts corpora, translate side-by-side with
                     a hover dictionary and translation memory, search every
                     text at once, build scholar collections, manage terminology,
                     and <strong>create and share links like this one</strong>
@@ -83,7 +84,7 @@ export function mountShell(root, route) {
             </aside>
 
             <footer class="shell-foot">
-                <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA · Non-commercial use</p>
+                <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA + OpenZenTexts · Non-commercial &amp; CC-licensed use</p>
                 <p class="shell-foot-pref">
                     Auto-open links in the Read Zen app:
                     <a href="#" id="auto-open-toggle" class="shell-foot-toggle"></a>
@@ -94,6 +95,7 @@ export function mountShell(root, route) {
 
     const mount = root.querySelector('#view-mount');
     const chip = root.querySelector('#route-chip');
+    const corpusChip = root.querySelector('#corpus-chip');
     const titleEl = root.querySelector('#shell-title');
     const actions = root.querySelector('#shell-actions');
     const ctxTitle = root.querySelector('#context-title');
@@ -115,6 +117,18 @@ export function mountShell(root, route) {
         // Routed views always get the desktop-app upsell card. Landing has no
         // route and skips it (it has its own download CTA).
         upsell.hidden = false;
+
+        if (corpusChip) {
+            const corpus = route.corpus;
+            if (corpus === 'cbeta' || corpus === 'openzen') {
+                corpusChip.hidden = false;
+                corpusChip.textContent = corpus === 'cbeta' ? 'CBETA' : 'OpenZenTexts';
+                corpusChip.classList.remove('route-chip--cbeta', 'route-chip--openzen');
+                corpusChip.classList.add(corpus === 'cbeta' ? 'route-chip--cbeta' : 'route-chip--openzen');
+            } else {
+                corpusChip.hidden = true;
+            }
+        }
 
         // Top "Open in Read Zen" button: visible on every routed view as a
         // signal that the link can be opened directly in the desktop app.

@@ -130,6 +130,33 @@ code, .mono { font-family: var(--mono); }
     max-width: 26rem;
 }
 
+.shell-route {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.route-chip--corpus {
+    font-family: var(--sans);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.route-chip--corpus.route-chip--cbeta {
+    background: rgba(94, 116, 140, 0.22);
+    border-color: rgba(94, 116, 140, 0.55);
+    color: #d7e1ee;
+}
+
+.route-chip--corpus.route-chip--openzen {
+    background: rgba(39, 120, 78, 0.22);
+    border-color: rgba(39, 120, 78, 0.55);
+    color: #d2eadb;
+}
+
 .shell-actions {
     display: flex;
     align-items: flex-start;
