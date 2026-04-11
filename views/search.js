@@ -1,21 +1,20 @@
 // views/search.js
-// Title-only search across the CBETA corpus.
+// Title-only search across the CBETA and OpenZenTexts corpora.
 //
-// Fetches `titles.jsonl` from the translations repo, parses it once (cached),
+// Fetches titles.jsonl from the translations repos, parses it once (cached),
 // and filters client-side against the query string. Each row links to the
 // passage outline view for that work.
 //
-// Full-text search stays in the desktop app â€” this is an informational preview
+// Full-text search stays in the desktop app — this is an informational preview
 // that shows "we understood your search", not a corpus scan.
 
 import { escapeHtml } from '../lib/format.js';
-import { DATA_REPO_BASE } from '../lib/github.js';
-import { streamJsonl } from '../lib/jsonl.js';
-import * as cache from '../lib/cache.js';
+import { DATA_REPO_BASE, OPEN_DATA_REPO_BASE } from '../lib/github.js';
+import { inferCorpusForRelPath } from '../lib/corpus.js';
+import { loadAllTitlesAsArray } from '../lib/titles.js';
 
 const TITLES_URL = DATA_REPO_BASE + 'titles.jsonl';
-const TITLES_CACHE_KEY = 'titles:main';
-const TITLES_TTL_MS = 30 * 60 * 1000;
+const OPEN_TITLES_URL = OPEN_DATA_REPO_BASE + 'titles.jsonl';
 const MAX_RESULTS = 60;
 
 export function match(route) {
@@ -26,27 +25,35 @@ export function preferAppFirst(_route) { return false; }
 
 export async function render(route, mount, shell) {
     const initialQuery = (route.q || '').trim();
-    const corpus = (route.corpus || '').trim().toUpperCase();
+    const cf = (route.corpus || '').trim();
+    const cfLower = cf.toLowerCase();
+    const cfNamed =
+        cfLower === 'cbeta' ? 'cbeta' :
+        (cfLower === 'openzen' || cfLower === 'open' || cfLower === 'o') ? 'openzen' :
+        null;
+    const corpusLabel = cfNamed === 'cbeta'
+        ? 'CBETA'
+        : (cfNamed === 'openzen' ? 'OpenZenTexts' : (cf || ''));
 
-    shell.setTitle(initialQuery ? `Search Â· ${initialQuery}` : 'Search');
+    shell.setTitle(initialQuery ? `Search · ${initialQuery}` : 'Search');
     shell.setContext(
-        initialQuery ? `Searching for "${initialQuery}"` : 'Search the CBETA corpus',
-        corpus ? `Corpus: ${corpus}` : 'Title-only search. Full-text search requires Read Zen.'
+        initialQuery ? `Searching for "${initialQuery}"` : 'Search CBETA + OpenZenTexts',
+        corpusLabel ? `Corpus: ${corpusLabel}` : 'Title-only search. Full-text search requires Read Zen.'
     );
     shell.setUpsell(
         'This is a title-only preview. The desktop app gives you ' +
-        '<strong>full-text search across every CBETA text</strong>, ' +
+        '<strong>full-text search across both corpora</strong>, ' +
         'instant jump-to-passage with ZH/EN side-by-side, the full ' +
         'reading and translation workflow, and the ability to share ' +
         'search links like this one.'
     );
-    shell.setExtraLink('titles.jsonl', TITLES_URL);
+    shell.setExtraLink('titles.jsonl', cfNamed === 'openzen' ? OPEN_TITLES_URL : TITLES_URL);
 
     mount.innerHTML = `
         <section class="list-wrap search-wrap">
             <form class="search-form" id="search-form" autocomplete="off">
                 <input class="search-input" id="search-input" type="text"
-                       placeholder="Search work titlesâ€¦"
+                       placeholder="Search work titles…"
                        value="${escapeHtml(initialQuery)}" />
                 <button class="btn btn--small" type="submit">Search</button>
             </form>
@@ -73,11 +80,11 @@ export async function render(route, mount, shell) {
     const subEl = document.querySelector('#search-sub');
     const titleEl = document.querySelector('#search-title');
 
-    shell.setStatus('Loading titlesâ€¦', 'Downloading the corpus title index.', false);
+    shell.setStatus('Loading titles…', 'Downloading the title index.', false);
 
     let titles;
     try {
-        titles = await loadTitles();
+        titles = await loadAllTitlesAsArray();
     } catch (error) {
         shell.showError(
             'Search index unavailable',
@@ -104,9 +111,11 @@ export async function render(route, mount, shell) {
         for (const t of titles) {
             if (!t) continue;
             const path = (t.path || t.Path || '').toString();
-            if (corpus) {
+            if (cfNamed) {
+                if ((t.corpus || inferCorpusForRelPath(path)) !== cfNamed) continue;
+            } else if (cf && /^[A-Za-z]$/.test(cf)) {
                 const firstLetter = path.charAt(0).toUpperCase();
-                if (firstLetter !== corpus) continue;
+                if (firstLetter !== cf.toUpperCase()) continue;
             }
             const zh = (t.zh || t.Zh || '').toString();
             const en = (t.en || t.En || '').toString();
@@ -123,7 +132,7 @@ export async function render(route, mount, shell) {
         if (results.length === 0) {
             body.innerHTML = '';
             empty.hidden = false;
-            empty.innerHTML = `<p>No titles match <strong>${escapeHtml(trimmed)}</strong>${corpus ? ` in corpus ${escapeHtml(corpus)}` : ''}.</p>`;
+            empty.innerHTML = `<p>No titles match <strong>${escapeHtml(trimmed)}</strong>${corpusLabel ? ` in corpus ${escapeHtml(corpusLabel)}` : ''}.</p>`;
             subEl.textContent = '0 matches';
             return;
         }
@@ -138,14 +147,14 @@ export async function render(route, mount, shell) {
             const en = (t.en || t.En || '').toString();
             const enShort = (t.enShort || t.EnShort || '').toString();
             const path = (t.path || t.Path || '').toString();
-            const workId = (t.workId || t.WorkId || deriveWorkIdFromPath(path));
+            const workId = (t.fileId || t.fileID || t.workId || t.WorkId || deriveWorkIdFromPath(path));
             const href = workId ? '#/' + workId : '#';
 
             const enLine = en || enShort;
 
             return `
                 <a class="search-row" href="${escapeHtml(href)}">
-                    <span class="search-row-id">${escapeHtml(workId || 'â€”')}</span>
+                    <span class="search-row-id">${escapeHtml(workId || '—')}</span>
                     <span class="search-row-text">
                         <span class="search-row-zh">${escapeHtml(zh || '[no title]')}</span>
                         ${enLine ? `<span class="search-row-en">${escapeHtml(enLine)}</span>` : ''}
@@ -159,10 +168,9 @@ export async function render(route, mount, shell) {
     form.addEventListener('submit', (e) => {
         e.preventDefault();
         const q = input.value;
-        // Update hash without reloading the view.
-        const newHash = '#/search' + (q ? '?q=' + encodeURIComponent(q) + (corpus ? '&corpus=' + encodeURIComponent(corpus) : '') : '');
+        const corpusParam = cf ? '&corpus=' + encodeURIComponent(cf) : '';
+        const newHash = '#/search' + (q ? '?q=' + encodeURIComponent(q) + corpusParam : '');
         if (window.location.hash !== newHash) {
-            // Use replaceState so we don't spam the history for every keystroke.
             window.history.replaceState(null, '', newHash);
         }
         doSearch(q);
@@ -171,22 +179,14 @@ export async function render(route, mount, shell) {
     doSearch(initialQuery);
 }
 
-/** Fetch the full titles.jsonl index once per session. */
-async function loadTitles() {
-    const cached = cache.get(TITLES_CACHE_KEY);
-    if (cached) return cached;
-
-    const titles = [];
-    for await (const row of streamJsonl(TITLES_URL)) {
-        if (row && typeof row === 'object') titles.push(row);
-    }
-    cache.set(TITLES_CACHE_KEY, titles, TITLES_TTL_MS);
-    return titles;
-}
-
-/** Best-effort workId extraction from a relative path like "T/T48/T48n2005.xml". */
+/** Best-effort workId extraction from a relative path. */
 function deriveWorkIdFromPath(path) {
     if (!path) return '';
-    const file = path.split('/').pop() || '';
+    const normalized = path.replace(/\\/g, '/');
+    const parts = normalized.split('/').filter(Boolean);
+    if (inferCorpusForRelPath(normalized) === 'openzen' && parts.length >= 2) {
+        return `${parts[0]}.${parts[1]}`;
+    }
+    const file = parts.pop() || '';
     return file.replace(/\.xml$/i, '');
 }
