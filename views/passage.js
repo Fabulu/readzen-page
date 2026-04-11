@@ -41,14 +41,14 @@ export async function render(route, mount, shell) {
     );
     shell.setUpsell(
         'This preview shows one passage. The desktop app gives you the ' +
-        'full work, every CBETA text, a hover dictionary while you read, ' +
+        'full work, every text we index across CBETA and OpenZenTexts, a hover dictionary while you read, ' +
         'and lets you write your own translations. ' +
         'You can also <strong>create and share links like this one yourself</strong>.'
     );
 
     // Look up the title from titles.jsonl in the background and update the
     // shell + document title once it arrives. Don't block render on this.
-    lookupTitle(route.workId).then((entry) => {
+    lookupTitle(route.workId, route.corpus).then((entry) => {
         if (!entry) return;
         const titleText = entry.enShort || entry.en || entry.zh || route.workId;
         const subtitle = entry.zh && titleText !== entry.zh ? entry.zh : '';
@@ -63,9 +63,12 @@ export async function render(route, mount, shell) {
         false
     );
 
-    const srcUrl = sourceXmlUrl(route.workId);
+    const srcUrl = sourceXmlUrl(route.workId, route.corpus);
     if (!srcUrl) {
-        shell.showError('Unrecognised work ID', `Could not resolve "${route.workId}" to a CBETA file.`);
+        shell.showError(
+            'Unrecognised work ID',
+            `Could not resolve "${route.workId}" to a ${corpusLabel(route.corpus)} file.`
+        );
         return;
     }
 
@@ -125,9 +128,9 @@ export async function render(route, mount, shell) {
             let translationWork = null;
             const tCandidates = [];
             if (route.translator) {
-                tCandidates.push(communityTranslationUrl(route.workId, route.translator));
+                tCandidates.push(communityTranslationUrl(route.workId, route.translator, route.corpus));
             }
-            tCandidates.push(authoritativeTranslationUrl(route.workId));
+            tCandidates.push(authoritativeTranslationUrl(route.workId, route.corpus));
             for (const turl of tCandidates) {
                 if (!turl) continue;
                 try {
@@ -371,16 +374,16 @@ async function renderTranslation(route, _sourceLines, shell) {
     const candidates = [];
     if (route.translator) {
         candidates.push({
-            url: communityTranslationUrl(route.workId, route.translator),
+            url: communityTranslationUrl(route.workId, route.translator, route.corpus),
             label: `Translation by ${route.translator}`
         });
         candidates.push({
-            url: authoritativeTranslationUrl(route.workId),
+            url: authoritativeTranslationUrl(route.workId, route.corpus),
             label: 'Community translation'
         });
     } else {
         candidates.push({
-            url: authoritativeTranslationUrl(route.workId),
+            url: authoritativeTranslationUrl(route.workId, route.corpus),
             label: 'Community translation'
         });
     }
@@ -447,6 +450,12 @@ function describeMode(route) {
     return 'Chinese source preview';
 }
 
+function corpusLabel(corpus) {
+    if (corpus === 'openzen') return 'OpenZenTexts';
+    if (corpus === 'cbeta') return 'CBETA';
+    return 'known';
+}
+
 /** Sync min-heights of parallel lines so rows line up across the two panels. */
 function syncRowHeights() {
     const sourceRows = document.querySelectorAll('#source-body .line-row');
@@ -464,3 +473,4 @@ function syncRowHeights() {
         translationRows[j].style.minHeight = h + 'px';
     }
 }
+

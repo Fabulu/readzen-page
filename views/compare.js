@@ -58,7 +58,7 @@ export async function render(route, mount, shell) {
     );
 
     // Background title lookup so the header shows the human title
-    lookupTitle(workId).then((entry) => {
+    lookupTitle(workId, route.corpus).then((entry) => {
         if (!entry) return;
         const t = entry.enShort || entry.en || entry.zh || workId;
         const sub = entry.zh && t !== entry.zh ? entry.zh : '';
@@ -67,9 +67,12 @@ export async function render(route, mount, shell) {
     });
     shell.setStatus('Loading compare preview…', 'Fetching the original and both translations.', false);
 
-    const srcUrl = sourceXmlUrl(workId);
+    const srcUrl = sourceXmlUrl(workId, route.corpus);
     if (!srcUrl) {
-        shell.showError('Unrecognised work ID', `Could not resolve "${workId}" to a CBETA file.`);
+        shell.showError(
+            'Unrecognised work ID',
+            `Could not resolve "${workId}" to a ${corpusLabel(route.corpus)} file.`
+        );
         return;
     }
     shell.setExtraLink('Source XML', srcUrl);
@@ -113,8 +116,8 @@ export async function render(route, mount, shell) {
         // Kick all three fetches off in parallel.
         const [sourceWork, workA, workB] = await Promise.all([
             loadXml(srcUrl),
-            resolveAndLoad(workId, sourceA),
-            resolveAndLoad(workId, sourceB)
+            resolveAndLoad(workId, sourceA, route.corpus),
+            resolveAndLoad(workId, sourceB, route.corpus)
         ]);
 
         // Original pane.
@@ -223,7 +226,7 @@ function fillTranslationPane(key, workResult, sourceLabel, hasRange, startLine, 
  * `{ kind, work?, url?, error? }` shape so the caller doesn't care whether
  * the source is "me", community, or a named user.
  */
-async function resolveAndLoad(workId, source) {
+async function resolveAndLoad(workId, source, corpus) {
     const lower = String(source || '').toLowerCase();
 
     if (!source || lower === 'me') {
@@ -232,9 +235,9 @@ async function resolveAndLoad(workId, source) {
 
     let url = null;
     if (lower === 'community' || lower === 'authoritative' || lower === 'auth') {
-        url = authoritativeTranslationUrl(workId);
+        url = authoritativeTranslationUrl(workId, corpus);
     } else {
-        url = communityTranslationUrl(workId, source);
+        url = communityTranslationUrl(workId, source, corpus);
     }
 
     if (!url) {
@@ -262,6 +265,12 @@ async function loadXml(url) {
         cache.set(cacheKey, text, XML_CACHE_TTL_MS);
     }
     return parseTei(text);
+}
+
+function corpusLabel(corpus) {
+    if (corpus === 'openzen') return 'OpenZenTexts';
+    if (corpus === 'cbeta') return 'CBETA';
+    return 'known';
 }
 
 /** Human label for a compare source id. */
@@ -298,3 +307,4 @@ function syncCompareRowHeights() {
         bRows[j].style.minHeight = px;
     }
 }
+

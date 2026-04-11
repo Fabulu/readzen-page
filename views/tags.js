@@ -65,7 +65,7 @@ export async function render(route, mount, shell) {
     );
 
     // Background title lookup
-    lookupTitle(workId).then((entry) => {
+    lookupTitle(workId, route.corpus).then((entry) => {
         if (!entry) return;
         const t = entry.enShort || entry.en || entry.zh || workId;
         const sub = entry.zh && t !== entry.zh ? entry.zh : '';
@@ -110,7 +110,7 @@ export async function render(route, mount, shell) {
     // Start loading the vocabulary and source XML in parallel so rows can be
     // enriched with tag names + source text as soon as they arrive.
     const vocabPromise = loadVocabulary(user).catch(() => null);
-    const sourceXmlPromise = loadSourceXml(workId).catch(() => null);
+    const sourceXmlPromise = loadSourceXml(workId, route.corpus).catch(() => null);
 
     const tagsUrl = `${DATA_REPO_BASE}community/tags/${encodeURIComponent(user)}.jsonl`;
     shell.setExtraLink('Tags JSONL', tagsUrl);
@@ -120,12 +120,20 @@ export async function render(route, mount, shell) {
     // "T/T48/T48n2005.xml" (3-part). Accept either by comparing the file name.
     const workFileName = workId + '.xml';
     const expectedRels = [];
-    const rel = xmlUrlForFileId(workId);   // e.g. "T/T48/T48n2005.xml"
+    const rel = xmlUrlForFileId(workId, route.corpus);   // e.g. "T/T48/T48n2005.xml"
     if (rel) expectedRels.push(rel.toLowerCase());
     // Also the 2-part form (trim leading canon/).
     if (rel) {
         const parts = rel.split('/');
         if (parts.length > 1) expectedRels.push(parts.slice(1).join('/').toLowerCase());
+    }
+    if (route.corpus === 'openzen') {
+        const dotIdx = workId.indexOf('.');
+        if (dotIdx > 0 && dotIdx < workId.length - 1) {
+            const slug = workId.substring(dotIdx + 1);
+            expectedRels.push(`${slug}/${slug}.xml`.toLowerCase());
+            expectedRels.push(`${slug}.xml`.toLowerCase());
+        }
     }
 
     function matchesWork(relPath) {
@@ -274,8 +282,8 @@ function findTag(vocab, tagId) {
 }
 
 /** Fetch and parse the source XML for a given work id. Cached as raw text. */
-async function loadSourceXml(workId) {
-    const url = sourceXmlUrl(workId);
+async function loadSourceXml(workId, corpus) {
+    const url = sourceXmlUrl(workId, corpus);
     if (!url) return null;
     const cacheKey = 'xml-text:' + url;
     let text = cache.get(cacheKey);
@@ -362,3 +370,4 @@ function fillSourceSnippet(row, tag, work) {
     if (snippet.length > 80) snippet = snippet.substring(0, 80) + '…';
     snippetEl.textContent = snippet || '[empty]';
 }
+
