@@ -305,3 +305,70 @@ test('parse → build → parse round-trips for scholar with query user', () => 
     assert.equal(r2.passageId, 'passageId');
     assert.equal(r2.user, 'Fabulu');
 });
+
+// ---------- OpenZen routes ----------
+
+test('passage: OpenZen workId only', () => {
+    const r = parseRoute('ws.gateless-barrier');
+    assert.equal(r.kind, 'passage');
+    assert.equal(r.workId, 'ws.gateless-barrier');
+    assert.equal(r.corpus, 'openzen');
+    assert.equal(r.canon, '');
+    assert.equal(r.volume, '');
+    assert.equal(r.workSuffix, '');
+    assert.equal(r.mode, 'zh');
+});
+
+test('passage: OpenZen with side=en and translator', () => {
+    const r = parseRoute('ws.gateless-barrier/en/Fabulu');
+    assert.equal(r.kind, 'passage');
+    assert.equal(r.mode, 'en');
+    assert.equal(r.translator, 'Fabulu');
+    assert.equal(r.corpus, 'openzen');
+});
+
+test('passage: CBETA route still has corpus=cbeta', () => {
+    const r = parseRoute('T48n2005');
+    assert.equal(r.kind, 'passage');
+    assert.equal(r.corpus, 'cbeta');
+});
+
+test('compare: OpenZen fileId infers corpus=openzen', () => {
+    const r = parseRoute('compare/ws.gateless-barrier/orig/me/community');
+    assert.equal(r.kind, 'compare');
+    assert.equal(r.fileId, 'ws.gateless-barrier');
+    assert.equal(r.corpus, 'openzen');
+});
+
+test('tags: OpenZen fileId infers corpus=openzen', () => {
+    const r = parseRoute('tags/ws.gateless-barrier/Fabulu');
+    assert.equal(r.kind, 'tags');
+    assert.equal(r.fileId, 'ws.gateless-barrier');
+    assert.equal(r.corpus, 'openzen');
+});
+
+test('passage: OpenZen with each publisher prefix', () => {
+    const publishers = ['ws', 'pd', 'ce', 'mit'];
+    for (const prefix of publishers) {
+        const r = parseRoute(`${prefix}.sample-text`);
+        assert.equal(r.kind, 'passage');
+        assert.equal(r.corpus, 'openzen');
+    }
+});
+
+test('parse -> build -> parse round-trips for OpenZen passage', () => {
+    const raw = 'ws.gateless-barrier/en/Fabulu';
+    const r1 = parseRoute(raw);
+    const uri = buildZenUri(r1);
+    const stripped = uri.replace(/^zen:\/\//, '');
+    const r2 = parseRoute(stripped);
+    assert.equal(r2.kind, r1.kind);
+    assert.equal(r2.workId, r1.workId);
+    assert.equal(r2.mode, r1.mode);
+    assert.equal(r2.translator, r1.translator);
+});
+
+test('unknown publisher does not match OpenZen pattern', () => {
+    const r = parseRoute('xx.foo');
+    assert.equal(r.kind, 'unknown');
+});
