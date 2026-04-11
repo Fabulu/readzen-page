@@ -144,6 +144,23 @@ test('parseTei: inline <note> is also skipped (CBETA editorial commentary)', () 
     assert.ok(text.includes('end'));
 });
 
+test('parseTei: <cb:mulu> is skipped (CBETA TOC marker that duplicates <head>)', () => {
+    // Real CBETA structure observed in T48n2005 (Wumenguan):
+    //   <lb n="0292a25"/><cb:div type="xu"><cb:mulu>禪宗無門關</cb:mulu><head>禪宗無門關</head>
+    // Recursing into <cb:mulu> would double the heading text in the line.
+    const xml = `<?xml version="1.0"?>
+<TEI xmlns="${TEI_NS}" xmlns:cb="http://www.cbeta.org/ns/1.0">
+  <teiHeader><fileDesc><titleStmt><title>x</title></titleStmt><publicationStmt/><sourceDesc><p>x</p></sourceDesc></fileDesc></teiHeader>
+  <text><body>
+    <p><lb n="0292a25"/><cb:div type="xu"><cb:mulu level="1" type="序">禪宗無門關</cb:mulu><head>禪宗無門關</head></cb:div></p>
+  </body></text>
+</TEI>`;
+    const parsed = parseTei(xml);
+    const text = parsed.linesById.get('0292a25').text;
+    // Should appear ONCE, not twice.
+    assert.equal(text, '禪宗無門關', `got: ${JSON.stringify(text)}`);
+});
+
 // ---------- Titles ----------
 
 test('parseTei: extracts zh and en titles from titleStmt', () => {
