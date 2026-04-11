@@ -299,23 +299,23 @@ async function renderTranslation(route, _sourceLines, shell) {
     const titleEl = document.querySelector('#translation-title');
 
     // Build candidate URLs in priority order. If a translator was requested,
-    // try their personal translation FIRST, then fall back to the authoritative
-    // community translation. This handles the common case where a user has
-    // translated some files but not others.
+    // try their personal translation FIRST, then fall back to the community
+    // translation. This handles the common case where a user has translated
+    // some files but not others.
     const candidates = [];
     if (route.translator) {
         candidates.push({
             url: communityTranslationUrl(route.workId, route.translator),
-            label: `Community Translation · ${route.translator}`
+            label: `Translation by ${route.translator}`
         });
         candidates.push({
             url: authoritativeTranslationUrl(route.workId),
-            label: `Authoritative Translation (${route.translator} hasn't translated this file)`
+            label: 'Community translation'
         });
     } else {
         candidates.push({
             url: authoritativeTranslationUrl(route.workId),
-            label: 'Authoritative Translation'
+            label: 'Community translation'
         });
     }
 
@@ -351,8 +351,8 @@ async function renderTranslation(route, _sourceLines, shell) {
     {
         const error = lastError || new Error('No translation source available.');
         label.textContent = route.translator
-            ? `Community Translation · ${route.translator}`
-            : 'Authoritative Translation';
+            ? `Translation by ${route.translator}`
+            : 'Community translation';
         panel.hidden = false;
         meta.textContent = '—';
         body.innerHTML = `
@@ -375,8 +375,8 @@ function describeRange(route) {
 function describeMode(route) {
     if (route.mode === 'en') {
         return route.translator
-            ? `Community translation by ${route.translator}`
-            : 'Authoritative English translation';
+            ? `Translation by ${route.translator}`
+            : 'Community translation';
     }
     return 'Chinese source preview';
 }
