@@ -309,6 +309,27 @@ code, .mono { font-family: var(--mono); }
 
 .shell-foot a:hover { color: var(--accent); }
 
+.shell-foot-pref {
+    margin-top: 0.5rem;
+    font-size: 0.72rem;
+    color: var(--muted);
+    opacity: 0.55;
+    transition: opacity 180ms ease;
+}
+
+.shell-foot-pref:hover {
+    opacity: 1;
+}
+
+.shell-foot-toggle {
+    color: var(--text-soft);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-transform: lowercase;
+    margin-left: 0.25rem;
+    cursor: pointer;
+}
+
 /* ━━ Landing view ━━ */
 
 .landing {

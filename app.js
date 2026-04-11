@@ -22,8 +22,21 @@ import * as compare from './views/compare.js';
 // They're dispatched before the placeholder path in `init` below.
 const LOOKUP_VIEWS = [dictionary, termbase, master, tags, scholar, search];
 
-const DESKTOP_FALLBACK_DELAY = 1800;
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
+
+// localStorage key for the user's auto-open-in-desktop-app preference.
+// Default is "on" — set to 'false' to disable. The footer toggle in
+// views/shell.js flips this and reloads the page.
+const AUTO_OPEN_PREF_KEY = 'readzen-auto-open';
+
+/** Returns true if the user has NOT opted out of silent auto-launch. */
+function isAutoOpenEnabled() {
+    try {
+        return localStorage.getItem(AUTO_OPEN_PREF_KEY) !== 'false';
+    } catch {
+        return true; // localStorage unavailable → default on
+    }
+}
 
 /**
  * Mount the correct view for the current hash and wire the app-first race.
@@ -42,7 +55,18 @@ async function init() {
         return;
     }
 
-    // Lookup views (dictionary / termbase / master): instant render, no race.
+    // For ANY routed view that resolves to a valid zen:// URI, fire the
+    // desktop app silently in the background — UNLESS the user has
+    // opted out via the footer toggle. If the app is installed it takes
+    // over the OS tab; if not, the iframe load fails silently and the
+    // preview below stays visible. When auto-open is off, the shell shows
+    // an explicit "Open in Read Zen" button instead.
+    if (isAutoOpenEnabled()) {
+        fireAppLaunchSilent(route);
+    }
+
+    // Lookup views (dictionary / termbase / master / tags / scholar / search):
+    // instant render alongside the silent launch.
     for (const view of LOOKUP_VIEWS) {
         if (view.match(route)) {
             try {
@@ -54,9 +78,8 @@ async function init() {
         }
     }
 
-    // Passage → fire app launch silently in background, render preview immediately.
+    // Passage → preview renders immediately while the app launch races.
     if (passage.match(route)) {
-        fireAppLaunchSilent(route);
         try {
             await passage.render(route, shell.mount, shell);
         } catch (error) {
@@ -65,9 +88,8 @@ async function init() {
         return;
     }
 
-    // Compare → fire app launch silently in background, render preview immediately.
+    // Compare → same flow as passage.
     if (compare.match(route)) {
-        fireAppLaunchSilent(route);
         try {
             await compare.render(route, shell.mount, shell);
         } catch (error) {
@@ -76,28 +98,18 @@ async function init() {
         return;
     }
 
-    // Completely unknown kind → show the "install Read Zen" card, then
-    // fire the app-first race so the fallback block reveals itself if the
-    // desktop app doesn't take over within the grace window.
+    // Completely unknown kind → show the "install Read Zen" card. The
+    // silent app launch fired at the top of init() handles the "app
+    // installed" path; this fallback covers everyone else.
     shell.setTitle('Read Zen');
     shell.setContext('Someone shared a Read Zen link with you', 'Install Read Zen to open it.');
     renderPlaceholder(route, shell.mount, {
         heading: 'Someone shared a Read Zen link with you',
         sub: 'Install Read Zen to open it.'
     });
-
-    tryOpenDesktop(route, () => {
-        const fallback = document.getElementById('placeholder-fallback');
-        if (fallback) fallback.classList.add('visible');
-        shell.setStatus(
-            'Read Zen not detected',
-            'This link opens in the Read Zen desktop app. Install the app, then click the link again to open it directly.',
-            false
-        );
-    });
 }
 
-/** Renders the "install Read Zen" placeholder card used by Wave 1 for non-passage kinds. */
+/** Renders the "install Read Zen" placeholder card used for unknown route kinds. */
 function renderPlaceholder(route, mount, messages) {
     const zenUri = buildZenUri(route) || '';
     const routeText = route && route.rawRoute ? route.rawRoute : '';
@@ -111,11 +123,7 @@ function renderPlaceholder(route, mount, messages) {
                 <code class="passage-raw">${escapeHtml(routeText)}</code>
             </div>
 
-            <div class="passage-action" id="placeholder-action">
-                <p class="passage-status">Launching Read Zen<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
-            </div>
-
-            <div class="passage-fallback" id="placeholder-fallback">
+            <div class="passage-fallback visible">
                 <p class="fallback-msg">
                     This link opens in the <strong>Read Zen</strong> desktop app.<br>
                     If you don't have it yet, download it below — it's free.
@@ -147,60 +155,6 @@ function fireAppLaunchSilent(route) {
     } catch {
         // Browser blocked the protocol or it doesn't exist — preview is the answer.
     }
-}
-
-/**
- * Fires a hidden iframe at the `zen://` deep link. If the tab loses
- * visibility within the grace window, we treat that as "app took over".
- * Otherwise, `onFallback` runs after DESKTOP_FALLBACK_DELAY ms.
- * (Used by the unknown-route placeholder fallback only.)
- */
-function tryOpenDesktop(route, onFallback) {
-    const zenUri = buildZenUri(route);
-    if (!zenUri) {
-        onFallback();
-        return;
-    }
-
-    const launchTime = Date.now();
-    let appDetected = false;
-
-    function onAppDetected() {
-        if (Date.now() - launchTime < 200) return;
-        if (appDetected) return;
-        appDetected = true;
-        cleanup();
-        const action = document.getElementById('placeholder-action');
-        if (action) {
-            action.innerHTML = '<p class="passage-status">Opened in Read Zen</p>';
-        }
-    }
-
-    function onVisibilityChange() {
-        if (document.hidden) onAppDetected();
-    }
-
-    function cleanup() {
-        document.removeEventListener('visibilitychange', onVisibilityChange);
-        window.removeEventListener('blur', onAppDetected);
-    }
-
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('blur', onAppDetected);
-
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = zenUri;
-    document.body.appendChild(iframe);
-    setTimeout(() => {
-        try { document.body.removeChild(iframe); } catch {}
-    }, 500);
-
-    setTimeout(() => {
-        cleanup();
-        if (appDetected) return;
-        onFallback();
-    }, DESKTOP_FALLBACK_DELAY);
 }
 
 // Re-run init on hash changes so users navigating between links inside the

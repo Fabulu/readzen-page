@@ -10,6 +10,18 @@ import { escapeHtml } from '../lib/format.js';
 import { buildZenUri, describeRoute } from '../lib/route.js';
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
+const AUTO_OPEN_PREF_KEY = 'readzen-auto-open';
+
+/** Default-on. The footer toggle in this file flips it. */
+function isAutoOpenEnabled() {
+    try { return localStorage.getItem(AUTO_OPEN_PREF_KEY) !== 'false'; }
+    catch { return true; }
+}
+
+function setAutoOpenEnabled(on) {
+    try { localStorage.setItem(AUTO_OPEN_PREF_KEY, on ? 'true' : 'false'); }
+    catch {}
+}
 
 /**
  * Render the shell into `#app` and return the inner mount node plus a set of
@@ -67,6 +79,10 @@ export function mountShell(root, route) {
 
             <footer class="shell-foot">
                 <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA · Non-commercial use</p>
+                <p class="shell-foot-pref">
+                    Auto-open links in the Read Zen app:
+                    <a href="#" id="auto-open-toggle" class="shell-foot-toggle"></a>
+                </p>
             </footer>
         </div>
     `;
@@ -85,6 +101,8 @@ export function mountShell(root, route) {
     const upsell = root.querySelector('#upsell');
     const upsellDesc = root.querySelector('#upsell-desc');
 
+    const autoOpenOn = isAutoOpenEnabled();
+
     if (route) {
         chip.hidden = false;
         chip.textContent = describeRoute(route);
@@ -94,8 +112,25 @@ export function mountShell(root, route) {
         // Routed views always get the desktop-app upsell card. Landing has no
         // route and skips it (it has its own download CTA).
         upsell.hidden = false;
+        // Auto-open ON (default): the iframe launch in app.js handles it,
+        // so the manual button is redundant. Auto-open OFF: bring the
+        // button back so users still have a one-click launch path.
+        openDesktop.hidden = autoOpenOn;
     } else {
         openDesktop.href = RELEASES_URL;
+        openDesktop.hidden = autoOpenOn;
+    }
+
+    // Footer toggle: shows current state, flips on click, reloads so the
+    // new preference takes effect immediately for this view.
+    const toggle = root.querySelector('#auto-open-toggle');
+    if (toggle) {
+        toggle.textContent = autoOpenOn ? 'on' : 'off';
+        toggle.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            setAutoOpenEnabled(!autoOpenOn);
+            window.location.reload();
+        });
     }
 
     return {
