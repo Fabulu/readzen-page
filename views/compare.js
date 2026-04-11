@@ -242,16 +242,19 @@ async function resolveAndLoad(workId, source) {
     }
 }
 
-/** Fetch + parse TEI XML with caching. */
+/**
+ * Fetch + parse TEI XML with caching. Caches the raw XML text rather than
+ * the parsed object — parsed TEI contains Map instances that don't survive
+ * sessionStorage's JSON round-trip.
+ */
 async function loadXml(url) {
-    const cacheKey = 'xml:' + url;
-    const cached = cache.get(cacheKey);
-    if (cached) return cached;
-
-    const text = await fetchText(url);
-    const parsed = parseTei(text);
-    cache.set(cacheKey, parsed, XML_CACHE_TTL_MS);
-    return parsed;
+    const cacheKey = 'xml-text:' + url;
+    let text = cache.get(cacheKey);
+    if (typeof text !== 'string') {
+        text = await fetchText(url);
+        cache.set(cacheKey, text, XML_CACHE_TTL_MS);
+    }
+    return parseTei(text);
 }
 
 /** Human label for a compare source id. */

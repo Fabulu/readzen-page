@@ -279,15 +279,19 @@ function renderFirstNLines(sourceWork, n, route, mount) {
     `;
 }
 
-/** Fetch + parse TEI XML with caching. */
+/**
+ * Fetch + parse TEI XML with caching. We cache the RAW XML text, not the
+ * parsed object — parsed objects contain Map instances that don't survive
+ * JSON.stringify into sessionStorage. Re-parsing is fast (~10ms for typical
+ * files) and avoids the "linesById.get is not a function" bug after refresh.
+ */
 async function loadXml(url) {
-    const cached = cache.get('xml:' + url);
-    if (cached) return cached;
-
-    const text = await fetchText(url);
-    const parsed = parseTei(text);
-    cache.set('xml:' + url, parsed, XML_CACHE_TTL_MS);
-    return parsed;
+    let text = cache.get('xml-text:' + url);
+    if (typeof text !== 'string') {
+        text = await fetchText(url);
+        cache.set('xml-text:' + url, text, XML_CACHE_TTL_MS);
+    }
+    return parseTei(text);
 }
 
 /** Render the translation panel (or a not-available notice). */

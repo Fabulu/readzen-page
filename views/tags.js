@@ -267,18 +267,17 @@ function findTag(vocab, tagId) {
     return null;
 }
 
-/** Fetch and parse the source XML for a given work id. Cached. */
+/** Fetch and parse the source XML for a given work id. Cached as raw text. */
 async function loadSourceXml(workId) {
     const url = sourceXmlUrl(workId);
     if (!url) return null;
-    const cacheKey = 'xml:' + url;
-    const cached = cache.get(cacheKey);
-    if (cached) return cached;
-
-    const text = await fetchText(url);
-    const parsed = parseTei(text);
-    cache.set(cacheKey, parsed, XML_CACHE_TTL_MS);
-    return parsed;
+    const cacheKey = 'xml-text:' + url;
+    let text = cache.get(cacheKey);
+    if (typeof text !== 'string') {
+        text = await fetchText(url);
+        cache.set(cacheKey, text, XML_CACHE_TTL_MS);
+    }
+    return parseTei(text);
 }
 
 /** Build a DOM row for a tag entry. */
