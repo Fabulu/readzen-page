@@ -46,7 +46,7 @@ export function mountShell(root, route) {
                 <div class="shell-route" id="shell-route-box">
                     <span class="route-chip" id="route-chip" hidden></span>
                     <span class="route-chip route-chip--corpus" id="corpus-chip" hidden></span>
-                    <a class="support-btn" href="https://ko-fi.com/readzen" target="_blank" rel="noreferrer" title="Support ReadZen + OpenZenTexts on Ko-fi">\u2661 Support</a>
+                    <a class="support-btn" href="#" id="support-btn" title="Support ReadZen + OpenZenTexts on Ko-fi">\u2661 Support</a>
                 </div>
             </header>
 
@@ -156,6 +156,37 @@ export function mountShell(root, route) {
             window.location.reload();
         });
     }
+
+    // Ko-fi overlay: opens the donation form in an iframe modal so the user
+    // stays on readzen.pages.dev. No external SDK needed.
+    function openKofiOverlay(ev) {
+        if (ev) ev.preventDefault();
+        if (document.querySelector('.kofi-overlay')) return; // already open
+        const overlay = document.createElement('div');
+        overlay.className = 'kofi-overlay';
+        overlay.innerHTML =
+            '<div class="kofi-overlay-backdrop"></div>' +
+            '<div class="kofi-overlay-frame">' +
+            '<button class="kofi-overlay-close" aria-label="Close">\u00d7</button>' +
+            '<iframe src="https://ko-fi.com/readzen/?hidefeed=true&widget=true&embed=true" ' +
+            'style="border:none;width:100%;height:100%;background:#1a1a2e;border-radius:12px;" ' +
+            'title="Support ReadZen on Ko-fi"></iframe>' +
+            '</div>';
+        overlay.querySelector('.kofi-overlay-backdrop').addEventListener('click', () => overlay.remove());
+        overlay.querySelector('.kofi-overlay-close').addEventListener('click', () => overlay.remove());
+        document.addEventListener('keydown', function esc(e) {
+            if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', esc); }
+        });
+        document.body.appendChild(overlay);
+    }
+
+    // Wire all support links to open the overlay instead of navigating away
+    const supportBtn = root.querySelector('#support-btn');
+    if (supportBtn) supportBtn.addEventListener('click', openKofiOverlay);
+    root.querySelectorAll('a[href*="ko-fi.com/readzen"]').forEach(a => {
+        a.addEventListener('click', openKofiOverlay);
+        a.removeAttribute('target');
+    });
 
     return {
         mount,
