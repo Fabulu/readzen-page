@@ -498,7 +498,12 @@ code, .mono { font-family: var(--mono); }
 
 .line-row {
     display: grid;
-    grid-template-columns: 6.5rem minmax(0, 1fr);
+    /* The line-id column is normally 6.5rem (fits CBETA "0292c23" with room).
+       OpenZen synthetic line IDs are much longer ("wm32.case01.wumen.l05",
+       up to ~22 chars), so we let the column grow up to max-content when
+       needed. minmax keeps the floor at 6.5rem so CBETA grids stay aligned
+       with the historical layout. */
+    grid-template-columns: minmax(6.5rem, max-content) minmax(0, 1fr);
     gap: 1rem;
     align-items: start;
     padding: 0.55rem 1.35rem;
@@ -577,7 +582,10 @@ code, .mono { font-family: var(--mono); }
 
 .outline-row {
     display: grid;
-    grid-template-columns: 5rem 7rem minmax(0, 1fr);
+    /* juan column 5rem, lb column floors at 7rem (CBETA "0292c23") and grows
+       up to max-content for OpenZen synthetic IDs ("wm32.case01.wumen.l05"
+       and friends). Same fix pattern as .line-row above. */
+    grid-template-columns: 5rem minmax(7rem, max-content) minmax(0, 1fr);
     gap: 1rem;
     align-items: start;
     padding: 0.95rem 1.8rem;

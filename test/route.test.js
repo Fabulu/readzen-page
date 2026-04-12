@@ -372,3 +372,60 @@ test('unknown publisher does not match OpenZen pattern', () => {
     const r = parseRoute('xx.foo');
     assert.equal(r.kind, 'unknown');
 });
+
+// ---------- OpenZen synthetic line-id ranges ----------
+//
+// Regression: the original CBETA-only RANGE_PATTERN silently dropped
+// OpenZen synthetic line IDs (wm32.case01.l01-style), so a shared link
+// like #/pd.wumenguan-1632/wm32.case01.l01-wm32.case01.l02/en/Fabulu
+// would open the right file but fail to jump to the passage.
+
+test('passage: OpenZen single synthetic lb', () => {
+    const r = parseRoute('pd.wumenguan-1632/wm32.case01.l01');
+    assert.equal(r.kind, 'passage');
+    assert.equal(r.workId, 'pd.wumenguan-1632');
+    assert.equal(r.corpus, 'openzen');
+    assert.equal(r.hasExplicitRange, true);
+    assert.equal(r.startLine, 'wm32.case01.l01');
+    assert.equal(r.endLine, 'wm32.case01.l01');
+});
+
+test('passage: OpenZen synthetic lb range', () => {
+    const r = parseRoute('pd.wumenguan-1632/wm32.case01.l01-wm32.case01.l02');
+    assert.equal(r.kind, 'passage');
+    assert.equal(r.workId, 'pd.wumenguan-1632');
+    assert.equal(r.corpus, 'openzen');
+    assert.equal(r.hasExplicitRange, true);
+    assert.equal(r.startLine, 'wm32.case01.l01');
+    assert.equal(r.endLine, 'wm32.case01.l02');
+});
+
+test('passage: OpenZen synthetic lb range + side + translator', () => {
+    const r = parseRoute('pd.wumenguan-1632/wm32.case01.l01-wm32.case01.l02/en/Fabulu');
+    assert.equal(r.kind, 'passage');
+    assert.equal(r.workId, 'pd.wumenguan-1632');
+    assert.equal(r.corpus, 'openzen');
+    assert.equal(r.startLine, 'wm32.case01.l01');
+    assert.equal(r.endLine, 'wm32.case01.l02');
+    assert.equal(r.mode, 'en');
+    assert.equal(r.translator, 'Fabulu');
+});
+
+test('passage: OpenZen multi-section synthetic lb (wmen subsection)', () => {
+    // wm32.case01.wumen.l05 is a 4-token form used by the wumenguan-1632
+    // converter for the master-commentary section.
+    const r = parseRoute('pd.wumenguan-1632/wm32.case01.wumen.l01-wm32.case01.wumen.l05');
+    assert.equal(r.kind, 'passage');
+    assert.equal(r.startLine, 'wm32.case01.wumen.l01');
+    assert.equal(r.endLine, 'wm32.case01.wumen.l05');
+});
+
+test('CBETA range still works after OpenZen extension', () => {
+    // Regression: the new patterns must not break the existing CBETA path.
+    const r = parseRoute('T48n2005/0292c23-0292c24/en/Fabulu');
+    assert.equal(r.kind, 'passage');
+    assert.equal(r.startLine, '0292c23');
+    assert.equal(r.endLine, '0292c24');
+    assert.equal(r.mode, 'en');
+    assert.equal(r.translator, 'Fabulu');
+});
