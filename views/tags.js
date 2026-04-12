@@ -12,11 +12,13 @@ import { escapeHtml } from '../lib/format.js';
 import { parseTei } from '../lib/tei.js';
 import {
     DATA_REPO_BASE,
+    OPEN_DATA_REPO_BASE,
     sourceXmlUrl,
     fetchText,
     fetchJson,
     xmlUrlForFileId
 } from '../lib/github.js';
+import { Corpus } from '../lib/corpus.js';
 import { streamJsonl } from '../lib/jsonl.js';
 import * as cache from '../lib/cache.js';
 import { lookupTitle } from '../lib/titles.js';
@@ -107,12 +109,18 @@ export async function render(route, mount, shell) {
     const subEl = document.querySelector('#tags-sub');
     const emptyEl = document.querySelector('#tags-empty');
 
+    // The community tags + vocabulary live in whichever translations repo
+    // matches the route's corpus. CBETA tags are in CbetaZenTranslations,
+    // OpenZen tags are in OpenZenTranslations. Without this dispatch the
+    // OpenZen route would silently 404 against the wrong repo.
+    const dataBase = route.corpus === Corpus.OpenZen ? OPEN_DATA_REPO_BASE : DATA_REPO_BASE;
+
     // Start loading the vocabulary and source XML in parallel so rows can be
     // enriched with tag names + source text as soon as they arrive.
-    const vocabPromise = loadVocabulary(user).catch(() => null);
+    const vocabPromise = loadVocabulary(user, dataBase).catch(() => null);
     const sourceXmlPromise = loadSourceXml(workId, route.corpus).catch(() => null);
 
-    const tagsUrl = `${DATA_REPO_BASE}community/tags/${encodeURIComponent(user)}.jsonl`;
+    const tagsUrl = `${dataBase}community/tags/${encodeURIComponent(user)}.jsonl`;
     shell.setExtraLink('Tags JSONL', tagsUrl);
 
     // Build the work-id → relPath comparators. ReadZen may store RelPath as
@@ -251,8 +259,8 @@ export async function render(route, mount, shell) {
 }
 
 /** Fetch the tag vocabulary JSON, cached. Returns null on 404. */
-async function loadVocabulary(user) {
-    const url = `${DATA_REPO_BASE}community/tag-vocabularies/${encodeURIComponent(user)}.json`;
+async function loadVocabulary(user, dataBase) {
+    const url = `${dataBase}community/tag-vocabularies/${encodeURIComponent(user)}.json`;
     const key = 'tagvocab:' + url;
     const cached = cache.get(key);
     if (cached) return cached;
