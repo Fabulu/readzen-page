@@ -157,6 +157,59 @@ code, .mono { font-family: var(--mono); }
     color: #d2eadb;
 }
 
+/* ━━ Support button (header, next to corpus chips) ━━ */
+
+.support-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.2rem 0.7rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #f0d0a0;
+    background: rgba(212, 171, 88, 0.12);
+    border: 1px solid rgba(212, 171, 88, 0.35);
+    border-radius: 999px;
+    text-decoration: none;
+    transition: background 180ms ease, border-color 180ms ease;
+    white-space: nowrap;
+    margin-left: 0.5rem;
+}
+
+.support-btn:hover {
+    background: rgba(212, 171, 88, 0.25);
+    border-color: rgba(212, 171, 88, 0.6);
+    color: #ffe4b5;
+}
+
+.upsell-support {
+    font-size: 0.82rem;
+    opacity: 0.65;
+    margin-top: 0.5rem;
+}
+
+.upsell-support a {
+    color: var(--text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.upsell-support a:hover {
+    opacity: 1;
+}
+
+@media (max-width: 600px) {
+    .support-btn {
+        font-size: 0;        /* hide text on mobile */
+        padding: 0.25rem;
+    }
+    .support-btn::before {
+        content: '\2661';    /* just the heart */
+        font-size: 0.85rem;
+    }
+}
+
 .shell-actions {
     display: flex;
     align-items: flex-start;

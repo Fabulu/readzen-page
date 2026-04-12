@@ -46,6 +46,7 @@ export function mountShell(root, route) {
                 <div class="shell-route" id="shell-route-box">
                     <span class="route-chip" id="route-chip" hidden></span>
                     <span class="route-chip route-chip--corpus" id="corpus-chip" hidden></span>
+                    <a class="support-btn" href="https://ko-fi.com/readzen" target="_blank" rel="noreferrer" title="Support ReadZen + OpenZenTexts on Ko-fi">\u2661 Support</a>
                 </div>
             </header>
 
@@ -80,11 +81,12 @@ export function mountShell(root, route) {
                 <div class="upsell-actions">
                     <a class="btn" id="upsell-download" href="${RELEASES_URL}">Download Read Zen</a>
                     <p class="upsell-platforms">Free · Windows · Linux · macOS</p>
+                    <p class="upsell-support"><a href="https://ko-fi.com/readzen" target="_blank" rel="noreferrer">This project is supported by people like you</a></p>
                 </div>
             </aside>
 
             <footer class="shell-foot">
-                <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA + OpenZenTexts · Non-commercial &amp; CC-licensed use</p>
+                <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA + OpenZenTexts · <a href="https://ko-fi.com/readzen" target="_blank" rel="noreferrer">Support this project</a></p>
                 <p class="shell-foot-pref">
                     Auto-open links in the Read Zen app:
                     <a href="#" id="auto-open-toggle" class="shell-foot-toggle"></a>
