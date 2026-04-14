@@ -268,7 +268,7 @@ async function loadXml(url) {
 }
 
 function corpusLabel(corpus) {
-    if (corpus === 'openzen') return 'OpenZenTexts';
+    if (corpus === 'openzen') return 'OpenZen';
     if (corpus === 'cbeta') return 'CBETA';
     return 'known';
 }

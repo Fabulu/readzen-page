@@ -46,7 +46,7 @@ export function mountShell(root, route) {
                 <div class="shell-route" id="shell-route-box">
                     <span class="route-chip" id="route-chip" hidden></span>
                     <span class="route-chip route-chip--corpus" id="corpus-chip" hidden></span>
-                    <a class="support-btn" href="#" id="support-btn" title="Support ReadZen + OpenZenTexts on Ko-fi">\u2661 Support</a>
+                    <a class="support-btn" href="#" id="support-btn" title="Support ReadZen + OpenZen on Ko-fi">\u2661 Support</a>
                 </div>
             </header>
 
@@ -72,7 +72,7 @@ export function mountShell(root, route) {
                 <p class="upsell-kicker">This is just a preview</p>
                 <h2 class="upsell-title">Get the full Read Zen desktop app</h2>
                 <p class="upsell-desc" id="upsell-desc">
-                    Read both the CBETA and OpenZenTexts corpora, translate side-by-side with
+                    Read both the CBETA and OpenZen corpora, translate side-by-side with
                     a hover dictionary and translation memory, search every
                     text at once, build scholar collections, manage terminology,
                     and <strong>create and share links like this one</strong>
@@ -124,7 +124,7 @@ export function mountShell(root, route) {
             const corpus = route.corpus;
             if (corpus === 'cbeta' || corpus === 'openzen') {
                 corpusChip.hidden = false;
-                corpusChip.textContent = corpus === 'cbeta' ? 'CBETA' : 'OpenZenTexts';
+                corpusChip.textContent = corpus === 'cbeta' ? 'CBETA' : 'OpenZen';
                 corpusChip.classList.remove('route-chip--cbeta', 'route-chip--openzen');
                 corpusChip.classList.add(corpus === 'cbeta' ? 'route-chip--cbeta' : 'route-chip--openzen');
             } else {

@@ -99,7 +99,7 @@ function applyChrome(shell, name, user) {
     shell.setUpsell(
         'This is a single Zen master profile. The desktop app gives you a ' +
         'managed master-dates database, hover lookups while you read any ' +
-        'Zen text across CBETA and OpenZenTexts, side-by-side translation, ' +
+        'Zen text across CBETA and OpenZen, side-by-side translation, ' +
         'and the ability to <strong>curate and share your own master entries</strong>.'
     );
     shell.hideStatus();

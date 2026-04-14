@@ -41,7 +41,7 @@ export async function render(route, mount, shell) {
     );
     shell.setUpsell(
         'This preview shows one passage. The desktop app gives you the ' +
-        'full work, every text we index across CBETA and OpenZenTexts, a hover dictionary while you read, ' +
+        'full work, every text we index across CBETA and OpenZen, a hover dictionary while you read, ' +
         'and lets you write your own translations. ' +
         'You can also <strong>create and share links like this one yourself</strong>.'
     );
@@ -451,7 +451,7 @@ function describeMode(route) {
 }
 
 function corpusLabel(corpus) {
-    if (corpus === 'openzen') return 'OpenZenTexts';
+    if (corpus === 'openzen') return 'OpenZen';
     if (corpus === 'cbeta') return 'CBETA';
     return 'known';
 }

@@ -1,5 +1,5 @@
 // views/search.js
-// Title-only search across the CBETA and OpenZenTexts corpora.
+// Title-only search across the CBETA and OpenZen corpora.
 //
 // Fetches titles.jsonl from the translations repos, parses it once (cached),
 // and filters client-side against the query string. Each row links to the
@@ -33,11 +33,11 @@ export async function render(route, mount, shell) {
         null;
     const corpusLabel = cfNamed === 'cbeta'
         ? 'CBETA'
-        : (cfNamed === 'openzen' ? 'OpenZenTexts' : (cf || ''));
+        : (cfNamed === 'openzen' ? 'OpenZen' : (cf || ''));
 
     shell.setTitle(initialQuery ? `Search · ${initialQuery}` : 'Search');
     shell.setContext(
-        initialQuery ? `Searching for "${initialQuery}"` : 'Search CBETA + OpenZenTexts',
+        initialQuery ? `Searching for "${initialQuery}"` : 'Search CBETA + OpenZen',
         corpusLabel ? `Corpus: ${corpusLabel}` : 'Title-only search. Full-text search requires Read Zen.'
     );
     shell.setUpsell(

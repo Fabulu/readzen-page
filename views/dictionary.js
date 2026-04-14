@@ -51,7 +51,7 @@ function applyChrome(shell, term) {
     shell.setUpsell(
         'This is a single dictionary lookup. The desktop app gives you the ' +
         'same dictionary as a <strong>hover overlay while you read</strong> ' +
-        'any Zen text we index across CBETA and OpenZenTexts, plus full-text ' +
+        'any Zen text we index across CBETA and OpenZen, plus full-text ' +
         'search, side-by-side translation, and the ability to share lookup ' +
         'links like this one.'
     );
