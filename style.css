@@ -1658,6 +1658,47 @@ code, .mono { font-family: var(--mono); }
     border-color: var(--accent);
 }
 
+.master-appearances {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.3rem;
+}
+
+.master-appearance {
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 0.9rem;
+}
+
+.master-appearance:last-child {
+    border-bottom: none;
+}
+
+.master-appearance-title {
+    color: var(--text);
+    font-weight: 500;
+}
+
+.master-appearance-sub {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.master-appearance-count {
+    color: var(--accent);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.master-appearance-snippet {
+    margin: 0.2rem 0 0;
+    font-size: 0.82rem;
+    color: var(--text-soft);
+    font-style: italic;
+    line-height: 1.5;
+}
+
 @media (max-width: 600px) {
     .master-profile {
         padding: 1.5rem 1.25rem;

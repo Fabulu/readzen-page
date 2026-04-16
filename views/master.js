@@ -14,6 +14,7 @@ import { escapeHtml } from '../lib/format.js';
 
 const MASTER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const MASTERS_URL = DATA_REPO_BASE + 'masters.json';
+const CORPUS_URL = DATA_REPO_BASE + 'master-corpus.json';
 
 /** Route-kind matcher. */
 export function match(route) {
@@ -62,7 +63,12 @@ export async function render(route, mount, shell) {
         return;
     }
 
-    mount.innerHTML = renderMasterProfile(master);
+    // Load corpus appearances (non-blocking — render profile first, add appearances after)
+    let corpus = null;
+    try { corpus = await loadCorpus(); } catch { /* optional */ }
+    const appearances = corpus ? (corpus.masters || {})[name] || null : null;
+
+    mount.innerHTML = renderMasterProfile(master, appearances);
 }
 
 function applyChrome(shell, name) {
@@ -73,12 +79,27 @@ function applyChrome(shell, name) {
         'From the Read Zen master database'
     );
     shell.setUpsell(
-        'This is a single Zen master profile. The desktop app gives you an ' +
-        'interactive lineage web, corpus text search across all CBETA texts, ' +
-        'hover dictionary, side-by-side translation, and the ability to ' +
-        '<strong>explore the complete lineage of 195 Chan masters</strong>.'
+        'Read Zen is a free desktop app for reading, translating, and studying ' +
+        'Chinese Chan Buddhist texts. It includes an interactive lineage web of ' +
+        '195 masters, full-corpus text search, hover dictionary, side-by-side ' +
+        'translation, and scholar collections. You can <strong>create and share ' +
+        'your own master profile links</strong> just like this one — right-click ' +
+        'any master and choose "Copy Reddit Link".'
     );
     shell.hideStatus();
+}
+
+/** Fetch + cache the corpus appearance index. */
+async function loadCorpus() {
+    const cacheKey = 'masters:corpus';
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+
+    const resp = await fetch(CORPUS_URL);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    cache.set(cacheKey, data, MASTER_CACHE_TTL_MS);
+    return data;
 }
 
 /** Fetch + cache the canonical masters.json. */
@@ -111,7 +132,7 @@ function findMaster(masters, name) {
 }
 
 /** Render the full master profile HTML. */
-function renderMasterProfile(m) {
+function renderMasterProfile(m, appearances) {
     const names = m.names || [];
     const primary = names[0] || '';
     const chinese = names.filter(n => /[\u4e00-\u9fff]/.test(n));
@@ -176,7 +197,43 @@ function renderMasterProfile(m) {
         html += `</section>`;
     }
 
+    // Corpus appearances
+    if (appearances) {
+        html += `<section class="master-section">`;
+        html += `<h3 class="master-section-heading">Text Appearances</h3>`;
+        html += `<p class="master-meta">Mentioned in ${appearances.primary_count + appearances.secondary_count} texts (${appearances.total_mentions.toLocaleString()} total mentions)</p>`;
+
+        if (appearances.primary && appearances.primary.length > 0) {
+            html += `<p class="master-label" style="margin-top:0.8rem;">Primary texts (author/subject)</p>`;
+            html += renderAppearanceList(appearances.primary);
+        }
+        if (appearances.secondary && appearances.secondary.length > 0) {
+            html += `<p class="master-label" style="margin-top:0.8rem;">Also mentioned in</p>`;
+            html += renderAppearanceList(appearances.secondary);
+        }
+        html += `</section>`;
+    }
+
     html += `</article>`;
+    return html;
+}
+
+/** Render a list of text appearances. */
+function renderAppearanceList(items) {
+    let html = `<div class="master-appearances">`;
+    for (const item of items) {
+        const title = item.title_zh || item.title || item.path;
+        const sub = item.title && item.title_zh ? item.title : '';
+        html += `<div class="master-appearance">`;
+        html += `<span class="master-appearance-title">${escapeHtml(title)}</span>`;
+        if (sub) html += ` <span class="master-appearance-sub">${escapeHtml(sub)}</span>`;
+        html += ` <span class="master-appearance-count">${item.mentions}x</span>`;
+        if (item.snippet) {
+            html += `<p class="master-appearance-snippet">${escapeHtml(item.snippet)}</p>`;
+        }
+        html += `</div>`;
+    }
+    html += `</div>`;
     return html;
 }
 
