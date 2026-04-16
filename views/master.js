@@ -116,15 +116,17 @@ async function loadMasters() {
     return masters;
 }
 
-/** Find a master by name (case-insensitive for pinyin, exact for CJK). */
+/** Find a master by name. Accepts underscores as spaces for URL-friendly form. */
 function findMaster(masters, name) {
     if (!Array.isArray(masters)) return null;
-    const lower = name.toLowerCase();
+    // Underscores in URL map to spaces in canonical names
+    const normalized = name.replace(/_/g, ' ');
+    const lower = normalized.toLowerCase();
     for (const m of masters) {
         if (!m || !m.names) continue;
         for (const n of m.names) {
             if (!n) continue;
-            if (n === name) return m;
+            if (n === normalized || n === name) return m;
             if (n.toLowerCase() === lower) return m;
         }
     }
@@ -206,10 +208,18 @@ function renderMasterProfile(m, appearances) {
         if (appearances.primary && appearances.primary.length > 0) {
             html += `<p class="master-label" style="margin-top:0.8rem;">Primary texts (author/subject)</p>`;
             html += renderAppearanceList(appearances.primary);
+            const hiddenPrimary = appearances.primary_count - appearances.primary.length;
+            if (hiddenPrimary > 0) {
+                html += `<p class="master-appearance-more">+ ${hiddenPrimary} more primary text${hiddenPrimary === 1 ? '' : 's'} — <a href="https://github.com/Fabulu/ReadZen" target="_blank" rel="noopener">see all in the Read Zen app</a></p>`;
+            }
         }
         if (appearances.secondary && appearances.secondary.length > 0) {
             html += `<p class="master-label" style="margin-top:0.8rem;">Also mentioned in</p>`;
             html += renderAppearanceList(appearances.secondary);
+            const hiddenSecondary = appearances.secondary_count - appearances.secondary.length;
+            if (hiddenSecondary > 0) {
+                html += `<p class="master-appearance-more">+ ${hiddenSecondary} more text${hiddenSecondary === 1 ? '' : 's'} — <a href="https://github.com/Fabulu/ReadZen" target="_blank" rel="noopener">see all in the Read Zen app</a></p>`;
+            }
         }
         html += `</section>`;
     }
@@ -237,9 +247,11 @@ function renderAppearanceList(items) {
     return html;
 }
 
-/** Build a clickable link to another master's profile. */
+/** Build a clickable link to another master's profile using underscore URLs. */
 function buildMasterLink(name) {
-    const href = '#/master/' + encodeURIComponent(name);
+    // Use underscores for cleaner URLs: "Fayan Wenyi" -> "Fayan_Wenyi"
+    const slug = name.replace(/ /g, '_');
+    const href = '#/master/' + encodeURIComponent(slug).replace(/%20/g, '_');
     return `<a href="${href}" class="master-lineage-link">${escapeHtml(name)}</a>`;
 }
 
