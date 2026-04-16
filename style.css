@@ -1535,3 +1535,133 @@ code, .mono { font-family: var(--mono); }
         text-align: left;
     }
 }
+
+/* ━━ Zen Master Profile ━━ */
+
+.master-profile {
+    max-width: 720px;
+    margin: 1rem auto 2rem;
+    padding: 2rem 2.2rem;
+    background: var(--paper-strong);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+}
+
+.master-header {
+    margin-bottom: 1.8rem;
+    padding-bottom: 1.2rem;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.master-chinese {
+    font-size: 1.8rem;
+    color: var(--accent);
+    margin: 0 0 0.2rem;
+    letter-spacing: 0.08em;
+}
+
+.master-name {
+    font-family: var(--serif);
+    font-size: 2.4rem;
+    font-weight: 500;
+    line-height: 1.15;
+    color: var(--text);
+    margin: 0;
+}
+
+.master-meta {
+    margin-top: 0.5rem;
+    font-size: 0.95rem;
+    color: var(--text-soft);
+}
+
+.master-school-badge {
+    display: inline-block;
+    padding: 0.15em 0.6em;
+    border-radius: 4px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    vertical-align: middle;
+}
+
+.master-aliases {
+    margin-top: 0.4rem;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+}
+
+.master-section {
+    margin-top: 1.4rem;
+}
+
+.master-section-heading {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin: 0 0 0.5rem;
+}
+
+.master-lineage-item {
+    margin: 0.3rem 0;
+    font-size: 0.95rem;
+    color: var(--text);
+}
+
+.master-label {
+    color: var(--text-soft);
+    font-weight: 600;
+}
+
+.master-lineage-link {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.15s;
+}
+
+.master-lineage-link:hover {
+    border-bottom-color: var(--accent);
+}
+
+.master-bio {
+    font-size: 0.95rem;
+    line-height: 1.72;
+    color: var(--text);
+    margin: 0;
+}
+
+.master-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.master-link {
+    display: inline-block;
+    padding: 0.3em 0.8em;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: var(--accent);
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.master-link:hover {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+}
+
+@media (max-width: 600px) {
+    .master-profile {
+        padding: 1.5rem 1.25rem;
+    }
+    .master-chinese { font-size: 1.4rem; }
+    .master-name { font-size: 1.8rem; }
+}

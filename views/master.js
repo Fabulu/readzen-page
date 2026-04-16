@@ -1,22 +1,19 @@
 // views/master.js
-// Renders a Zen master profile card.
+// Renders a rich Zen master profile page.
 //
-// Storage shape (mirrored from the desktop app):
-//   community/master-dates/{user}.jsonl
+// Data source: masters.json at the root of CbetaZenTranslations repo.
+// Contains all 195 masters with names, dates, school, teacher, students,
+// biography, region, and reference links.
 //
-// Each line is a JSON-encoded MasterDateEntry (see Models/MasterDateEntry.cs):
-//   { Names: string[], Floruit: int, Death: int, CreatedBy?: string, WrittenUtc? }
-//
-// When no user is supplied we also try the base `Assets/Data/master-dates.json`
-// bundled with the desktop app, but that file isn't mirrored on GitHub — in
-// practice the user parameter is required.
+// Route: #/master/{name}
+// The user parameter is optional and ignored for the canonical data.
 
 import { DATA_REPO_BASE } from '../lib/github.js';
-import { fetchJsonl } from '../lib/jsonl.js';
 import * as cache from '../lib/cache.js';
-import { renderLookupCard, renderLookupEmpty } from '../lib/lookup-card.js';
+import { escapeHtml } from '../lib/format.js';
 
 const MASTER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const MASTERS_URL = DATA_REPO_BASE + 'masters.json';
 
 /** Route-kind matcher. */
 export function match(route) {
@@ -29,157 +26,181 @@ export function preferAppFirst(_route) {
 }
 
 /**
- * Render the master card for `route.name`. Shows a not-found card if the
- * requested name isn't present in the user's JSONL file.
+ * Render the master profile for `route.name`.
  */
 export async function render(route, mount, shell) {
     const name = (route && route.name) || '';
-    const user = (route && route.user) || '';
-    applyChrome(shell, name, user);
+    applyChrome(shell, name);
 
     if (!name) {
-        renderLookupEmpty({
-            title: 'No master supplied',
-            detail: 'The master link is missing a name.',
-            hint: 'Expected shape: #/master/Linji Yixuan/Fabulu'
-        }, mount);
+        mount.innerHTML = emptyCard(
+            'No master supplied',
+            'The master link is missing a name.',
+            'Expected shape: #/master/Linji Yixuan'
+        );
         return;
     }
 
-    if (!user) {
-        renderLookupEmpty({
-            title: `No user supplied for ${name}`,
-            detail: 'Master profiles are stored per-user. The link must include the curator username.',
-            hint: 'Expected shape: #/master/Linji Yixuan/Fabulu'
-        }, mount);
-        return;
-    }
+    mount.innerHTML = `<article class="panel lookup-card"><p style="opacity:0.5;padding:2rem;">Loading ${escapeHtml(name)}…</p></article>`;
 
-    let entries;
+    let masters;
     try {
-        entries = await loadMasterDates(user);
+        masters = await loadMasters();
     } catch (error) {
         const msg = String(error && error.message || '');
-        if (msg.includes('404')) {
-            renderLookupEmpty({
-                title: `No master-dates file for ${user}`,
-                detail: `${user} has not published any master profiles yet.`,
-                hint: 'Open in Read Zen to browse other users\' collections.'
-            }, mount);
-            return;
-        }
-        renderLookupEmpty({
-            title: 'Master lookup failed',
-            detail: msg || 'Unknown error while fetching the master-dates file.'
-        }, mount);
+        mount.innerHTML = emptyCard('Master lookup failed', msg || 'Could not fetch masters.json.');
         return;
     }
 
-    const match = findMaster(entries, name);
-    if (!match) {
-        renderLookupEmpty({
-            title: `No master "${name}"`,
-            detail: `${user}'s master-dates file does not include "${name}".`,
-            hint: 'Check the spelling, or open in Read Zen to browse the full list.'
-        }, mount);
+    const master = findMaster(masters, name);
+    if (!master) {
+        mount.innerHTML = emptyCard(
+            `Master "${name}" not found`,
+            `No master matching "${name}" was found in the database.`,
+            'Check spelling. Chinese names and pinyin variants are both searched.'
+        );
         return;
     }
 
-    renderLookupCard(buildMasterCard(match, user), mount);
+    mount.innerHTML = renderMasterProfile(master);
 }
 
-/** Updates title, context strip, and open-in-app link. */
-function applyChrome(shell, name, user) {
+function applyChrome(shell, name) {
     if (!shell) return;
-    shell.setTitle(name ? 'Master · ' + name : 'Master');
+    shell.setTitle(name ? 'Master · ' + name : 'Zen Master');
     shell.setContext(
         name ? `Zen Master · ${name}` : 'Zen Master',
-        user ? `Curated by ${user}` : 'Unknown curator'
+        'From the Read Zen master database'
     );
     shell.setUpsell(
-        'This is a single Zen master profile. The desktop app gives you a ' +
-        'managed master-dates database, hover lookups while you read any ' +
-        'Zen text across CBETA and OpenZen, side-by-side translation, ' +
-        'and the ability to <strong>curate and share your own master entries</strong>.'
+        'This is a single Zen master profile. The desktop app gives you an ' +
+        'interactive lineage web, corpus text search across all CBETA texts, ' +
+        'hover dictionary, side-by-side translation, and the ability to ' +
+        '<strong>explore the complete lineage of 195 Chan masters</strong>.'
     );
     shell.hideStatus();
 }
 
-/**
- * Fetch + parse the user's `community/master-dates/{user}.jsonl` file.
- * JSONL is one JSON object per line. Blank and malformed lines are skipped
- * by the shared `fetchJsonl` helper.
- */
-async function loadMasterDates(user) {
-    const url = DATA_REPO_BASE
-        + 'community/master-dates/'
-        + encodeURIComponent(user)
-        + '.jsonl';
-
-    const cacheKey = 'master-dates:' + url;
+/** Fetch + cache the canonical masters.json. */
+async function loadMasters() {
+    const cacheKey = 'masters:canonical';
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    const entries = await fetchJsonl(url);
-    cache.set(cacheKey, entries, MASTER_CACHE_TTL_MS);
-    return entries;
+    const resp = await fetch(MASTERS_URL);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    const masters = data.masters || [];
+    cache.set(cacheKey, masters, MASTER_CACHE_TTL_MS);
+    return masters;
 }
 
-/**
- * Find a master entry by name. Matches are case-insensitive for pinyin and
- * exact for CJK (matching the desktop app's behaviour loosely). We accept
- * both PascalCase and camelCase keys.
- */
-function findMaster(entries, name) {
-    if (!Array.isArray(entries)) return null;
-    const nameLower = name.toLowerCase();
-
-    for (const raw of entries) {
-        if (!raw) continue;
-        const names = raw.Names || raw.names || [];
-        if (!Array.isArray(names)) continue;
-        for (const n of names) {
+/** Find a master by name (case-insensitive for pinyin, exact for CJK). */
+function findMaster(masters, name) {
+    if (!Array.isArray(masters)) return null;
+    const lower = name.toLowerCase();
+    for (const m of masters) {
+        if (!m || !m.names) continue;
+        for (const n of m.names) {
             if (!n) continue;
-            if (n === name) return raw;
-            if (String(n).toLowerCase() === nameLower) return raw;
+            if (n === name) return m;
+            if (n.toLowerCase() === lower) return m;
         }
     }
     return null;
 }
 
-/** Build the card payload for a master entry. */
-function buildMasterCard(entry, user) {
-    const names = entry.Names || entry.names || [];
-    const floruit = entry.Floruit ?? entry.floruit ?? 0;
-    const death = entry.Death ?? entry.death ?? 0;
-    const createdBy = entry.CreatedBy || entry.createdBy || user || '';
-
-    const primaryName = names[0] || '';
+/** Render the full master profile HTML. */
+function renderMasterProfile(m) {
+    const names = m.names || [];
+    const primary = names[0] || '';
+    const chinese = names.filter(n => /[\u4e00-\u9fff]/.test(n));
     const otherNames = names.slice(1).filter(Boolean);
-
-    const sections = [];
-
-    if (otherNames.length > 0) {
-        sections.push({ heading: 'Also known as', content: otherNames });
-    }
+    const floruit = m.floruit || 0;
+    const death = m.death || 0;
 
     const datesText = formatDates(floruit, death);
-    if (datesText) {
-        sections.push({ heading: 'Dates', content: datesText });
+    const schoolBadge = m.school
+        ? `<span class="master-school-badge">${escapeHtml(m.school)}</span>`
+        : '';
+
+    let html = `<article class="panel master-profile">`;
+
+    // Header
+    html += `<header class="master-header">`;
+    if (chinese.length > 0) {
+        html += `<p class="master-chinese">${escapeHtml(chinese.join('  '))}</p>`;
+    }
+    html += `<h2 class="master-name">${escapeHtml(primary)}</h2>`;
+    html += `<p class="master-meta">${datesText ? escapeHtml(datesText) : ''}`;
+    if (schoolBadge) html += ` ${schoolBadge}`;
+    if (m.region) html += ` · ${escapeHtml(m.region)}`;
+    html += `</p>`;
+    if (otherNames.length > 0) {
+        html += `<p class="master-aliases">${escapeHtml(otherNames.join('  ·  '))}</p>`;
+    }
+    html += `</header>`;
+
+    // Lineage
+    if (m.teacher || (m.students && m.students.length > 0)) {
+        html += `<section class="master-section">`;
+        html += `<h3 class="master-section-heading">Lineage</h3>`;
+        if (m.teacher) {
+            const teacherLink = buildMasterLink(m.teacher);
+            html += `<p class="master-lineage-item"><span class="master-label">Teacher:</span> ${teacherLink}</p>`;
+        }
+        if (m.students && m.students.length > 0) {
+            const studentLinks = m.students.map(s => buildMasterLink(s)).join(', ');
+            html += `<p class="master-lineage-item"><span class="master-label">Students:</span> ${studentLinks}</p>`;
+        }
+        html += `</section>`;
     }
 
-    return {
-        title: primaryName,
-        subtitle: datesText || '',
-        sections,
-        footer: createdBy ? `by ${createdBy}` : ''
-    };
+    // Biography
+    if (m.notes) {
+        html += `<section class="master-section">`;
+        html += `<h3 class="master-section-heading">Biography</h3>`;
+        html += `<p class="master-bio">${escapeHtml(m.notes)}</p>`;
+        html += `</section>`;
+    }
+
+    // Links
+    if (m.links && m.links.length > 0) {
+        html += `<section class="master-section">`;
+        html += `<h3 class="master-section-heading">References</h3>`;
+        html += `<div class="master-links">`;
+        for (const link of m.links) {
+            html += `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener" class="master-link">${escapeHtml(link.label)}</a>`;
+        }
+        html += `</div>`;
+        html += `</section>`;
+    }
+
+    html += `</article>`;
+    return html;
 }
 
-/** Format the `Floruit` / `Death` pair into a human-readable string. */
+/** Build a clickable link to another master's profile. */
+function buildMasterLink(name) {
+    const href = '#/master/' + encodeURIComponent(name);
+    return `<a href="${href}" class="master-lineage-link">${escapeHtml(name)}</a>`;
+}
+
 function formatDates(floruit, death) {
-    const parts = [];
-    if (floruit && floruit !== 0) parts.push('fl. ' + floruit);
-    if (death && death !== 0) parts.push('d. ' + death);
-    return parts.join(' · ');
+    if (floruit && death) return `${floruit}–${death}`;
+    if (floruit) return `fl. ${floruit}`;
+    if (death) return `d. ${death}`;
+    return '';
+}
+
+function emptyCard(title, detail, hint) {
+    return `
+        <article class="panel lookup-card lookup-card--empty">
+            <header class="lookup-head">
+                <h2 class="lookup-title">${escapeHtml(title || 'Not found')}</h2>
+            </header>
+            <p class="lookup-empty-detail">${escapeHtml(detail || '')}</p>
+            ${hint ? `<p class="lookup-empty-hint">${escapeHtml(hint)}</p>` : ''}
+        </article>
+    `;
 }
