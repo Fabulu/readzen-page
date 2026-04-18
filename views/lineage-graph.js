@@ -472,11 +472,33 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
         if (hits.length > 0) {
             state.focused = hits[0].key;
             state.searchHits = new Set(hits.map(h => h.key));
-            // Center on centroid of all matches
-            const cx = hits.reduce((s, h) => s + h.x, 0) / hits.length;
-            const cy = hits.reduce((s, h) => s + h.y, 0) / hits.length;
-            state.panX = state.width / 2 - cx * state.zoom;
-            state.panY = state.height / 2 - cy * state.zoom;
+
+            if (hits.length === 1) {
+                // Single hit: zoom in noticeably and center
+                state.zoom = Math.min(1.2, Math.max(state.zoom, 0.7));
+                state.panX = state.width / 2 - hits[0].x * state.zoom;
+                state.panY = state.height / 2 - hits[0].y * state.zoom;
+            } else {
+                // Multiple hits: fit all in view with padding
+                const xs = hits.map(h => h.x);
+                const ys = hits.map(h => h.y);
+                const minX = Math.min(...xs) - NODE_W;
+                const maxX = Math.max(...xs) + NODE_W;
+                const minY = Math.min(...ys) - NODE_H;
+                const maxY = Math.max(...ys) + NODE_H;
+                const spanW = maxX - minX;
+                const spanH = maxY - minY;
+                const fitZoom = Math.min(
+                    state.width / (spanW + NODE_W * 4),
+                    state.height / (spanH + NODE_H * 4),
+                    1.2
+                );
+                state.zoom = Math.max(0.15, fitZoom);
+                const cx = (minX + maxX) / 2;
+                const cy = (minY + maxY) / 2;
+                state.panX = state.width / 2 - cx * state.zoom;
+                state.panY = state.height / 2 - cy * state.zoom;
+            }
         } else {
             state.searchHits = null;
         }
