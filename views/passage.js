@@ -672,30 +672,69 @@ function wireViewToggle(container) {
 
 // ━━ Translator switcher ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+/** Cache for discovered translator usernames (one API call per session). */
+let _translatorsCache = null;
+
+async function discoverTranslators(corpus) {
+    if (_translatorsCache) return _translatorsCache;
+    try {
+        const repo = corpus === 'open'
+            ? 'Fabulu/OpenZenTranslations'
+            : 'Fabulu/CbetaZenTranslations';
+        const res = await fetch(
+            `https://api.github.com/repos/${repo}/contents/community/translations`,
+            { cache: 'default' });
+        if (!res.ok) throw new Error(res.status);
+        const items = await res.json();
+        _translatorsCache = items
+            .filter(i => i.type === 'dir')
+            .map(i => i.name);
+    } catch {
+        _translatorsCache = [];
+    }
+    return _translatorsCache;
+}
+
 function buildTranslatorSwitcher(route) {
     const current = route.translator || 'community';
     return `
         <div class="translator-switcher" id="translator-switcher">
             <label class="translator-label">
-                Switch translator
-                <input class="translator-input" id="translator-input"
-                    type="text" placeholder="GitHub username"
-                    value="${current === 'community' ? '' : escapeHtml(current)}" />
+                Translator
+                <select class="translator-select" id="translator-select">
+                    <option value="">Community (default)</option>
+                </select>
             </label>
-            <button class="btn btn--small" id="translator-go">Load</button>
-            <span class="translator-hint">Leave blank for the community translation</span>
+            <span class="translator-hint">Loading translators\u2026</span>
         </div>
     `;
 }
 
 function wireTranslatorSwitcher(container, route) {
-    const goBtn = container.querySelector('#translator-go');
-    const input = container.querySelector('#translator-input');
-    if (!goBtn || !input) return;
+    const select = container.querySelector('#translator-select');
+    const hint = container.querySelector('.translator-hint');
+    if (!select) return;
 
-    const doSwitch = () => {
-        const user = input.value.trim();
-        // Rebuild hash with new translator (or without, for community)
+    const corpus = route.workId?.startsWith('ws.') || route.workId?.startsWith('pd.') ||
+                   route.workId?.startsWith('ce.') || route.workId?.startsWith('mit.')
+        ? 'open' : 'cbeta';
+
+    discoverTranslators(corpus).then(users => {
+        users.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u;
+            opt.textContent = u;
+            if (u === route.translator) opt.selected = true;
+            select.appendChild(opt);
+        });
+        if (!route.translator) select.value = '';
+        if (hint) hint.textContent = users.length
+            ? `${users.length} translator${users.length === 1 ? '' : 's'} available`
+            : 'No community translators yet';
+    });
+
+    select.addEventListener('change', () => {
+        const user = select.value;
         const base = '#/' + route.workId;
         const rangePart = route.startLine
             ? '/' + route.startLine + (route.endLine && route.endLine !== route.startLine ? '-' + route.endLine : '')
@@ -703,10 +742,7 @@ function wireTranslatorSwitcher(container, route) {
         const modePart = '/en';
         const translatorPart = user ? '/' + encodeURIComponent(user) : '';
         location.hash = base + rangePart + modePart + translatorPart;
-    };
-
-    goBtn.addEventListener('click', doSwitch);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSwitch(); });
+    });
 }
 
 // ━━ Show-more button + footer ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
