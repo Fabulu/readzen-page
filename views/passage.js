@@ -252,6 +252,48 @@ function renderSourceOutline(sourceWork, headings, route, mount) {
         ? `${escapeHtml(titleZh)} <span class="outline-title-en">\u00b7 ${escapeHtml(titleEn)}</span>`
         : escapeHtml(titleZh);
 
+    const totalPages = Math.max(1, Math.ceil(headings.length / PAGE));
+    const showAll = headings.length <= PAGE;
+    let currentPage = 1;
+
+    function renderPage(page) {
+        document.querySelector('#outline-list').innerHTML = buildRowsHtml(
+            showAll ? headings : headings.slice((page - 1) * PAGE, page * PAGE),
+            showAll ? 0 : (page - 1) * PAGE
+        );
+        updateNav();
+        window.scrollTo(0, 0);
+    }
+
+    function updateNav() {
+        const nav = document.querySelector('#outline-nav');
+        if (!nav) return;
+        nav.innerHTML = buildPageButtons(currentPage, totalPages);
+        wireOutlineNav(nav);
+    }
+
+    function wireOutlineNav(nav) {
+        nav.querySelectorAll('[data-page]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = parseInt(btn.dataset.page, 10);
+                if (p >= 1 && p <= totalPages && p !== currentPage) {
+                    currentPage = p;
+                    renderPage(currentPage);
+                }
+            });
+        });
+        const jumpInput = nav.querySelector('.page-jump');
+        if (jumpInput) {
+            jumpInput.addEventListener('change', () => {
+                const p = parseInt(jumpInput.value, 10);
+                if (p >= 1 && p <= totalPages && p !== currentPage) {
+                    currentPage = p;
+                    renderPage(currentPage);
+                }
+            });
+        }
+    }
+
     const wrap = document.querySelector('#outline-wrap') || mount;
     wrap.innerHTML = `
         <article class="panel outline-panel">
@@ -260,24 +302,13 @@ function renderSourceOutline(sourceWork, headings, route, mount) {
                 <p class="outline-sub">Table of contents \u00b7 ${headings.length} section${headings.length === 1 ? '' : 's'}</p>
             </header>
             <div class="outline-list" id="outline-list">
-                ${buildRowsHtml(headings.slice(0, shown), 0)}
+                ${buildRowsHtml(showAll ? headings : headings.slice(0, PAGE), 0)}
             </div>
-            ${shown < headings.length ? buildShowMoreBtn(shown, headings.length) : ''}
+            ${!showAll ? `<nav class="page-nav" id="outline-nav">${buildPageButtons(1, totalPages)}</nav>` : ''}
         </article>
     `;
 
-    if (shown < headings.length) {
-        wrap.querySelector('#show-more-btn').addEventListener('click', () => {
-            shown = Math.min(shown + PAGE, headings.length);
-            document.querySelector('#outline-list').innerHTML = buildRowsHtml(headings.slice(0, shown), 0);
-            if (shown >= headings.length) {
-                const btn = wrap.querySelector('#show-more-wrap');
-                if (btn) btn.remove();
-            } else {
-                wrap.querySelector('#show-more-btn').textContent = `Show more (${shown} of ${headings.length} sections)`;
-            }
-        });
-    }
+    if (!showAll) wireOutlineNav(wrap.querySelector('#outline-nav'));
 }
 
 /**
