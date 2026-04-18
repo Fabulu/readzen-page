@@ -2407,7 +2407,15 @@ a.master-appearance-title:hover {
     font-size: 0.85rem;
 }
 
-.masters-filter-select { min-width: 10rem; }
+.masters-filter-select {
+    min-width: 10rem;
+    background: var(--bg-soft);
+    color: var(--text);
+}
+.masters-filter-select option {
+    background: var(--bg-soft);
+    color: var(--text);
+}
 .masters-search-input { min-width: 14rem; flex: 1; max-width: 22rem; }
 
 .masters-filter-select:focus,

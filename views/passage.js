@@ -218,60 +218,66 @@ export async function render(route, mount, shell) {
  * them — but they still act as useful navigation into the body text.
  */
 function renderSourceOutline(sourceWork, headings, route, mount) {
-    const MAX_ROWS = 30;
-    const truncated = headings.length > MAX_ROWS;
-    const rows = truncated ? headings.slice(0, MAX_ROWS) : headings;
+    const PAGE = 50;
+    let shown = Math.min(PAGE, headings.length);
 
     const lineOrder = sourceWork.lineOrder;
     const lastLineId = lineOrder.length > 0 ? lineOrder[lineOrder.length - 1] : '';
 
-    // Compute the end-lb for each heading = (lb of next heading). For the
-    // last heading we use the last lb in the document. Mode/translator
-    // suffixes are honoured so an `/en/{user}` outline keeps the same
-    // mode when the user clicks into a section.
     const modeSuffix = route.mode === 'en' ? '/en' : '';
     const translatorSuffix = route.translator ? '/' + encodeURIComponent(route.translator) : '';
 
-    const rowsHtml = rows.map((h, idx) => {
-        const nextHeading = headings[idx + 1];
-        const endLb = (nextHeading && nextHeading.lineId) || lastLineId || h.lineId;
-        const href = '#/' + route.workId + '/' + h.lineId + '-' + endLb + modeSuffix + translatorSuffix;
-        const juanLabel = h.juanNumber != null ? `juan ${escapeHtml(String(h.juanNumber))}` : '';
+    function buildRowsHtml(rows, startIdx) {
+        return rows.map((h, i) => {
+            const nextHeading = headings[startIdx + i + 1];
+            const endLb = (nextHeading && nextHeading.lineId) || lastLineId || h.lineId;
+            const href = '#/' + route.workId + '/' + h.lineId + '-' + endLb + modeSuffix + translatorSuffix;
+            const juanLabel = h.juanNumber != null ? `juan ${escapeHtml(String(h.juanNumber))}` : '';
 
-        return `
-            <a class="outline-row" href="${escapeHtml(href)}">
-                <span class="outline-row-juan">${juanLabel}</span>
-                <span class="outline-row-lb">${escapeHtml(h.lineId)}</span>
-                <span class="outline-row-text">
-                    <span class="outline-row-zh">${escapeHtml(h.text)}</span>
-                </span>
-            </a>
-        `;
-    }).join('');
+            return `
+                <a class="outline-row" href="${escapeHtml(href)}">
+                    <span class="outline-row-juan">${juanLabel}</span>
+                    <span class="outline-row-lb">${escapeHtml(h.lineId)}</span>
+                    <span class="outline-row-text">
+                        <span class="outline-row-zh">${escapeHtml(h.text)}</span>
+                    </span>
+                </a>
+            `;
+        }).join('');
+    }
 
     const titleZh = sourceWork.titleZh || route.workId;
     const titleEn = sourceWork.titleEn || '';
     const titleLine = titleEn
-        ? `${escapeHtml(titleZh)} <span class="outline-title-en">· ${escapeHtml(titleEn)}</span>`
+        ? `${escapeHtml(titleZh)} <span class="outline-title-en">\u00b7 ${escapeHtml(titleEn)}</span>`
         : escapeHtml(titleZh);
-
-    const truncatedHtml = truncated
-        ? `<p class="outline-truncated">Showing first ${MAX_ROWS} of ${headings.length} sections. Open in Read Zen for the full table of contents.</p>`
-        : '';
 
     const wrap = document.querySelector('#outline-wrap') || mount;
     wrap.innerHTML = `
         <article class="panel outline-panel">
             <header class="outline-head">
                 <h2 class="outline-title">${titleLine}</h2>
-                <p class="outline-sub">Table of contents · ${headings.length} section${headings.length === 1 ? '' : 's'}</p>
+                <p class="outline-sub">Table of contents \u00b7 ${headings.length} section${headings.length === 1 ? '' : 's'}</p>
             </header>
-            <div class="outline-list">
-                ${rowsHtml}
+            <div class="outline-list" id="outline-list">
+                ${buildRowsHtml(headings.slice(0, shown), 0)}
             </div>
-            ${truncatedHtml}
+            ${shown < headings.length ? buildShowMoreBtn(shown, headings.length) : ''}
         </article>
     `;
+
+    if (shown < headings.length) {
+        wrap.querySelector('#show-more-btn').addEventListener('click', () => {
+            shown = Math.min(shown + PAGE, headings.length);
+            document.querySelector('#outline-list').innerHTML = buildRowsHtml(headings.slice(0, shown), 0);
+            if (shown >= headings.length) {
+                const btn = wrap.querySelector('#show-more-wrap');
+                if (btn) btn.remove();
+            } else {
+                wrap.querySelector('#show-more-btn').textContent = `Show more (${shown} of ${headings.length} sections)`;
+            }
+        });
+    }
 }
 
 /**
