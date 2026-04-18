@@ -333,6 +333,16 @@ code, .mono { font-family: var(--mono); }
     font-size: 0.86rem;
 }
 
+.btn--copy-link {
+    cursor: pointer;
+    transition: background 180ms ease, border-color 180ms ease;
+}
+
+.btn--copied {
+    background: rgba(39, 120, 78, 0.35) !important;
+    border-color: rgba(39, 120, 78, 0.6) !important;
+}
+
 .text-link {
     color: var(--text-soft);
     text-decoration: none;
@@ -497,60 +507,199 @@ code, .mono { font-family: var(--mono); }
     font-weight: 300;
     letter-spacing: 0.1em;
     color: var(--accent);
-    text-transform: uppercase;
 }
 
-.landing .hero-desc {
-    max-width: 34rem;
-    margin: 1.8rem auto 0;
+.landing .hero-tagline {
+    max-width: 36rem;
+    margin: 1.2rem auto 0;
     font-family: var(--serif);
-    font-size: 1.02rem;
-    line-height: 1.9;
+    font-size: 1.08rem;
+    line-height: 1.7;
     color: var(--text-soft);
 }
 
-.landing .cta {
-    padding: 2rem 0 3rem;
-    text-align: center;
+.landing .hero-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.8rem;
+    flex-wrap: wrap;
 }
 
-.landing .cta-explain {
-    max-width: 31rem;
-    margin: 0 auto 1.4rem;
-    font-family: var(--serif);
+/* ── Corpus cards ── */
+
+.corpus-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 2.5rem 0;
+}
+
+@media (max-width: 540px) {
+    .corpus-cards { grid-template-columns: 1fr; }
+}
+
+.corpus-card {
+    padding: 1.2rem 1.4rem;
+    border: 1px solid rgba(94, 116, 140, 0.35);
+    border-radius: 10px;
+    background: rgba(94, 116, 140, 0.08);
+}
+
+.corpus-card--openzen {
+    border-color: rgba(39, 120, 78, 0.35);
+    background: rgba(39, 120, 78, 0.08);
+}
+
+.corpus-card-title {
+    font-family: var(--sans);
+    font-size: 0.88rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: var(--text);
+    margin-bottom: 0.4rem;
 }
 
-.landing .cta-note {
-    margin-top: 1rem;
+.corpus-card-desc {
+    font-size: 0.92rem;
+    color: var(--text-soft);
+    line-height: 1.55;
+}
+
+.corpus-card-license {
+    margin-top: 0.6rem;
     font-size: 0.78rem;
     color: var(--muted);
-    letter-spacing: 0.06em;
 }
 
-.landing .features {
-    padding: 3rem 0 3rem;
+.corpus-card-license a { color: var(--muted); text-decoration: underline; }
+
+/* ── Feature showcase ── */
+
+.feature-showcase {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.2rem;
+    margin: 2rem 0 2.5rem;
+    padding: 2rem 0;
     border-top: 1px solid var(--border-soft);
     border-bottom: 1px solid var(--border-soft);
 }
 
-.landing .feature + .feature {
-    margin-top: 1.5rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
+@media (max-width: 680px) {
+    .feature-showcase { grid-template-columns: 1fr; }
 }
 
-.landing .feature-label {
-    display: block;
-    margin-bottom: 0.55rem;
+.feature-group-title {
     font-family: var(--serif);
-    font-size: 0.82rem;
-    letter-spacing: 0.14em;
+    font-size: 1rem;
+    font-weight: 400;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--accent);
+    margin-bottom: 0.6rem;
 }
 
-.landing .feature p { color: var(--text-soft); }
+.feature-group-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.feature-group-list li {
+    position: relative;
+    padding-left: 1rem;
+    margin-bottom: 0.35rem;
+    font-size: 0.88rem;
+    color: var(--text-soft);
+    line-height: 1.5;
+}
+
+.feature-group-list li::before {
+    content: "\2022";
+    position: absolute;
+    left: 0;
+    color: var(--muted);
+}
+
+.feature-group-cta {
+    display: inline-block;
+    margin-top: 0.8rem;
+    font-size: 0.82rem;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--accent);
+}
+
+.feature-group-cta:hover { border-bottom-style: solid; }
+
+/* ── Install collapsed (single details wrapper) ── */
+
+.install-collapsed {
+    margin: 2rem 0;
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.015);
+}
+
+.install-collapsed-summary {
+    cursor: pointer;
+    padding: 0.9rem 1.2rem;
+    font-family: var(--serif);
+    font-size: 0.95rem;
+    color: var(--text-soft);
+    list-style: none;
+    user-select: none;
+}
+
+.install-collapsed-summary::-webkit-details-marker { display: none; }
+
+.install-collapsed-summary::before {
+    content: "\25B8";
+    display: inline-block;
+    width: 1.1rem;
+    color: var(--accent);
+    transition: transform 0.15s ease;
+}
+
+.install-collapsed[open] > .install-collapsed-summary::before {
+    transform: rotate(90deg);
+}
+
+.install-collapsed-body {
+    padding: 0 1.2rem 1.2rem;
+}
+
+/* ── Trust strip ── */
+
+.trust-strip {
+    text-align: center;
+    padding: 1.5rem 0 1rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+}
+
+.trust-strip a {
+    color: var(--text-soft);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--muted);
+}
+
+.trust-strip a:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.trust-sep { margin: 0 0.3rem; }
+
+/* ── Start Here random button ── */
+
+.start-here-random {
+    text-align: center;
+    margin-top: 1rem;
+}
 
 /* ━━ Landing: Install help ━━ */
 

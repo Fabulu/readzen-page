@@ -13,6 +13,7 @@
 
 import { escapeHtml } from '../lib/format.js';
 import { buildZenUri, describeRoute } from '../lib/route.js';
+import { copyShareableLink } from '../lib/share.js';
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 const AUTO_OPEN_PREF_KEY = 'readzen-auto-open';
@@ -70,6 +71,7 @@ export function mountShell(root, route) {
                     <p class="context-subtitle" id="context-subtitle"></p>
                 </div>
                 <div class="shell-actions-buttons">
+                    <button class="btn btn--small btn--copy-link" id="copy-link-btn" hidden title="Copy a shareable link to this view">Copy Link</button>
                     <a class="btn btn--small" id="open-desktop" href="#" hidden>Open in Read Zen</a>
                     <a class="text-link" id="shell-extra-link" href="#" target="_blank" rel="noreferrer" hidden></a>
                 </div>
@@ -131,6 +133,7 @@ export function mountShell(root, route) {
     const statusDetail = root.querySelector('#status-detail');
     const upsell = root.querySelector('#upsell');
     const upsellDesc = root.querySelector('#upsell-desc');
+    const copyLinkBtn = root.querySelector('#copy-link-btn');
 
     const autoOpenOn = isAutoOpenEnabled();
 
@@ -152,6 +155,25 @@ export function mountShell(root, route) {
             } else {
                 corpusChip.hidden = true;
             }
+        }
+
+        // Copy Link button: visible on every routed view. Copies a
+        // shareable URL (readzen.pages.dev/#/...) to the clipboard with
+        // brief "Copied!" feedback.
+        if (copyLinkBtn) {
+            copyLinkBtn.hidden = false;
+            copyLinkBtn.addEventListener('click', async () => {
+                try {
+                    await copyShareableLink(route);
+                    const orig = copyLinkBtn.textContent;
+                    copyLinkBtn.textContent = 'Copied!';
+                    copyLinkBtn.classList.add('btn--copied');
+                    setTimeout(() => {
+                        copyLinkBtn.textContent = orig;
+                        copyLinkBtn.classList.remove('btn--copied');
+                    }, 1800);
+                } catch { /* silent */ }
+            });
         }
 
         // Top "Open in Read Zen" button: visible on every routed view as a
