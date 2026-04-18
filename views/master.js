@@ -103,7 +103,7 @@ async function loadCorpus() {
 }
 
 /** Fetch + cache the canonical masters.json. */
-async function loadMasters() {
+export async function loadMasters() {
     const cacheKey = 'masters:canonical';
     const cached = cache.get(cacheKey);
     if (cached) return cached;

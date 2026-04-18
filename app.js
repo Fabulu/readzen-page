@@ -13,6 +13,8 @@ import * as passage from './views/passage.js';
 import * as dictionary from './views/dictionary.js';
 import * as termbase from './views/termbase.js';
 import * as master from './views/master.js';
+import * as mastersBrowse from './views/masters-browse.js';
+import * as lineageGraph from './views/lineage-graph.js';
 import * as tags from './views/tags.js';
 import * as scholar from './views/scholar.js';
 import * as search from './views/search.js';
@@ -21,7 +23,7 @@ import { dismissInlineDict } from './lib/inline-dict.js';
 
 // Lookup views share a common contract: instant render, no app-first race.
 // They're dispatched before the placeholder path in `init` below.
-const LOOKUP_VIEWS = [dictionary, termbase, master, tags, scholar, search];
+const LOOKUP_VIEWS = [dictionary, termbase, master, mastersBrowse, lineageGraph, tags, scholar, search];
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 

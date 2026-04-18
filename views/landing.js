@@ -141,6 +141,18 @@ export function render(_route, mount, shell) {
                 </p>
             </div>
 
+            <div class="explore-masters">
+                <h3 class="explore-masters-heading">Explore Zen Masters</h3>
+                <p class="explore-masters-desc">
+                    Browse 200+ Chan/Zen masters across all five schools, from Bodhidharma
+                    to the late Song dynasty. View lineages, biographies, and text appearances.
+                </p>
+                <div class="explore-masters-links">
+                    <a class="btn btn--outline" href="#/masters">Browse All Masters</a>
+                    <a class="btn btn--outline" href="#/lineage">View the Lineage Web</a>
+                </div>
+            </div>
+
             <div class="features">
                 <div class="feature">
                     <span class="feature-label">Translate</span>
