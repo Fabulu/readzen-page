@@ -478,10 +478,18 @@ async function renderTranslation(route, _sourceLines, shell) {
             : 'Community translation';
         panel.hidden = false;
         meta.textContent = '—';
+        const translator = route.translator ? `by ${escapeHtml(route.translator)} ` : '';
         body.innerHTML = `
             <div class="panel-empty">
-                <p>No matching translation XML was found at the expected path.</p>
-                <p class="panel-empty-hint">${escapeHtml(error.message || '')}</p>
+                <p>No English translation ${translator}available for this text yet.</p>
+                <p class="panel-empty-hint">
+                    This text hasn\u2019t been translated \u2014 you\u2019re seeing the Chinese original only.
+                    Translations are contributed by the community and grow over time.
+                </p>
+                <p class="panel-empty-hint">
+                    Want to translate? <a href="${RELEASES_URL}">Download Read Zen</a> to start translating,
+                    or <a href="https://ko-fi.com/readzen">support the project on Ko-fi</a>.
+                </p>
             </div>
         `;
     }
@@ -696,16 +704,15 @@ async function discoverTranslators(corpus) {
 }
 
 function buildTranslatorSwitcher(route) {
-    const current = route.translator || 'community';
     return `
         <div class="translator-switcher" id="translator-switcher">
             <label class="translator-label">
-                Translator
+                Translation source
                 <select class="translator-select" id="translator-select">
-                    <option value="">Community (default)</option>
+                    <option value="">Community translation</option>
                 </select>
             </label>
-            <span class="translator-hint">Loading translators\u2026</span>
+            <span class="translator-hint">Loading available translations\u2026</span>
         </div>
     `;
 }
