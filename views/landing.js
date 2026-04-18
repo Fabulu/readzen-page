@@ -130,11 +130,11 @@ export function render(_route, mount, shell) {
 
             <div class="feature-showcase">
                 <div class="feature-group">
-                    <h3 class="feature-group-title">Read</h3>
+                    <h3 class="feature-group-title">Read &amp; Translate</h3>
                     <ul class="feature-group-list">
                         <li>Side-by-side Chinese/English reading</li>
-                        <li>Hover dictionary (CC-CEDICT) on every character</li>
-                        <li class="feature-desktop">Translation editor with translation memory</li>
+                        <li>Click any character for dictionary lookup</li>
+                        <li class="feature-desktop">Translation editor with translation memory assistant</li>
                         <li class="feature-desktop">AI-assisted translation drafts</li>
                     </ul>
                     <a class="feature-group-cta" href="#/T48n2005">Try a text</a>
@@ -143,9 +143,9 @@ export function render(_route, mount, shell) {
                     <h3 class="feature-group-title">Research</h3>
                     <ul class="feature-group-list">
                         <li>Search work titles across both corpora</li>
-                        <li class="feature-desktop">Full-text search across all 5,000+ texts</li>
-                        <li class="feature-desktop">Tag passages and build scholar collections</li>
-                        <li class="feature-desktop">Managed terminology (termbases)</li>
+                        <li class="feature-desktop">Full-text search with co-occurrence analysis</li>
+                        <li class="feature-desktop">Tag &amp; code passages for qualitative research</li>
+                        <li class="feature-desktop">Scholar collections with export &amp; comparison</li>
                     </ul>
                     <a class="feature-group-cta" href="#/search">Search the corpus</a>
                 </div>
@@ -153,11 +153,46 @@ export function render(_route, mount, shell) {
                     <h3 class="feature-group-title">Explore</h3>
                     <ul class="feature-group-list">
                         <li>200+ Zen masters with lineages and biographies</li>
-                        <li>Interactive lineage web across all five schools</li>
-                        <li>Share links to any passage, master, or search</li>
-                        <li class="feature-desktop">Sync translations and tags via GitHub</li>
+                        <li>Interactive lineage web across nine schools</li>
+                        <li class="feature-desktop">Compare translations side by side</li>
+                        <li class="feature-desktop">Critical edition provenance &amp; apparatus</li>
                     </ul>
                     <a class="feature-group-cta" href="#/masters">Browse masters</a>
+                </div>
+            </div>
+
+            <div class="desktop-features">
+                <h3 class="desktop-features-heading">In the Desktop App</h3>
+                <p class="desktop-features-desc">Everything above, plus research tools that need local processing power:</p>
+                <div class="desktop-features-grid">
+                    <div class="desktop-feature-card">
+                        <h4>Translation Assistant</h4>
+                        <p>Translation memory matches, terminology lookup, and QA warnings &mdash; all in a live sidebar while you translate.</p>
+                    </div>
+                    <div class="desktop-feature-card">
+                        <h4>Search Assistant</h4>
+                        <p>Full-text search with co-occurrence bubbles, n-gram analysis, Zipf curves, and export to six formats.</p>
+                    </div>
+                    <div class="desktop-feature-card">
+                        <h4>Scholar Assistant</h4>
+                        <p>Build passage collections, compare 2&ndash;4 texts side by side, extract vocabulary, and export for citation managers.</p>
+                    </div>
+                    <div class="desktop-feature-card">
+                        <h4>Tagging &amp; Coding</h4>
+                        <p>Tag vocabulary editor, per-passage coding, inter-rater reliability (Cohen&rsquo;s kappa), and cross-tabulation.</p>
+                    </div>
+                    <div class="desktop-feature-card">
+                        <h4>Translation Comparison</h4>
+                        <p>Compare community translations side by side. See how different translators handle the same passage.</p>
+                    </div>
+                    <div class="desktop-feature-card">
+                        <h4>Critical Edition Tools</h4>
+                        <p>Witness evidence viewer, apparatus display, correction timeline, and forensic provenance per character.</p>
+                    </div>
+                </div>
+                <div class="desktop-features-cta">
+                    <a class="btn" href="${RELEASES_URL}">Download Free</a>
+                    <span class="desktop-features-platforms">Windows &middot; macOS &middot; Linux</span>
                 </div>
             </div>
 

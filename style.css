@@ -792,6 +792,65 @@ code, .mono { font-family: var(--mono); }
 
 .feature-group-cta:hover { border-bottom-style: solid; }
 
+/* ── Desktop features showcase ── */
+
+.desktop-features {
+    margin: 2.5rem 0 1.5rem;
+}
+
+.desktop-features-heading {
+    color: var(--accent);
+    font-size: 1.1rem;
+    margin-bottom: 0.3rem;
+}
+
+.desktop-features-desc {
+    color: var(--text-soft);
+    font-size: 0.88rem;
+    margin-bottom: 1rem;
+}
+
+.desktop-features-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8rem;
+}
+
+@media (max-width: 640px) {
+    .desktop-features-grid { grid-template-columns: 1fr; }
+}
+
+.desktop-feature-card {
+    padding: 0.8rem 1rem;
+    background: var(--paper);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+}
+
+.desktop-feature-card h4 {
+    font-size: 0.88rem;
+    color: var(--text);
+    margin-bottom: 0.25rem;
+}
+
+.desktop-feature-card p {
+    font-size: 0.8rem;
+    color: var(--text-soft);
+    line-height: 1.45;
+}
+
+.desktop-features-cta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.desktop-features-platforms {
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
 /* ── Install collapsed (single details wrapper) ── */
 
 .install-collapsed {

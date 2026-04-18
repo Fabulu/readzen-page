@@ -234,47 +234,104 @@ function fileIdFromPath(path) {
     return dot > 0 ? filename.substring(0, dot) : filename;
 }
 
-const INITIAL_SHOW = 10;
-const SHOW_MORE_STEP = 20;
+const PAGE_SIZE = 30;
 
-/** Render a list of text appearances with progressive disclosure. */
+/** Render a paginated list of text appearances. */
 function renderAppearanceList(items) {
     const listId = 'app-list-' + (++renderAppearanceList._seq);
-    let html = `<div class="master-appearances" id="${listId}">`;
-    for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const title = item.title_zh || item.title || item.path;
-        const sub = item.title && item.title_zh ? item.title : '';
-        const fileId = fileIdFromPath(item.path);
-        const hidden = i >= INITIAL_SHOW ? ' style="display:none" data-app-hidden' : '';
-        html += `<div class="master-appearance"${hidden}>`;
-        if (fileId) {
-            html += `<a href="#/${encodeURIComponent(fileId)}" class="master-appearance-title">${escapeHtml(title)}</a>`;
-        } else {
-            html += `<span class="master-appearance-title">${escapeHtml(title)}</span>`;
+    const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    let currentPage = 1;
+
+    function renderItems(page) {
+        const start = (page - 1) * PAGE_SIZE;
+        const slice = items.slice(start, start + PAGE_SIZE);
+        let html = '';
+        for (const item of slice) {
+            const title = item.title_zh || item.title || item.path;
+            const sub = item.title && item.title_zh ? item.title : '';
+            const fileId = fileIdFromPath(item.path);
+            html += '<div class="master-appearance">';
+            if (fileId) {
+                html += '<a href="#/' + encodeURIComponent(fileId) + '" class="master-appearance-title">' + escapeHtml(title) + '</a>';
+            } else {
+                html += '<span class="master-appearance-title">' + escapeHtml(title) + '</span>';
+            }
+            if (sub) html += ' <span class="master-appearance-sub">' + escapeHtml(sub) + '</span>';
+            html += ' <span class="master-appearance-count">' + item.mentions + 'x</span>';
+            if (item.snippet) {
+                html += '<p class="master-appearance-snippet">' + escapeHtml(item.snippet) + '</p>';
+            }
+            html += '</div>';
         }
-        if (sub) html += ` <span class="master-appearance-sub">${escapeHtml(sub)}</span>`;
-        html += ` <span class="master-appearance-count">${item.mentions}x</span>`;
-        if (item.snippet) {
-            html += `<p class="master-appearance-snippet">${escapeHtml(item.snippet)}</p>`;
+        return html;
+    }
+
+    function buildNav(page, total) {
+        if (total <= 1) return '';
+        const btns = [];
+        btns.push('<button class="page-btn" data-page="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>\u2190 Prev</button>');
+        const pages = new Set([1, total, page, page - 1, page + 1]);
+        const sorted = [...pages].filter(p => p >= 1 && p <= total).sort((a, b) => a - b);
+        let last = 0;
+        for (const p of sorted) {
+            if (p - last > 1) btns.push('<span class="page-ellipsis">\u2026</span>');
+            btns.push('<button class="page-btn' + (p === page ? ' page-btn--active' : '') + '" data-page="' + p + '">' + p + '</button>');
+            last = p;
         }
-        html += `</div>`;
+        btns.push('<button class="page-btn" data-page="' + (page + 1) + '"' + (page >= total ? ' disabled' : '') + '>Next \u2192</button>');
+        if (total > 5) {
+            btns.push('<input class="page-jump" type="number" min="1" max="' + total + '" value="' + page + '" title="Jump to page" />');
+        }
+        btns.push('<span class="page-info">' + page + ' of ' + total + '</span>');
+        return '<nav class="page-nav">' + btns.join('') + '</nav>';
     }
-    if (items.length > INITIAL_SHOW) {
-        const remaining = items.length - INITIAL_SHOW;
-        html += `<button class="master-appearance-showmore" data-list="${listId}" data-shown="${INITIAL_SHOW}" onclick="(function(btn){`
-            + `var list=document.getElementById(btn.dataset.list);`
-            + `var shown=parseInt(btn.dataset.shown,10);`
-            + `var next=shown+${SHOW_MORE_STEP};`
-            + `var items=list.querySelectorAll('[data-app-hidden]');`
-            + `for(var i=0;i<items.length&&shown<next;i++,shown++){items[i].style.display='';items[i].removeAttribute('data-app-hidden');}`
-            + `btn.dataset.shown=''+shown;`
-            + `var left=list.querySelectorAll('[data-app-hidden]').length;`
-            + `if(!left){btn.remove();}else{btn.textContent='Show more ('+left+' remaining)';}`
-            + `})(this)">Show more (${remaining} remaining)</button>`;
+
+    function wireNav(container) {
+        const nav = container.querySelector('.page-nav');
+        if (!nav) return;
+        nav.querySelectorAll('[data-page]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = parseInt(btn.dataset.page, 10);
+                if (p >= 1 && p <= totalPages && p !== currentPage) {
+                    currentPage = p;
+                    update();
+                }
+            });
+        });
+        const jumpInput = nav.querySelector('.page-jump');
+        if (jumpInput) {
+            jumpInput.addEventListener('change', () => {
+                const p = parseInt(jumpInput.value, 10);
+                if (p >= 1 && p <= totalPages && p !== currentPage) {
+                    currentPage = p;
+                    update();
+                }
+            });
+        }
     }
-    html += `</div>`;
-    return html;
+
+    function update() {
+        const list = document.getElementById(listId);
+        if (!list) return;
+        const body = list.querySelector('.master-appearances-body');
+        if (body) body.innerHTML = renderItems(currentPage);
+        const navWrap = list.querySelector('.master-appearances-nav');
+        if (navWrap) navWrap.innerHTML = buildNav(currentPage, totalPages);
+        wireNav(list);
+    }
+
+    const wrapHtml = '<div class="master-appearances" id="' + listId + '">'
+        + '<div class="master-appearances-body">' + renderItems(1) + '</div>'
+        + '<div class="master-appearances-nav">' + buildNav(1, totalPages) + '</div>'
+        + '</div>';
+
+    // Defer wiring until DOM is ready
+    setTimeout(() => {
+        const el = document.getElementById(listId);
+        if (el) wireNav(el);
+    }, 0);
+
+    return wrapHtml;
 }
 renderAppearanceList._seq = 0;
 
