@@ -196,8 +196,10 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
             }
 
             let alpha = 0.35;
+            const hits = state.searchHits;
             if (state.focused) {
-                const relevant = e.from.key === state.focused || e.to.key === state.focused ||
+                const relevant = (hits ? hits.has(e.from.key) || hits.has(e.to.key) : false) ||
+                    e.from.key === state.focused || e.to.key === state.focused ||
                     isLineageOf(e.from.key, state.focused, edges) ||
                     isLineageOf(e.to.key, state.focused, edges);
                 alpha = relevant ? 0.6 : 0.06;
@@ -221,7 +223,8 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
 
             const col = SCHOOL_COLORS[n.school] || DEFAULT_COLOR;
             let nodeAlpha = 1.0;
-            if (state.focused && n.key !== state.focused) {
+            const isSearchHit = state.searchHits && state.searchHits.has(n.key);
+            if (state.focused && n.key !== state.focused && !isSearchHit) {
                 const connected = isLineageOf(n.key, state.focused, edges);
                 nodeAlpha = connected ? 0.8 : 0.2;
             }
@@ -246,8 +249,8 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
 
             ctx.fillStyle = col.fill;
             ctx.fill();
-            ctx.strokeStyle = (n.key === state.hovered || n.key === state.focused) ? '#d4ab58' : col.stroke;
-            ctx.lineWidth = (n.key === state.focused) ? 2.0 : 1.0;
+            ctx.strokeStyle = (n.key === state.hovered || n.key === state.focused || isSearchHit) ? '#d4ab58' : col.stroke;
+            ctx.lineWidth = (n.key === state.focused || isSearchHit) ? 2.0 : 1.0;
             ctx.stroke();
 
             // Name text
@@ -462,14 +465,20 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
     // ── Search ──
     searchInput.addEventListener('input', () => {
         const q = searchInput.value.trim().toLowerCase();
-        if (!q) { state.focused = null; draw(); return; }
-        const hit = nodes.find(n =>
+        if (!q) { state.focused = null; state.searchHits = null; draw(); return; }
+        const hits = nodes.filter(n =>
             n.names.some(nm => nm.toLowerCase().includes(q))
         );
-        if (hit) {
-            state.focused = hit.key;
-            state.panX = state.width / 2 - hit.x * state.zoom;
-            state.panY = state.height / 2 - hit.y * state.zoom;
+        if (hits.length > 0) {
+            state.focused = hits[0].key;
+            state.searchHits = new Set(hits.map(h => h.key));
+            // Center on centroid of all matches
+            const cx = hits.reduce((s, h) => s + h.x, 0) / hits.length;
+            const cy = hits.reduce((s, h) => s + h.y, 0) / hits.length;
+            state.panX = state.width / 2 - cx * state.zoom;
+            state.panY = state.height / 2 - cy * state.zoom;
+        } else {
+            state.searchHits = null;
         }
         draw();
     });

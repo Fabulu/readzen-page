@@ -2,7 +2,7 @@
 // Rendered when no route is present. Landing page with hero, corpus
 // explainer, feature showcase, masters, curated texts, and install help.
 
-import { getLastRead, getLists } from '../lib/reading-lists.js';
+import { getLastRead, getLists, removeFromList } from '../lib/reading-lists.js';
 import { loadAllTitlesAsArray } from '../lib/titles.js';
 import { loadMasters } from './master.js';
 import { initGraph } from './lineage-graph.js';
@@ -57,7 +57,10 @@ export function render(_route, mount, shell) {
                <h3 class="reading-list-heading">My Reading List</h3>
                <div class="reading-list-items">
                    ${myList.map((i) =>
-                       `<a class="reading-list-item" href="#/${escapeHtml(i.route || i.fileId)}">${escapeHtml(i.title)}</a>`
+                       `<div class="reading-list-entry">
+                            <a class="reading-list-item" href="#/${escapeHtml(i.route || i.fileId)}">${escapeHtml(i.title)}</a>
+                            <button class="reading-list-remove" data-file-id="${escapeHtml(i.fileId)}" title="Remove from reading list">\u00d7</button>
+                        </div>`
                    ).join('')}
                </div>
            </div>`
@@ -80,19 +83,25 @@ export function render(_route, mount, shell) {
                 <p class="hero-tagline">Read, search, and study classical Chinese Zen texts &mdash; with English translations and a built-in dictionary.</p>
             </div>
 
+            <form class="landing-search" id="landing-search-form" autocomplete="off">
+                <input class="landing-search-input" id="landing-search-input" type="text"
+                       placeholder="Search 5,000+ texts by title\u2026" />
+                <button class="btn" type="submit">Search</button>
+            </form>
+
             <div class="lineage-showcase">
                 <h3 class="lineage-showcase-heading">The Zen Lineage</h3>
                 <p class="lineage-showcase-desc">
                     204 Chan/Zen masters from Bodhidharma to the late Ming.
                     Click a master to trace their lineage. Double-click to visit their profile.
                 </p>
+                <input type="text" id="landing-lineage-search" class="lineage-search--landing"
+                       placeholder="Search masters by name\u2026" />
                 <div class="lineage-showcase-canvas-wrap">
                     <canvas id="landing-lineage-canvas" class="lineage-showcase-canvas"></canvas>
                     <div id="landing-lineage-legend" class="lineage-legend lineage-legend--landing"></div>
                 </div>
                 <div class="lineage-showcase-controls">
-                    <input type="text" id="landing-lineage-search" class="lineage-search--landing"
-                           placeholder="Search masters\u2026" />
                     <a class="btn btn--outline btn--small" href="#/lineage">Open Full Screen</a>
                     <a class="btn btn--outline btn--small" href="#/masters">Browse All Masters</a>
                     <button class="btn btn--outline btn--small" id="random-master-btn">\uD83C\uDFB2 Random Master</button>
@@ -265,6 +274,35 @@ export function render(_route, mount, shell) {
             </div>
         </section>
     `;
+
+    // ── Landing search form ──
+    const landingSearchForm = mount.querySelector('#landing-search-form');
+    const landingSearchInput = mount.querySelector('#landing-search-input');
+    if (landingSearchForm) {
+        landingSearchForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const q = (landingSearchInput.value || '').trim();
+            window.location.hash = '#/search' + (q ? '?q=' + encodeURIComponent(q) : '');
+        });
+    }
+
+    // ── Reading list remove buttons ──
+    mount.querySelectorAll('.reading-list-remove').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const fileId = btn.dataset.fileId;
+            if (fileId) {
+                removeFromList('My Reading List', fileId);
+                const entry = btn.closest('.reading-list-entry');
+                if (entry) entry.remove();
+                // If list is now empty, remove the section
+                const section = mount.querySelector('.reading-list-section');
+                if (section && !section.querySelector('.reading-list-entry')) {
+                    section.remove();
+                }
+            }
+        });
+    });
 
     // Wire random buttons (async, non-blocking)
     const randomTextBtn = mount.querySelector('#random-text-btn');

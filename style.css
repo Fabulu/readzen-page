@@ -520,6 +520,63 @@ code, .mono { font-family: var(--mono); }
     color: var(--text-soft);
 }
 
+.landing-search {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin: 1.2rem auto 0;
+    max-width: 480px;
+}
+
+.landing-search-input {
+    flex: 1;
+    padding: 0.6rem 1rem;
+    font-size: 1rem;
+    font-family: var(--sans);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-soft);
+    color: var(--text);
+}
+.landing-search-input::placeholder { color: var(--muted); }
+.landing-search-input:focus { outline: none; border-color: var(--accent); }
+
+/* ── Search filters ── */
+
+.search-filters {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 0.6rem 0 0.8rem;
+    flex-wrap: wrap;
+}
+
+.search-filter-label {
+    font-size: 0.82rem;
+    color: var(--text-soft);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.search-filter-hint {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-left: auto;
+}
+
+.search-row-badge {
+    font-size: 0.68rem;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+}
+
 .landing .hero-actions {
     display: flex;
     justify-content: center;
@@ -593,15 +650,22 @@ code, .mono { font-family: var(--mono); }
 }
 
 .lineage-search--landing {
-    width: 180px;
-    padding: 4px 10px;
-    font-size: 12px;
-    border-radius: 6px;
-    border: 1px solid var(--border-soft);
-    background: transparent;
+    width: 100%;
+    max-width: 320px;
+    padding: 8px 14px;
+    font-size: 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-soft);
     color: var(--text);
+    display: block;
+    margin: 0 auto 0.8rem;
 }
 .lineage-search--landing::placeholder { color: var(--muted); }
+.lineage-search--landing:focus {
+    outline: none;
+    border-color: var(--accent);
+}
 
 @media (max-width: 640px) {
     .lineage-showcase-canvas-wrap { height: 320px; }
@@ -2799,12 +2863,19 @@ a.master-appearance-title:hover {
 
 .reading-list-items {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
+    flex-direction: column;
+    gap: 0.35rem;
     margin-bottom: 0.5rem;
 }
 
+.reading-list-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
 .reading-list-item {
+    flex: 1;
     padding: 0.35rem 0.7rem;
     background: var(--paper);
     border: 1px solid var(--border-soft);
@@ -2815,6 +2886,18 @@ a.master-appearance-title:hover {
 }
 
 .reading-list-item:hover { border-color: var(--accent); }
+
+.reading-list-remove {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    line-height: 1;
+    border-radius: 4px;
+}
+.reading-list-remove:hover { color: var(--error); }
 
 .reading-list-upsell {
     font-size: 0.8rem;

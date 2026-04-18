@@ -5,7 +5,7 @@
 // and filters client-side against the query string. Each row links to the
 // passage outline view for that work.
 //
-// Full-text search stays in the desktop app � this is an informational preview
+// Full-text search stays in the desktop app; this is an informational preview
 // that shows "we understood your search", not a corpus scan.
 
 import { escapeHtml } from '../lib/format.js';
@@ -35,10 +35,10 @@ export async function render(route, mount, shell) {
         ? 'CBETA'
         : (cfNamed === 'openzen' ? 'OpenZen' : (cf || ''));
 
-    shell.setTitle(initialQuery ? `Search � ${initialQuery}` : 'Search');
+    shell.setTitle(initialQuery ? 'Search \u00b7 ' + initialQuery : 'Search');
     shell.setContext(
-        initialQuery ? `Searching for "${initialQuery}"` : 'Search CBETA + OpenZen',
-        corpusLabel ? `Corpus: ${corpusLabel}` : 'Title-only search. Full-text search requires Read Zen.'
+        initialQuery ? 'Searching for "' + initialQuery + '"' : 'Search CBETA + OpenZen',
+        corpusLabel ? 'Corpus: ' + corpusLabel : 'Title-only search. Full-text search requires Read Zen.'
     );
     shell.setUpsell(
         'This is a title-only preview. The desktop app gives you ' +
@@ -58,10 +58,18 @@ export async function render(route, mount, shell) {
                 <button class="btn btn--small" type="submit">Search</button>
             </form>
 
-            <p class="search-disclaimer">
-                Title-only search. Full-text search requires the
-                <a class="text-link text-link--accent" href="https://github.com/Fabulu/ReadZen/releases">Read Zen desktop app</a>.
-            </p>
+            <div class="search-filters">
+                <label class="search-filter-label">
+                    <input type="radio" name="trans-filter" value="all" checked /> All
+                </label>
+                <label class="search-filter-label">
+                    <input type="radio" name="trans-filter" value="translated" /> Translated
+                </label>
+                <label class="search-filter-label">
+                    <input type="radio" name="trans-filter" value="untranslated" /> Untranslated
+                </label>
+                <span class="search-filter-hint">Full-text search in the <a class="text-link text-link--accent" href="https://github.com/Fabulu/ReadZen/releases">desktop app</a></span>
+            </div>
 
             <header class="list-head">
                 <h2 class="list-title" id="search-title">Results</h2>
@@ -79,8 +87,9 @@ export async function render(route, mount, shell) {
     const empty = document.querySelector('#search-empty');
     const subEl = document.querySelector('#search-sub');
     const titleEl = document.querySelector('#search-title');
+    const filterRadios = mount.querySelectorAll('input[name="trans-filter"]');
 
-    shell.setStatus('Loading titles�', 'Downloading the title index.', false);
+    shell.setStatus('Loading titles\u2026', 'Downloading the title index.', false);
 
     let titles;
     try {
@@ -95,13 +104,26 @@ export async function render(route, mount, shell) {
 
     shell.hideStatus();
 
+    function getTransFilter() {
+        for (const r of filterRadios) { if (r.checked) return r.value; }
+        return 'all';
+    }
+
+    function hasTranslation(t) {
+        const en = (t.en || t.En || '').toString().trim();
+        const enShort = (t.enShort || t.EnShort || '').toString().trim();
+        return en.length > 0 || enShort.length > 0;
+    }
+
     function doSearch(query) {
         const trimmed = (query || '').trim();
+        const transFilter = getTransFilter();
+
         if (!trimmed) {
             body.innerHTML = '';
             empty.hidden = false;
-            empty.innerHTML = `<p>Enter a query above to search ${titles.length} work titles.</p>`;
-            subEl.textContent = `${titles.length} titles indexed`;
+            empty.innerHTML = '<p>Enter a query above to search ' + titles.length + ' work titles.</p>';
+            subEl.textContent = titles.length + ' titles indexed';
             titleEl.textContent = 'Results';
             return;
         }
@@ -117,6 +139,9 @@ export async function render(route, mount, shell) {
                 const firstLetter = path.charAt(0).toUpperCase();
                 if (firstLetter !== cf.toUpperCase()) continue;
             }
+            if (transFilter === 'translated' && !hasTranslation(t)) continue;
+            if (transFilter === 'untranslated' && hasTranslation(t)) continue;
+
             const zh = (t.zh || t.Zh || '').toString();
             const en = (t.en || t.En || '').toString();
             const enShort = (t.enShort || t.EnShort || '').toString();
@@ -127,20 +152,21 @@ export async function render(route, mount, shell) {
             }
         }
 
-        titleEl.textContent = `Results for "${trimmed}"`;
+        titleEl.textContent = 'Results for "' + trimmed + '"';
 
         if (results.length === 0) {
             body.innerHTML = '';
             empty.hidden = false;
-            empty.innerHTML = `<p>No titles match <strong>${escapeHtml(trimmed)}</strong>${corpusLabel ? ` in corpus ${escapeHtml(corpusLabel)}` : ''}.</p>`;
+            empty.innerHTML = '<p>No titles match <strong>' + escapeHtml(trimmed) + '</strong>' +
+                (corpusLabel ? ' in corpus ' + escapeHtml(corpusLabel) : '') + '.</p>';
             subEl.textContent = '0 matches';
             return;
         }
 
         empty.hidden = true;
         subEl.textContent = results.length >= MAX_RESULTS
-            ? `Showing first ${MAX_RESULTS} matches (refine your query for more)`
-            : `${results.length} match${results.length === 1 ? '' : 'es'}`;
+            ? 'Showing first ' + MAX_RESULTS + ' matches (refine your query for more)'
+            : results.length + ' match' + (results.length === 1 ? '' : 'es');
 
         body.innerHTML = results.map((t) => {
             const zh = (t.zh || t.Zh || '').toString();
@@ -151,17 +177,17 @@ export async function render(route, mount, shell) {
             const href = workId ? '#/' + workId : '#';
 
             const enLine = en || enShort;
+            const badge = enLine ? '<span class="search-row-badge">EN</span>' : '';
 
-            return `
-                <a class="search-row" href="${escapeHtml(href)}">
-                    <span class="search-row-id">${escapeHtml(workId || '�')}</span>
-                    <span class="search-row-text">
-                        <span class="search-row-zh">${escapeHtml(zh || '[no title]')}</span>
-                        ${enLine ? `<span class="search-row-en">${escapeHtml(enLine)}</span>` : ''}
-                    </span>
-                    <span class="search-row-path">${escapeHtml(path)}</span>
-                </a>
-            `;
+            return '<a class="search-row" href="' + escapeHtml(href) + '">' +
+                '<span class="search-row-id">' + escapeHtml(workId || '\u2014') + '</span>' +
+                '<span class="search-row-text">' +
+                    '<span class="search-row-zh">' + escapeHtml(zh || '[no title]') + '</span>' +
+                    (enLine ? '<span class="search-row-en">' + escapeHtml(enLine) + '</span>' : '') +
+                '</span>' +
+                badge +
+                '<span class="search-row-path">' + escapeHtml(path) + '</span>' +
+            '</a>';
         }).join('');
     }
 
@@ -176,6 +202,9 @@ export async function render(route, mount, shell) {
         doSearch(q);
     });
 
+    // Re-run search when filter changes
+    filterRadios.forEach(r => r.addEventListener('change', () => doSearch(input.value)));
+
     doSearch(initialQuery);
 }
 
@@ -185,7 +214,7 @@ function deriveWorkIdFromPath(path) {
     const normalized = path.replace(/\\/g, '/');
     const parts = normalized.split('/').filter(Boolean);
     if (inferCorpusForRelPath(normalized) === 'openzen' && parts.length >= 2) {
-        return `${parts[0]}.${parts[1]}`;
+        return parts[0] + '.' + parts[1];
     }
     const file = parts.pop() || '';
     return file.replace(/\.xml$/i, '');
