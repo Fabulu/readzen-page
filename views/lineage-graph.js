@@ -88,7 +88,7 @@ export async function render(route, mount, shell) {
 
 // ── Graph engine ──
 
-function initGraph(canvas, legendEl, searchInput, masters, focusName) {
+export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
     const ctx = canvas.getContext('2d');
     const nodes = buildNodes(masters);
     const edges = buildEdges(nodes);

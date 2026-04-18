@@ -522,8 +522,88 @@ code, .mono { font-family: var(--mono); }
     display: flex;
     justify-content: center;
     gap: 1rem;
-    margin-top: 1.8rem;
+    margin-top: 2rem;
+    margin-bottom: 2.5rem;
     flex-wrap: wrap;
+}
+
+/* ── Lineage showcase (the showpiece) ── */
+
+.lineage-showcase {
+    margin: 1.5rem 0 0;
+    text-align: center;
+}
+
+.lineage-showcase-heading {
+    font-family: var(--serif);
+    font-size: 1.3rem;
+    font-weight: 300;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 0.5rem;
+}
+
+.lineage-showcase-desc {
+    font-family: var(--serif);
+    font-size: 0.92rem;
+    line-height: 1.7;
+    color: var(--text-soft);
+    max-width: 32rem;
+    margin: 0 auto 1rem;
+}
+
+.lineage-showcase-canvas-wrap {
+    position: relative;
+    width: 100%;
+    height: 420px;
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.lineage-showcase-canvas {
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+}
+.lineage-showcase-canvas:active { cursor: grabbing; }
+
+.lineage-legend--landing {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(20, 16, 12, 0.85);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 10px;
+    pointer-events: none;
+}
+
+.lineage-showcase-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.8rem;
+    flex-wrap: wrap;
+}
+
+.lineage-search--landing {
+    width: 180px;
+    padding: 4px 10px;
+    font-size: 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-soft);
+    background: transparent;
+    color: var(--text);
+}
+.lineage-search--landing::placeholder { color: var(--muted); }
+
+@media (max-width: 640px) {
+    .lineage-showcase-canvas-wrap { height: 320px; }
+    .lineage-search--landing { width: 140px; }
 }
 
 /* ── Corpus cards ── */

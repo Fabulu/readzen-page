@@ -5,6 +5,7 @@
 import { getLastRead, getLists } from '../lib/reading-lists.js';
 import { loadAllTitlesAsArray } from '../lib/titles.js';
 import { loadMasters } from './master.js';
+import { initGraph } from './lineage-graph.js';
 import { escapeHtml } from '../lib/format.js';
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
@@ -77,10 +78,31 @@ export function render(_route, mount, shell) {
             <div class="hero">
                 <h2 class="hero-title">Read Zen</h2>
                 <p class="hero-tagline">Read, search, and study classical Chinese Zen texts &mdash; with English translations and a built-in dictionary.</p>
-                <div class="hero-actions">
-                    <a class="btn" href="#/search">Start Reading</a>
-                    <a class="btn btn--outline" href="${RELEASES_URL}">Download Desktop App</a>
+            </div>
+
+            <div class="lineage-showcase">
+                <h3 class="lineage-showcase-heading">The Zen Lineage</h3>
+                <p class="lineage-showcase-desc">
+                    204 Chan/Zen masters from Bodhidharma to the late Ming.
+                    Click a master to trace their lineage. Double-click to visit their profile.
+                </p>
+                <div class="lineage-showcase-canvas-wrap">
+                    <canvas id="landing-lineage-canvas" class="lineage-showcase-canvas"></canvas>
+                    <div id="landing-lineage-legend" class="lineage-legend lineage-legend--landing"></div>
                 </div>
+                <div class="lineage-showcase-controls">
+                    <input type="text" id="landing-lineage-search" class="lineage-search--landing"
+                           placeholder="Search masters\u2026" />
+                    <a class="btn btn--outline btn--small" href="#/lineage">Open Full Screen</a>
+                    <a class="btn btn--outline btn--small" href="#/masters">Browse All Masters</a>
+                    <button class="btn btn--outline btn--small" id="random-master-btn">\uD83C\uDFB2 Random Master</button>
+                </div>
+            </div>
+
+            <div class="hero-actions">
+                <a class="btn" href="#/search">Start Reading</a>
+                <a class="btn btn--outline" href="${RELEASES_URL}">Download Desktop App</a>
+                <a class="btn btn--outline" href="https://ko-fi.com/readzen">Support on Ko-fi</a>
             </div>
 
             <div class="corpus-cards">
@@ -129,18 +151,7 @@ export function render(_route, mount, shell) {
                 </div>
             </div>
 
-            <div class="explore-masters">
-                <h3 class="explore-masters-heading">Explore Zen Masters</h3>
-                <p class="explore-masters-desc">
-                    Browse 200+ Chan/Zen masters across all five schools, from Bodhidharma
-                    to the late Song dynasty. View lineages, biographies, and text appearances.
-                </p>
-                <div class="explore-masters-links">
-                    <a class="btn btn--outline" href="#/masters">Browse All Masters</a>
-                    <button class="btn btn--outline" id="random-master-btn">\uD83C\uDFB2 Random Master</button>
-                    <a class="btn btn--outline" href="#/lineage">View the Lineage Web</a>
-                </div>
-            </div>
+            <!-- Explore Zen Masters section removed — replaced by the embedded lineage graph above -->
 
             <div class="start-here">
                 <h3 class="start-here-heading">Start Here</h3>
@@ -291,6 +302,21 @@ export function render(_route, mount, shell) {
                 if (name) window.location.hash = '#/master/' + encodeURIComponent(name.replace(/ /g, '_'));
             } catch { /* silent */ }
             randomMasterBtn.disabled = false;
+        });
+    }
+
+    // ── Embedded lineage graph (the showpiece) ──
+    const canvas = mount.querySelector('#landing-lineage-canvas');
+    const legend = mount.querySelector('#landing-lineage-legend');
+    const searchInput = mount.querySelector('#landing-lineage-search');
+    if (canvas) {
+        loadMasters().then(masters => {
+            if (!canvas.isConnected) return; // navigated away during load
+            initGraph(canvas, legend, searchInput, masters, null);
+        }).catch(() => {
+            // If masters fail to load, hide the canvas area gracefully
+            const wrap = mount.querySelector('.lineage-showcase-canvas-wrap');
+            if (wrap) wrap.innerHTML = '<p style="text-align:center;opacity:0.5;padding:2rem;">Could not load lineage data.</p>';
         });
     }
 }
