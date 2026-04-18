@@ -164,7 +164,7 @@ export async function render(route, mount, shell) {
                 if (headings.length >= 3) {
                     renderSourceOutline(sourceWork, headings, route, mount);
                 } else {
-                    renderFirstNLines(sourceWork, 30, route, mount);
+                    renderFirstNLines(sourceWork, 30, route, mount, true);
                 }
             }
             shell.hideStatus();
@@ -354,7 +354,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
  * small works (<200), otherwise paginates in chunks of 50 with a "Show more"
  * button.
  */
-function renderFirstNLines(sourceWork, _unused, route, mount) {
+function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
     const PAGE = 50;
     const allLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
     const totalLines = allLines.length;
@@ -372,7 +372,7 @@ function renderFirstNLines(sourceWork, _unused, route, mount) {
         <article class="panel outline-panel">
             <header class="outline-head">
                 <h2 class="outline-title">${titleLine}</h2>
-                <p class="outline-sub">Preview · ${showAll ? totalLines : shown + ' of ' + totalLines} line${totalLines === 1 ? '' : 's'}</p>
+                <p class="outline-sub">${noTranslation ? 'Chinese source \u2014 no English translation available yet' : 'Preview \u00b7 ' + (showAll ? totalLines : shown + ' of ' + totalLines) + ' line' + (totalLines === 1 ? '' : 's')}</p>
             </header>
             <div class="panel-body panel-body--source" id="firstn-source-body">
                 ${renderLinesHtml(allLines.slice(0, shown))}

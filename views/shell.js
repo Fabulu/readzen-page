@@ -19,6 +19,16 @@ const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 const AUTO_OPEN_PREF_KEY = 'readzen-auto-open';
 const THEME_PREF_KEY = 'readzen-theme';
 
+function isAutoOpenEnabled() {
+    try { return localStorage.getItem(AUTO_OPEN_PREF_KEY) === 'true'; }
+    catch { return false; }
+}
+
+function setAutoOpenEnabled(on) {
+    try { localStorage.setItem(AUTO_OPEN_PREF_KEY, on ? 'true' : 'false'); }
+    catch {}
+}
+
 function getTheme() {
     try { return localStorage.getItem(THEME_PREF_KEY) || 'dark'; }
     catch { return 'dark'; }
@@ -32,16 +42,6 @@ function applyTheme(theme) {
 // Apply saved theme immediately on module load.
 applyTheme(getTheme());
 
-/** Default-on. The footer toggle in this file flips it. */
-function isAutoOpenEnabled() {
-    try { return localStorage.getItem(AUTO_OPEN_PREF_KEY) !== 'false'; }
-    catch { return true; }
-}
-
-function setAutoOpenEnabled(on) {
-    try { localStorage.setItem(AUTO_OPEN_PREF_KEY, on ? 'true' : 'false'); }
-    catch {}
-}
 
 /**
  * Render the shell into `#app` and return the inner mount node plus a set of
@@ -51,13 +51,13 @@ export function mountShell(root, route) {
     root.innerHTML = `
         <div class="shell">
             <header class="shell-header">
-                <div class="shell-brand">
+                <a class="shell-brand" href="#">
                     <div class="hero-mark" aria-hidden="true"></div>
                     <div class="shell-brand-text">
                         <p class="shell-kicker">Read Zen Preview</p>
                         <h1 class="shell-title" id="shell-title">Read Zen</h1>
                     </div>
-                </div>
+                </a>
                 <div class="shell-route" id="shell-route-box">
                     <span class="route-chip" id="route-chip" hidden></span>
                     <span class="route-chip route-chip--corpus" id="corpus-chip" hidden></span>
@@ -104,7 +104,7 @@ export function mountShell(root, route) {
             <footer class="shell-foot">
                 <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA + OpenZenTexts · <a href="https://ko-fi.com/readzen" target="_blank" rel="noreferrer">Support this project</a></p>
                 <p class="shell-foot-pref">
-                    Auto-open links in the Read Zen app:
+                    Auto-open in desktop app:
                     <a href="#" id="auto-open-toggle" class="shell-foot-toggle"></a>
                 </p>
                 <p class="shell-foot-pref font-size-ctrl">
@@ -189,8 +189,7 @@ export function mountShell(root, route) {
         }
     }
 
-    // Footer toggle: shows current auto-open state, flips on click, reloads
-    // so the new preference takes effect immediately for this view.
+    // Auto-open toggle: off by default, user opts in.
     const toggle = root.querySelector('#auto-open-toggle');
     if (toggle) {
         toggle.textContent = autoOpenOn ? 'on' : 'off';

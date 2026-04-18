@@ -29,17 +29,28 @@ const LOOKUP_VIEWS = [dictionary, termbase, master, mastersBrowse, lineageGraph,
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 
 // localStorage key for the user's auto-open-in-desktop-app preference.
-// Default is "on" — set to 'false' to disable. The footer toggle in
-// views/shell.js flips this and reloads the page.
+// Default is OFF — user must opt in via the footer toggle.
 const AUTO_OPEN_PREF_KEY = 'readzen-auto-open';
 
-/** Returns true if the user has NOT opted out of silent auto-launch. */
 function isAutoOpenEnabled() {
+    try { return localStorage.getItem(AUTO_OPEN_PREF_KEY) === 'true'; }
+    catch { return false; }
+}
+
+/**
+ * Fires the zen:// deep link silently via a hidden iframe. If the desktop
+ * app is installed the OS handles it; if not, the iframe fails silently.
+ */
+function fireAppLaunchSilent(route) {
+    const zenUri = buildZenUri(route);
+    if (!zenUri) return;
     try {
-        return localStorage.getItem(AUTO_OPEN_PREF_KEY) !== 'false';
-    } catch {
-        return true; // localStorage unavailable → default on
-    }
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = zenUri;
+        document.body.appendChild(iframe);
+        setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 500);
+    } catch {}
 }
 
 /**
@@ -59,12 +70,8 @@ async function init() {
         return;
     }
 
-    // For ANY routed view that resolves to a valid zen:// URI, fire the
-    // desktop app silently in the background — UNLESS the user has
-    // opted out via the footer toggle. If the app is installed it takes
-    // over the OS tab; if not, the iframe load fails silently and the
-    // preview below stays visible. When auto-open is off, the shell shows
-    // an explicit "Open in Read Zen" button instead.
+    // If the user opted in via footer toggle, silently fire the zen://
+    // deep link so the desktop app takes over. Off by default.
     if (isAutoOpenEnabled()) {
         fireAppLaunchSilent(route);
     }
@@ -140,27 +147,6 @@ function renderPlaceholder(route, mount, messages) {
     `;
 }
 
-/**
- * Fires the zen:// deep link silently in the background. If the desktop app
- * is installed, the OS handles it and the user switches focus. If not, the
- * iframe load fails silently and we keep showing the preview. No UI delay.
- */
-function fireAppLaunchSilent(route) {
-    const zenUri = buildZenUri(route);
-    if (!zenUri) return;
-    try {
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.src = zenUri;
-        document.body.appendChild(iframe);
-        setTimeout(() => {
-            try { document.body.removeChild(iframe); } catch {}
-        }, 500);
-    } catch {
-        // Browser blocked the protocol or it doesn't exist — preview is the answer.
-    }
-}
-
 // Apply saved font size on load.
 try {
     const saved = localStorage.getItem('readzen-font-size');
@@ -171,6 +157,7 @@ try {
 // same tab get a fresh view.
 window.addEventListener('hashchange', () => {
     dismissAllPopups();
+    window.scrollTo(0, 0);
     init();
 });
 

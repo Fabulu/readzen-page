@@ -5,7 +5,7 @@
 // and filters client-side against the query string. Each row links to the
 // passage outline view for that work.
 //
-// Full-text search stays in the desktop app — this is an informational preview
+// Full-text search stays in the desktop app ï¿½ this is an informational preview
 // that shows "we understood your search", not a corpus scan.
 
 import { escapeHtml } from '../lib/format.js';
@@ -35,7 +35,7 @@ export async function render(route, mount, shell) {
         ? 'CBETA'
         : (cfNamed === 'openzen' ? 'OpenZen' : (cf || ''));
 
-    shell.setTitle(initialQuery ? `Search · ${initialQuery}` : 'Search');
+    shell.setTitle(initialQuery ? `Search ï¿½ ${initialQuery}` : 'Search');
     shell.setContext(
         initialQuery ? `Searching for "${initialQuery}"` : 'Search CBETA + OpenZen',
         corpusLabel ? `Corpus: ${corpusLabel}` : 'Title-only search. Full-text search requires Read Zen.'
@@ -53,7 +53,7 @@ export async function render(route, mount, shell) {
         <section class="list-wrap search-wrap">
             <form class="search-form" id="search-form" autocomplete="off">
                 <input class="search-input" id="search-input" type="text"
-                       placeholder="Search work titles…"
+                       placeholder="Search work titles\u2026"
                        value="${escapeHtml(initialQuery)}" />
                 <button class="btn btn--small" type="submit">Search</button>
             </form>
@@ -80,7 +80,7 @@ export async function render(route, mount, shell) {
     const subEl = document.querySelector('#search-sub');
     const titleEl = document.querySelector('#search-title');
 
-    shell.setStatus('Loading titles…', 'Downloading the title index.', false);
+    shell.setStatus('Loading titlesï¿½', 'Downloading the title index.', false);
 
     let titles;
     try {
@@ -154,7 +154,7 @@ export async function render(route, mount, shell) {
 
             return `
                 <a class="search-row" href="${escapeHtml(href)}">
-                    <span class="search-row-id">${escapeHtml(workId || '—')}</span>
+                    <span class="search-row-id">${escapeHtml(workId || 'ï¿½')}</span>
                     <span class="search-row-text">
                         <span class="search-row-zh">${escapeHtml(zh || '[no title]')}</span>
                         ${enLine ? `<span class="search-row-en">${escapeHtml(enLine)}</span>` : ''}

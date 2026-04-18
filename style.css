@@ -46,7 +46,7 @@
 :root[data-theme="light"] body::before { display: none; }
 
 html {
-    font-size: 16px;
+    font-size: var(--text-size, 16px);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scroll-behavior: smooth;
@@ -89,7 +89,7 @@ code, .mono { font-family: var(--mono); }
 .shell {
     width: min(100%, 1360px);
     margin: 0 auto;
-    padding: 2.4rem 2rem 4rem;
+    padding: 1.2rem 2rem 4rem;
 }
 
 .shell-header {
@@ -105,6 +105,8 @@ code, .mono { font-family: var(--mono); }
     display: flex;
     align-items: center;
     gap: 1.1rem;
+    text-decoration: none;
+    color: inherit;
 }
 
 .shell-brand-text { display: flex; flex-direction: column; }
@@ -493,12 +495,12 @@ code, .mono { font-family: var(--mono); }
 .landing {
     max-width: 720px;
     margin: 0 auto;
-    padding: 2.5rem 0 2rem;
+    padding: 0.5rem 0 2rem;
 }
 
 .landing .hero {
     text-align: center;
-    padding: 2.5rem 0 2rem;
+    padding: 1rem 0 1.5rem;
 }
 
 .landing .hero-title {
@@ -701,6 +703,18 @@ code, .mono { font-family: var(--mono); }
     position: absolute;
     left: 0;
     color: var(--muted);
+}
+
+.feature-group-list li.feature-desktop::after {
+    content: "desktop";
+    font-size: 0.68rem;
+    color: var(--muted);
+    background: var(--paper-strong);
+    padding: 0.05rem 0.35rem;
+    border-radius: 3px;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+    letter-spacing: 0.04em;
 }
 
 .feature-group-cta {
@@ -1005,12 +1019,12 @@ code, .mono { font-family: var(--mono); }
 .line-text {
     color: var(--text);
     font-family: var(--serif);
-    font-size: var(--text-size, 16px);
+    font-size: 1rem;
     line-height: 1.82;
 }
 
 .panel-body--source .line-text {
-    font-size: calc(var(--text-size, 16px) + 1.5px);
+    font-size: 1.1rem;
     letter-spacing: 0.015em;
 }
 

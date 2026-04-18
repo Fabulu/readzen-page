@@ -114,28 +114,28 @@ export function render(_route, mount, shell) {
                 <div class="corpus-card corpus-card--openzen">
                     <h3 class="corpus-card-title">OpenZen</h3>
                     <p class="corpus-card-desc">Freely-licensed critical editions and community translations. A growing collection you can build on.</p>
-                    <p class="corpus-card-license">MIT licensed &middot; <a href="https://github.com/OpenZenTexts" target="_blank" rel="noopener">OpenZenTexts</a></p>
+                    <p class="corpus-card-license">CC0 / CC BY 4.0 &middot; <a href="https://github.com/OpenZenTexts" target="_blank" rel="noopener">OpenZenTexts</a></p>
                 </div>
             </div>
 
             <div class="feature-showcase">
                 <div class="feature-group">
-                    <h3 class="feature-group-title">Read &amp; Translate</h3>
+                    <h3 class="feature-group-title">Read</h3>
                     <ul class="feature-group-list">
-                        <li>Side-by-side Chinese/English with linked scrolling</li>
+                        <li>Side-by-side Chinese/English reading</li>
                         <li>Hover dictionary (CC-CEDICT) on every character</li>
-                        <li>Projection editor with translation memory</li>
-                        <li>AI-assisted translation drafts</li>
+                        <li class="feature-desktop">Translation editor with translation memory</li>
+                        <li class="feature-desktop">AI-assisted translation drafts</li>
                     </ul>
                     <a class="feature-group-cta" href="#/T48n2005">Try a text</a>
                 </div>
                 <div class="feature-group">
                     <h3 class="feature-group-title">Research</h3>
                     <ul class="feature-group-list">
-                        <li>Full-text search across both corpora</li>
-                        <li>Tag passages and build scholar collections</li>
-                        <li>Managed terminology (termbases)</li>
-                        <li>Compare translations across contributors</li>
+                        <li>Search work titles across both corpora</li>
+                        <li class="feature-desktop">Full-text search across all 5,000+ texts</li>
+                        <li class="feature-desktop">Tag passages and build scholar collections</li>
+                        <li class="feature-desktop">Managed terminology (termbases)</li>
                     </ul>
                     <a class="feature-group-cta" href="#/search">Search the corpus</a>
                 </div>
@@ -145,7 +145,7 @@ export function render(_route, mount, shell) {
                         <li>200+ Zen masters with lineages and biographies</li>
                         <li>Interactive lineage web across all five schools</li>
                         <li>Share links to any passage, master, or search</li>
-                        <li>Sync translations and tags with your community</li>
+                        <li class="feature-desktop">Sync translations and tags via GitHub</li>
                     </ul>
                     <a class="feature-group-cta" href="#/masters">Browse masters</a>
                 </div>
@@ -176,24 +176,16 @@ export function render(_route, mount, shell) {
                     <details class="install-os">
                         <summary>
                             <span class="install-os-icon">\uD83E\uDE9F</span>
-                            Windows &mdash; "Windows protected your PC" warning
+                            Windows
                         </summary>
+                        <p class="install-intro"><strong>Three ways to install:</strong></p>
                         <ol class="install-steps">
-                            <li>Download the <code>ReadZen-win-x64.zip</code> from the releases page.</li>
-                            <li>Extract the zip anywhere (no installer yet &mdash; just a folder of files).</li>
-                            <li>Double-click <code>ReadZen.App.exe</code>. Windows SmartScreen will show a blue "Windows protected your PC" panel.</li>
-                            <li>Click <strong>More info</strong> at the top of the warning.</li>
-                            <li>Click the new <strong>Run anyway</strong> button at the bottom.</li>
+                            <li><strong>WinGet (recommended):</strong> <code>winget install ReadZen</code> &mdash; installs cleanly, SmartScreen-safe, and <code>winget upgrade</code> handles updates.</li>
+                            <li><strong>Installer:</strong> Download <code>Setup.exe</code> from the releases page. Run it &mdash; the app auto-updates from then on.</li>
+                            <li><strong>Portable ZIP:</strong> Download <code>ReadZen-win-x64.zip</code>, extract anywhere, and run <code>ReadZen.App.exe</code>. SmartScreen may warn once &mdash; click <strong>More info</strong> then <strong>Run anyway</strong>.</li>
                         </ol>
                         <p class="install-tip">
-                            <strong>Faster path (once Microsoft merges the manifest PR):</strong>
-                            <code>winget install Fabulu.ReadZen</code> &mdash; Microsoft signs the binary on its CDN, no SmartScreen warning at all, and <code>winget upgrade</code> handles updates for you.
-                        </p>
-                        <p class="install-why">
-                            Why the warning? Code-signing certificates cost ~$120/yr.
-                            We'll add it once download volume justifies the spend. Until
-                            then, verify the source on
-                            <a href="${SOURCE_URL}">GitHub</a> if you want to be sure.
+                            <strong>Git is bundled.</strong> You do not need to install Git separately &mdash; Read Zen ships with Portable Git built in.
                         </p>
                     </details>
 
@@ -251,10 +243,10 @@ export function render(_route, mount, shell) {
                             First-time setup (after install)
                         </summary>
                         <ol class="install-steps">
-                            <li><strong>Install Git</strong> if you don't have it: <a href="https://git-scm.com/downloads">git-scm.com/downloads</a>. Read Zen needs it to download the text corpora.</li>
-                            <li>Launch Read Zen. The onboarding tutorial walks you through 4 required setup steps (welcome &rarr; Git check &rarr; choose folder &amp; download corpus &rarr; build search index). After that the rest of the tour is optional and you can skip out at any time.</li>
-                            <li>The download is large (~2.5 GB) because it includes both CBETA and OpenZen text collections.</li>
-                            <li>A free <a href="https://github.com/signup">GitHub account</a> is only needed if you want to share translations or contribute back. Reading + translating locally works without one.</li>
+                            <li>Launch Read Zen. The onboarding walks you through 4 setup steps (welcome &rarr; Git check &rarr; choose folder &amp; download corpus &rarr; build search index). Skip the rest of the tour any time.</li>
+                            <li>Git is bundled on Windows. On macOS/Linux, install Git if you don't have it: <a href="https://git-scm.com/downloads">git-scm.com/downloads</a>.</li>
+                            <li>The corpus download is ~2.5 GB (CBETA + OpenZen).</li>
+                            <li>A <a href="https://github.com/signup">GitHub account</a> is only needed to share translations. Reading and translating locally works without one.</li>
                         </ol>
                     </details>
                 </div>

@@ -11,13 +11,14 @@ import { escapeHtml } from '../lib/format.js';
 // ── School colors ──
 
 const SCHOOL_COLORS = {
-    'Linji':    { fill: '#8c2a2a', stroke: '#b84040', text: '#f0d0c8' },
-    'Caodong':  { fill: '#2a4a8c', stroke: '#4070b8', text: '#c8d8f0' },
-    'Yunmen':   { fill: '#5c2a8c', stroke: '#8040b8', text: '#dcc8f0' },
-    'Fayan':    { fill: '#1a6858', stroke: '#309880', text: '#b0e8d8' },
-    'Guiyang':  { fill: '#7a6020', stroke: '#b09030', text: '#f0e0a0' },
-    'Hongzhou': { fill: '#8c5020', stroke: '#c07830', text: '#f0d0a0' },
-    'Niutou':   { fill: '#2a6a2a', stroke: '#40a040', text: '#c0e8c0' },
+    'Linji':      { fill: '#8c2a2a', stroke: '#b84040', text: '#f0d0c8' },
+    'Caodong':    { fill: '#2a4a8c', stroke: '#4070b8', text: '#c8d8f0' },
+    'Yunmen':     { fill: '#5c2a8c', stroke: '#8040b8', text: '#dcc8f0' },
+    'Fayan':      { fill: '#1a6858', stroke: '#309880', text: '#b0e8d8' },
+    'Guiyang':    { fill: '#7a6020', stroke: '#b09030', text: '#f0e0a0' },
+    'Hongzhou':   { fill: '#8c5020', stroke: '#c07830', text: '#f0d0a0' },
+    'Niutou':     { fill: '#2a6a2a', stroke: '#40a040', text: '#c0e8c0' },
+    'Early Chan': { fill: '#6a5a3a', stroke: '#9a8860', text: '#e0d8c0' },
 };
 const DEFAULT_COLOR = { fill: '#3a3530', stroke: '#5a5550', text: '#ddd8d0' };
 

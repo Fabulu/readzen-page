@@ -6,13 +6,14 @@ import { loadMasters } from './master.js';
 import { escapeHtml } from '../lib/format.js';
 
 const SCHOOL_COLORS = {
-    'Linji':    { bg: 'rgba(180, 60, 50, 0.22)', border: 'rgba(180, 60, 50, 0.55)', text: '#f0c0b8' },
-    'Caodong':  { bg: 'rgba(55, 100, 170, 0.22)', border: 'rgba(55, 100, 170, 0.55)', text: '#b8d0f0' },
-    'Yunmen':   { bg: 'rgba(120, 60, 160, 0.22)', border: 'rgba(120, 60, 160, 0.55)', text: '#d8b8f0' },
-    'Fayan':    { bg: 'rgba(40, 140, 120, 0.22)', border: 'rgba(40, 140, 120, 0.55)', text: '#b0e8d8' },
-    'Guiyang':  { bg: 'rgba(180, 140, 40, 0.22)', border: 'rgba(180, 140, 40, 0.55)', text: '#f0e0a0' },
-    'Hongzhou': { bg: 'rgba(200, 120, 50, 0.22)', border: 'rgba(200, 120, 50, 0.55)', text: '#f0d0a0' },
-    'Niutou':   { bg: 'rgba(80, 160, 80, 0.22)', border: 'rgba(80, 160, 80, 0.55)', text: '#c0e8c0' },
+    'Linji':      { bg: 'rgba(180, 60, 50, 0.22)', border: 'rgba(180, 60, 50, 0.55)', text: '#f0c0b8' },
+    'Caodong':    { bg: 'rgba(55, 100, 170, 0.22)', border: 'rgba(55, 100, 170, 0.55)', text: '#b8d0f0' },
+    'Yunmen':     { bg: 'rgba(120, 60, 160, 0.22)', border: 'rgba(120, 60, 160, 0.55)', text: '#d8b8f0' },
+    'Fayan':      { bg: 'rgba(40, 140, 120, 0.22)', border: 'rgba(40, 140, 120, 0.55)', text: '#b0e8d8' },
+    'Guiyang':    { bg: 'rgba(180, 140, 40, 0.22)', border: 'rgba(180, 140, 40, 0.55)', text: '#f0e0a0' },
+    'Hongzhou':   { bg: 'rgba(200, 120, 50, 0.22)', border: 'rgba(200, 120, 50, 0.55)', text: '#f0d0a0' },
+    'Niutou':     { bg: 'rgba(80, 160, 80, 0.22)', border: 'rgba(80, 160, 80, 0.55)', text: '#c0e8c0' },
+    'Early Chan': { bg: 'rgba(154, 136, 96, 0.22)', border: 'rgba(154, 136, 96, 0.55)', text: '#e0d8c0' },
 };
 
 function schoolStyle(school) {
