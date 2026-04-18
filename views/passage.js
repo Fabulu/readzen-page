@@ -338,6 +338,16 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
                 }
             });
         });
+        const jumpInput = nav.querySelector('.page-jump');
+        if (jumpInput) {
+            jumpInput.addEventListener('change', () => {
+                const p = parseInt(jumpInput.value, 10);
+                if (p >= 1 && p <= totalPages && p !== currentPage) {
+                    currentPage = p;
+                    renderPage(currentPage);
+                }
+            });
+        }
     }
 
     const wrap = document.querySelector('#outline-wrap') || mount;
@@ -432,6 +442,16 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
                 }
             });
         });
+        const jumpInput = nav.querySelector('.page-jump');
+        if (jumpInput) {
+            jumpInput.addEventListener('change', () => {
+                const p = parseInt(jumpInput.value, 10);
+                if (p >= 1 && p <= totalPages && p !== currentPage) {
+                    currentPage = p;
+                    renderPage(currentPage);
+                }
+            });
+        }
     }
 
     const wrap = document.querySelector('#outline-wrap') || mount;
@@ -832,6 +852,9 @@ function buildPageButtons(current, total) {
     }
 
     btns.push(`<button class="page-btn" data-page="${current + 1}" ${current >= total ? 'disabled' : ''}>Next \u2192</button>`);
+    if (total > 5) {
+        btns.push(`<input class="page-jump" type="number" min="1" max="${total}" value="${current}" title="Jump to page" />`);
+    }
     btns.push(`<span class="page-info">${current} of ${total}</span>`);
     return btns.join('');
 }

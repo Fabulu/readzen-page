@@ -2,7 +2,7 @@
 // Rendered when no route is present. Landing page with hero, corpus
 // explainer, feature showcase, masters, curated texts, and install help.
 
-import { getLastRead, getLists, removeFromList } from '../lib/reading-lists.js';
+import { getLastRead, clearLastRead, getLists, removeFromList } from '../lib/reading-lists.js';
 import { loadAllTitlesAsArray } from '../lib/titles.js';
 import { loadMasters } from './master.js';
 import { initGraph } from './lineage-graph.js';
@@ -42,10 +42,11 @@ export function render(_route, mount, shell) {
     // ── Continue reading banner ──
     const lastRead = getLastRead();
     const continueHtml = lastRead
-        ? `<div class="continue-reading">
+        ? `<div class="continue-reading" id="continue-reading">
                <a class="continue-reading-link" href="#/${escapeHtml(lastRead.route || lastRead.fileId)}">
                    Continue reading: ${escapeHtml(lastRead.title)} (${lastRead.scrollPercent}%)
                </a>
+               <button class="continue-reading-dismiss" id="dismiss-continue" title="Dismiss">\u00d7</button>
            </div>`
         : '';
 
@@ -109,7 +110,7 @@ export function render(_route, mount, shell) {
             </div>
 
             <div class="hero-actions">
-                <a class="btn" href="#/search">Start Reading</a>
+                <a class="btn" href="#/search">Advanced Search &amp; Filters</a>
                 <a class="btn btn--outline" href="${RELEASES_URL}">Download Desktop App</a>
                 <a class="btn btn--outline" href="https://ko-fi.com/readzen">Support on Ko-fi</a>
             </div>
@@ -274,6 +275,17 @@ export function render(_route, mount, shell) {
             </div>
         </section>
     `;
+
+    // ── Dismiss continue-reading ──
+    const dismissBtn = mount.querySelector('#dismiss-continue');
+    if (dismissBtn) {
+        dismissBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            clearLastRead();
+            const banner = mount.querySelector('#continue-reading');
+            if (banner) banner.remove();
+        });
+    }
 
     // ── Landing search form ──
     const landingSearchForm = mount.querySelector('#landing-search-form');

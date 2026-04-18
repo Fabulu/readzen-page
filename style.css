@@ -1387,6 +1387,20 @@ code, .mono { font-family: var(--mono); }
     padding: 0 0.2rem;
 }
 
+.page-jump {
+    width: 3.5rem;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.82rem;
+    font-family: var(--sans);
+    text-align: center;
+    border: 1px solid var(--border-soft);
+    border-radius: 5px;
+    background: var(--bg-soft);
+    color: var(--text);
+    margin-left: 0.3rem;
+}
+.page-jump:focus { outline: none; border-color: var(--accent); }
+
 .page-info {
     color: var(--muted);
     font-size: 0.78rem;
@@ -2383,6 +2397,8 @@ a.master-appearance-title:hover {
   position: fixed;
   z-index: 9999;
   max-width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
   background: var(--bg, #0b0907);
   border: 1px solid var(--border-soft, #333);
   border-radius: 8px;
@@ -2790,6 +2806,9 @@ a.master-appearance-title:hover {
 /* ━━ Continue Reading ━━ */
 
 .continue-reading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     margin-bottom: 1.5rem;
     padding: 0.7rem 1rem;
     background: var(--accent-soft);
@@ -2798,12 +2817,24 @@ a.master-appearance-title:hover {
 }
 
 .continue-reading-link {
+    flex: 1;
     color: var(--accent);
     text-decoration: none;
     font-size: 0.95rem;
 }
 
 .continue-reading-link:hover { text-decoration: underline; }
+
+.continue-reading-dismiss {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.1rem 0.4rem;
+    line-height: 1;
+}
+.continue-reading-dismiss:hover { color: var(--text); }
 
 /* ━━ Start Here ━━ */
 
