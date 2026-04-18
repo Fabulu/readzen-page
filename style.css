@@ -1860,3 +1860,32 @@ code, .mono { font-family: var(--mono); }
     .master-chinese { font-size: 1.4rem; }
     .master-name { font-size: 1.8rem; }
 }
+
+/* ── Inline dictionary popup (click-to-lookup) ─────────────── */
+
+.dict-popup {
+  position: fixed;
+  z-index: 9999;
+  max-width: 320px;
+  background: var(--bg, #0b0907);
+  border: 1px solid var(--border-soft, #333);
+  border-radius: 8px;
+  padding: 0.5rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,.45);
+}
+.dict-popup .lookup-card {
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: none;
+}
+.dict-upsell {
+  margin: 0.4rem 0 0;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border-soft, #333);
+  font-size: 0.7rem;
+  color: var(--muted, #888);
+  text-align: center;
+}
+.dict-upsell a { color: var(--accent, #d4ab58); text-decoration: none; }
+.dict-upsell a:hover { text-decoration: underline; }

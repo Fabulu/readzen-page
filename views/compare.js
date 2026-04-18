@@ -145,6 +145,8 @@ export async function render(route, mount, shell) {
                 lines = sliceLines(sourceWork.linesById, sourceWork.lineOrder, '', '');
             }
             origBody.innerHTML = renderLinesHtml(lines);
+            // Attach click-to-lookup dictionary on the original Chinese column
+            import('../lib/inline-dict.js').then(m => m.attachInlineDict(origBody));
         }
 
         // Translation panes.

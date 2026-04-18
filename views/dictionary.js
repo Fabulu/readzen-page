@@ -123,7 +123,7 @@ async function renderDictCard(term, mount) {
  * The character is percent-encoded so CJK works regardless of the server's
  * URL handling.
  */
-async function loadShard(char) {
+export async function loadShard(char) {
     const cacheKey = 'dict-shard:' + char;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
@@ -135,7 +135,7 @@ async function loadShard(char) {
 }
 
 /** Return all entries in the shard whose `trad` or `simp` equals the term. */
-function findMatches(shard, term) {
+export function findMatches(shard, term) {
     if (!Array.isArray(shard)) return [];
     const out = [];
     for (const entry of shard) {
@@ -152,7 +152,7 @@ function findMatches(shard, term) {
  * entries are merged into a single card: one per pinyin reading, definitions
  * collected as a bulleted list.
  */
-function buildCard(term, matches) {
+export function buildCard(term, matches) {
     // Use the first entry as the canonical title source.
     const primary = matches[0];
     const allPinyin = matches

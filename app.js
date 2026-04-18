@@ -17,6 +17,7 @@ import * as tags from './views/tags.js';
 import * as scholar from './views/scholar.js';
 import * as search from './views/search.js';
 import * as compare from './views/compare.js';
+import { dismissInlineDict } from './lib/inline-dict.js';
 
 // Lookup views share a common contract: instant render, no app-first race.
 // They're dispatched before the placeholder path in `init` below.
@@ -159,7 +160,10 @@ function fireAppLaunchSilent(route) {
 
 // Re-run init on hash changes so users navigating between links inside the
 // same tab get a fresh view.
-window.addEventListener('hashchange', () => init());
+window.addEventListener('hashchange', () => {
+    dismissInlineDict(); // clean up any active dict popup before route change
+    init();
+});
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

@@ -18,6 +18,7 @@ import {
 import { buildZenUri } from '../lib/route.js';
 import * as cache from '../lib/cache.js';
 import { lookupTitle } from '../lib/titles.js';
+import { attachInlineDict } from '../lib/inline-dict.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -180,6 +181,7 @@ export async function render(route, mount, shell) {
 
         document.querySelector('#source-meta').textContent = sourceWork.titleZh || route.workId;
         document.querySelector('#source-body').innerHTML = renderLinesHtml(sourceLines);
+        attachInlineDict(document.querySelector('#source-body'));
 
         // Only attempt translation loading when the route actually asked for it.
         if (route.mode === 'en') {
@@ -313,6 +315,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
     `;
 
     window.requestAnimationFrame(syncRowHeights);
+    attachInlineDict(document.querySelector('#source-body'));
 }
 
 /**
@@ -337,11 +340,12 @@ function renderFirstNLines(sourceWork, n, route, mount) {
             <div class="outline-banner">
                 Showing first ${lines.length} lines. Open in Read Zen for the full text.
             </div>
-            <div class="panel-body panel-body--source">
+            <div class="panel-body panel-body--source" id="firstn-source-body">
                 ${renderLinesHtml(lines)}
             </div>
         </article>
     `;
+    attachInlineDict(document.querySelector('#firstn-source-body'));
 }
 
 /**
