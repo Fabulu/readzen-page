@@ -9,7 +9,7 @@
 // that shows "we understood your search", not a corpus scan.
 
 import { escapeHtml } from '../lib/format.js';
-import { DATA_REPO_BASE, OPEN_DATA_REPO_BASE } from '../lib/github.js';
+import { DATA_REPO_BASE, OPEN_DATA_REPO_BASE, loadTranslatedFileIds } from '../lib/github.js';
 import { inferCorpusForRelPath } from '../lib/corpus.js';
 import { loadAllTitlesAsArray } from '../lib/titles.js';
 
@@ -92,8 +92,14 @@ export async function render(route, mount, shell) {
     shell.setStatus('Loading titles\u2026', 'Downloading the title index.', false);
 
     let titles;
+    let translatedIds = new Set();
     try {
-        titles = await loadAllTitlesAsArray();
+        const [titlesResult, idsResult] = await Promise.all([
+            loadAllTitlesAsArray(),
+            loadTranslatedFileIds()
+        ]);
+        titles = titlesResult;
+        translatedIds = idsResult;
     } catch (error) {
         shell.showError(
             'Search index unavailable',
@@ -109,10 +115,10 @@ export async function render(route, mount, shell) {
         return 'all';
     }
 
-    function hasTranslation(t) {
-        const en = (t.en || t.En || '').toString().trim();
-        const enShort = (t.enShort || t.EnShort || '').toString().trim();
-        return en.length > 0 || enShort.length > 0;
+    function isTranslated(t) {
+        const path = (t.path || t.Path || '').toString();
+        const workId = (t.fileId || t.fileID || t.workId || t.WorkId || deriveWorkIdFromPath(path));
+        return translatedIds.has(workId);
     }
 
     function doSearch(query) {
@@ -139,8 +145,8 @@ export async function render(route, mount, shell) {
                 const firstLetter = path.charAt(0).toUpperCase();
                 if (firstLetter !== cf.toUpperCase()) continue;
             }
-            if (transFilter === 'translated' && !hasTranslation(t)) continue;
-            if (transFilter === 'untranslated' && hasTranslation(t)) continue;
+            if (transFilter === 'translated' && !isTranslated(t)) continue;
+            if (transFilter === 'untranslated' && isTranslated(t)) continue;
 
             const zh = (t.zh || t.Zh || '').toString();
             const en = (t.en || t.En || '').toString();
@@ -177,7 +183,8 @@ export async function render(route, mount, shell) {
             const href = workId ? '#/' + workId : '#';
 
             const enLine = en || enShort;
-            const badge = enLine ? '<span class="search-row-badge">EN</span>' : '';
+            const translated = translatedIds.has(workId);
+            const badge = translated ? '<span class="search-row-badge">EN</span>' : '';
 
             return '<a class="search-row" href="' + escapeHtml(href) + '">' +
                 '<span class="search-row-id">' + escapeHtml(workId || '\u2014') + '</span>' +
