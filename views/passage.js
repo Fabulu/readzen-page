@@ -168,6 +168,7 @@ export async function render(route, mount, shell) {
                 }
             }
             shell.hideStatus();
+            window.scrollTo(0, 0);
             return;
         }
 
@@ -197,6 +198,7 @@ export async function render(route, mount, shell) {
         }
 
         shell.hideStatus();
+        window.scrollTo(0, 0);
         window.requestAnimationFrame(syncRowHeights);
 
         // Bookmark button + scroll tracking
@@ -523,14 +525,15 @@ function mountBookmarkButton(mount, fileId, title) {
     const saved = isInList(DEFAULT_LIST, fileId);
     const btn = document.createElement('button');
     btn.className = 'bookmark-btn';
-    btn.textContent = saved ? '\u2605 Saved' : '\u2606 Save';
+    btn.title = 'Save to your reading list (shown on the home page)';
+    btn.textContent = saved ? '\u2605 Saved to reading list' : '\u2606 Save to reading list';
     btn.addEventListener('click', () => {
         if (isInList(DEFAULT_LIST, fileId)) {
             removeFromList(DEFAULT_LIST, fileId);
-            btn.textContent = '\u2606 Save';
+            btn.textContent = '\u2606 Save to reading list';
         } else {
             addToList(DEFAULT_LIST, fileId, title);
-            btn.textContent = '\u2605 Saved';
+            btn.textContent = '\u2605 Saved to reading list';
         }
     });
     mount.prepend(btn);
