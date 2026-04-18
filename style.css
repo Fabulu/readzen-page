@@ -1280,6 +1280,55 @@ code, .mono { font-family: var(--mono); }
     border-radius: 10px;
 }
 
+/* ━━ Pagination ━━ */
+
+.page-nav {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 1.2rem 0;
+    flex-wrap: wrap;
+}
+
+.page-btn {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.82rem;
+    font-family: var(--sans);
+    color: var(--text-soft);
+    background: var(--paper);
+    border: 1px solid var(--border-soft);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 120ms, border-color 120ms;
+}
+.page-btn:hover:not(:disabled) {
+    background: var(--paper-strong);
+    border-color: var(--border);
+}
+.page-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+.page-btn--active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.page-ellipsis {
+    color: var(--muted);
+    font-size: 0.82rem;
+    padding: 0 0.2rem;
+}
+
+.page-info {
+    color: var(--muted);
+    font-size: 0.78rem;
+    margin-left: 0.5rem;
+}
+
 /* ━━ Passage footer (upsell) ━━ */
 
 .passage-footer {

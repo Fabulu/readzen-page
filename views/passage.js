@@ -282,15 +282,16 @@ function renderSourceOutline(sourceWork, headings, route, mount) {
 
 /**
  * Side-by-side preview for a rangeless link to a translated work.
- * Shows all lines for small works (<200), otherwise paginates in chunks of 50.
- * Includes bilingual toggle and translator switcher controls.
+ * Small works (<200 lines) render in full; larger works paginate with
+ * prev/next + page number buttons.
  */
 function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
     const PAGE = 50;
     const allSourceLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
     const totalLines = allSourceLines.length;
+    const totalPages = Math.max(1, Math.ceil(totalLines / PAGE));
     const showAll = totalLines <= 200;
-    let shown = showAll ? totalLines : PAGE;
+    let currentPage = 1;
 
     const tranMap = translationWork.linesById;
     const pairTranslation = (lines) => lines.map((src) => {
@@ -304,7 +305,43 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
 
     const viewPref = readViewPref();
 
+    function pageSlice(page) {
+        if (showAll) return allSourceLines;
+        const start = (page - 1) * PAGE;
+        return allSourceLines.slice(start, start + PAGE);
+    }
+
+    function renderPage(page) {
+        const lines = pageSlice(page);
+        document.querySelector('#source-body').innerHTML = renderLinesHtml(lines);
+        document.querySelector('#translation-body').innerHTML = renderLinesHtml(pairTranslation(lines));
+        attachInlineDict(document.querySelector('#source-body'));
+        window.requestAnimationFrame(syncRowHeights);
+        updatePaginationUI();
+        window.scrollTo(0, 0);
+    }
+
+    function updatePaginationUI() {
+        const nav = document.querySelector('#page-nav');
+        if (!nav) return;
+        nav.innerHTML = buildPageButtons(currentPage, totalPages);
+        wirePageButtons(nav);
+    }
+
+    function wirePageButtons(nav) {
+        nav.querySelectorAll('[data-page]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = parseInt(btn.dataset.page, 10);
+                if (p >= 1 && p <= totalPages && p !== currentPage) {
+                    currentPage = p;
+                    renderPage(currentPage);
+                }
+            });
+        });
+    }
+
     const wrap = document.querySelector('#outline-wrap') || mount;
+    const initLines = pageSlice(1);
     wrap.innerHTML = `
         ${buildViewToggle(viewPref)}
         ${buildTranslatorSwitcher(route)}
@@ -316,7 +353,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
                 </div>
                 <div class="panel-title">Chinese source</div>
                 <div class="panel-body panel-body--source" id="source-body">
-                    ${renderLinesHtml(allSourceLines.slice(0, shown))}
+                    ${renderLinesHtml(initLines)}
                 </div>
             </article>
             <article class="panel" id="translation-panel" ${viewPref === 'zh' ? 'hidden' : ''}>
@@ -326,32 +363,17 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
                 </div>
                 <div class="panel-title">English rendering</div>
                 <div class="panel-body" id="translation-body">
-                    ${renderLinesHtml(pairTranslation(allSourceLines.slice(0, shown)))}
+                    ${renderLinesHtml(pairTranslation(initLines))}
                 </div>
             </article>
         </div>
-        ${shown < totalLines ? buildShowMoreBtn(shown, totalLines) : ''}
+        ${!showAll ? `<nav class="page-nav" id="page-nav">${buildPageButtons(1, totalPages)}</nav>` : ''}
         ${buildPassageFooter()}
     `;
 
     wireViewToggle(wrap);
     wireTranslatorSwitcher(wrap, route);
-
-    if (shown < totalLines) {
-        wrap.querySelector('#show-more-btn').addEventListener('click', () => {
-            shown = Math.min(shown + PAGE, totalLines);
-            document.querySelector('#source-body').innerHTML = renderLinesHtml(allSourceLines.slice(0, shown));
-            document.querySelector('#translation-body').innerHTML = renderLinesHtml(pairTranslation(allSourceLines.slice(0, shown)));
-            attachInlineDict(document.querySelector('#source-body'));
-            if (shown >= totalLines) {
-                const btn = wrap.querySelector('#show-more-wrap');
-                if (btn) btn.remove();
-            } else {
-                wrap.querySelector('#show-more-btn').textContent = `Show more (${shown} of ${totalLines} lines shown)`;
-            }
-            window.requestAnimationFrame(syncRowHeights);
-        });
-    }
+    if (!showAll) wirePageButtons(wrap.querySelector('#page-nav'));
 
     window.requestAnimationFrame(syncRowHeights);
     attachInlineDict(document.querySelector('#source-body'));
@@ -366,44 +388,68 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
     const PAGE = 50;
     const allLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
     const totalLines = allLines.length;
+    const totalPages = Math.max(1, Math.ceil(totalLines / PAGE));
     const showAll = totalLines <= 200;
-    let shown = showAll ? totalLines : PAGE;
+    let currentPage = 1;
 
     const titleZh = sourceWork.titleZh || route.workId;
     const titleEn = sourceWork.titleEn || '';
     const titleLine = titleEn
-        ? `${escapeHtml(titleZh)} <span class="outline-title-en">· ${escapeHtml(titleEn)}</span>`
+        ? `${escapeHtml(titleZh)} <span class="outline-title-en">\u00b7 ${escapeHtml(titleEn)}</span>`
         : escapeHtml(titleZh);
+
+    const subtitle = noTranslation
+        ? 'Chinese source \u2014 no English translation available yet'
+        : totalLines + ' line' + (totalLines === 1 ? '' : 's');
+
+    function pageSlice(page) {
+        if (showAll) return allLines;
+        const start = (page - 1) * PAGE;
+        return allLines.slice(start, start + PAGE);
+    }
+
+    function renderPage(page) {
+        document.querySelector('#firstn-source-body').innerHTML = renderLinesHtml(pageSlice(page));
+        attachInlineDict(document.querySelector('#firstn-source-body'));
+        updateNav();
+        window.scrollTo(0, 0);
+    }
+
+    function updateNav() {
+        const nav = document.querySelector('#page-nav');
+        if (!nav) return;
+        nav.innerHTML = buildPageButtons(currentPage, totalPages);
+        wireNav(nav);
+    }
+
+    function wireNav(nav) {
+        nav.querySelectorAll('[data-page]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = parseInt(btn.dataset.page, 10);
+                if (p >= 1 && p <= totalPages && p !== currentPage) {
+                    currentPage = p;
+                    renderPage(currentPage);
+                }
+            });
+        });
+    }
 
     const wrap = document.querySelector('#outline-wrap') || mount;
     wrap.innerHTML = `
         <article class="panel outline-panel">
             <header class="outline-head">
                 <h2 class="outline-title">${titleLine}</h2>
-                <p class="outline-sub">${noTranslation ? 'Chinese source \u2014 no English translation available yet' : 'Preview \u00b7 ' + (showAll ? totalLines : shown + ' of ' + totalLines) + ' line' + (totalLines === 1 ? '' : 's')}</p>
+                <p class="outline-sub">${subtitle}</p>
             </header>
             <div class="panel-body panel-body--source" id="firstn-source-body">
-                ${renderLinesHtml(allLines.slice(0, shown))}
+                ${renderLinesHtml(pageSlice(1))}
             </div>
         </article>
-        ${shown < totalLines ? buildShowMoreBtn(shown, totalLines) : ''}
+        ${!showAll ? `<nav class="page-nav" id="page-nav">${buildPageButtons(1, totalPages)}</nav>` : ''}
         ${buildPassageFooter()}
     `;
     attachInlineDict(document.querySelector('#firstn-source-body'));
-
-    if (shown < totalLines) {
-        wrap.querySelector('#show-more-btn').addEventListener('click', () => {
-            shown = Math.min(shown + PAGE, totalLines);
-            document.querySelector('#firstn-source-body').innerHTML = renderLinesHtml(allLines.slice(0, shown));
-            attachInlineDict(document.querySelector('#firstn-source-body'));
-            if (shown >= totalLines) {
-                const btn = wrap.querySelector('#show-more-wrap');
-                if (btn) btn.remove();
-            } else {
-                wrap.querySelector('#show-more-btn').textContent = `Show more (${shown} of ${totalLines} lines shown)`;
-            }
-        });
-    }
+    if (!showAll) wireNav(wrap.querySelector('#page-nav'));
 }
 
 /**
@@ -767,8 +813,27 @@ function wireTranslatorSwitcher(container, route) {
 
 function buildShowMoreBtn(shown, total) {
     return `<div class="show-more-wrap" id="show-more-wrap">
-        <button class="btn show-more-btn" id="show-more-btn">Show more (${shown} of ${total} lines shown)</button>
+        <button class="btn show-more-btn" id="show-more-btn">Show more (${shown} of ${total} shown)</button>
     </div>`;
+}
+
+function buildPageButtons(current, total) {
+    const btns = [];
+    btns.push(`<button class="page-btn" data-page="${current - 1}" ${current <= 1 ? 'disabled' : ''}>\u2190 Prev</button>`);
+
+    // Show first, last, current, and neighbors; ellipsis for gaps
+    const pages = new Set([1, total, current, current - 1, current + 1]);
+    const sorted = [...pages].filter(p => p >= 1 && p <= total).sort((a, b) => a - b);
+    let last = 0;
+    for (const p of sorted) {
+        if (p - last > 1) btns.push('<span class="page-ellipsis">\u2026</span>');
+        btns.push(`<button class="page-btn ${p === current ? 'page-btn--active' : ''}" data-page="${p}">${p}</button>`);
+        last = p;
+    }
+
+    btns.push(`<button class="page-btn" data-page="${current + 1}" ${current >= total ? 'disabled' : ''}>Next \u2192</button>`);
+    btns.push(`<span class="page-info">${current} of ${total}</span>`);
+    return btns.join('');
 }
 
 function buildPassageFooter() {
