@@ -19,8 +19,11 @@ import { buildZenUri } from '../lib/route.js';
 import * as cache from '../lib/cache.js';
 import { lookupTitle } from '../lib/titles.js';
 import { attachInlineDict } from '../lib/inline-dict.js';
+import { addToList, removeFromList, isInList, setLastRead } from '../lib/reading-lists.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const DEFAULT_LIST = 'My Reading List';
+const VIEW_PREF_KEY = 'zen-view-pref'; // 'zh' | 'en' | 'both'
 
 export function match(route) {
     return route && route.kind === 'passage';
@@ -58,6 +61,11 @@ export async function render(route, mount, shell) {
             document.title = `${titleText} · Read Zen Preview`;
         } catch {}
     });
+    // Toolbar: copy-with-citation + cite buttons
+    const toolbar = buildPassageToolbar(route, shell);
+    const actionsRow = document.querySelector('.shell-actions-buttons');
+    if (actionsRow && toolbar) actionsRow.prepend(toolbar);
+
     shell.setStatus(
         'Loading preview…',
         'Fetching XML from GitHub and extracting the requested lines.',
@@ -190,6 +198,11 @@ export async function render(route, mount, shell) {
 
         shell.hideStatus();
         window.requestAnimationFrame(syncRowHeights);
+
+        // Bookmark button + scroll tracking
+        const titleText = sourceWork.titleZh || sourceWork.titleEn || route.workId;
+        mountBookmarkButton(mount, route.workId, titleText);
+        trackScrollProgress(mount, route.workId, titleText);
     } catch (error) {
         const detail = (error && error.message) || 'Unknown error while loading preview data.';
         shell.showError('Preview failed to load', detail, buildZenUri(route));
@@ -260,20 +273,19 @@ function renderSourceOutline(sourceWork, headings, route, mount) {
 }
 
 /**
- * Side-by-side preview of the first N body lines for a rangeless link to a
- * translated work. Lines are paired by `lineId` so the columns line up — the
- * preview walks the source line order, picks the first N non-empty source
- * lines, and looks up the matching translation line by ID. (CBETA-derived
- * translation files preserve `<lb n="...">` IDs from the source, so the
- * pairing is exact when both sides have content for that line.)
+ * Side-by-side preview for a rangeless link to a translated work.
+ * Shows all lines for small works (<200), otherwise paginates in chunks of 50.
+ * Includes bilingual toggle and translator switcher controls.
  */
 function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
-    const N = 30;
-    const sourceLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, N);
+    const PAGE = 50;
+    const allSourceLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
+    const totalLines = allSourceLines.length;
+    const showAll = totalLines <= 200;
+    let shown = showAll ? totalLines : PAGE;
 
-    // Pair each source line with the matching translation line by ID.
     const tranMap = translationWork.linesById;
-    const tranLines = sourceLines.map((src) => {
+    const pairTranslation = (lines) => lines.map((src) => {
         if (!src) return { id: '', text: '' };
         const t = tranMap && tranMap.get ? tranMap.get(src.id) : null;
         return { id: src.id, text: (t && t.text) || '' };
@@ -282,48 +294,73 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
     const titleZh = sourceWork.titleZh || route.workId;
     const titleEn = translationWork.titleEn || sourceWork.titleEn || '';
 
+    const viewPref = readViewPref();
+
     const wrap = document.querySelector('#outline-wrap') || mount;
     wrap.innerHTML = `
-        <div class="outline-banner">
-            Preview · first ${sourceLines.length} lines of the body text. Open the full
-            work in <a class="text-link text-link--accent" href="https://github.com/Fabulu/ReadZen/releases">Read Zen</a>,
-            or share a targeted link with a line range like
-            <code>#/${escapeHtml(route.workId)}/0292c22-0293a15/en</code>.
-        </div>
-        <div class="preview-grid">
-            <article class="panel">
+        ${buildViewToggle(viewPref)}
+        ${buildTranslatorSwitcher(route)}
+        <div class="preview-grid" id="preview-grid">
+            <article class="panel" id="source-panel" ${viewPref === 'en' ? 'hidden' : ''}>
                 <div class="panel-head">
                     <p class="panel-label">Chinese Source</p>
                     <p class="panel-meta">${escapeHtml(titleZh)}</p>
                 </div>
                 <div class="panel-title">Chinese source</div>
                 <div class="panel-body panel-body--source" id="source-body">
-                    ${renderLinesHtml(sourceLines)}
+                    ${renderLinesHtml(allSourceLines.slice(0, shown))}
                 </div>
             </article>
-            <article class="panel">
+            <article class="panel" id="translation-panel" ${viewPref === 'zh' ? 'hidden' : ''}>
                 <div class="panel-head">
                     <p class="panel-label">Translation</p>
                     <p class="panel-meta">${escapeHtml(titleEn || 'Community translation')}</p>
                 </div>
-                <div class="panel-title">English rendering · preview</div>
+                <div class="panel-title">English rendering</div>
                 <div class="panel-body" id="translation-body">
-                    ${renderLinesHtml(tranLines)}
+                    ${renderLinesHtml(pairTranslation(allSourceLines.slice(0, shown)))}
                 </div>
             </article>
         </div>
+        ${shown < totalLines ? buildShowMoreBtn(shown, totalLines) : ''}
+        ${buildPassageFooter()}
     `;
+
+    wireViewToggle(wrap);
+    wireTranslatorSwitcher(wrap, route);
+
+    if (shown < totalLines) {
+        wrap.querySelector('#show-more-btn').addEventListener('click', () => {
+            shown = Math.min(shown + PAGE, totalLines);
+            document.querySelector('#source-body').innerHTML = renderLinesHtml(allSourceLines.slice(0, shown));
+            document.querySelector('#translation-body').innerHTML = renderLinesHtml(pairTranslation(allSourceLines.slice(0, shown)));
+            attachInlineDict(document.querySelector('#source-body'));
+            if (shown >= totalLines) {
+                const btn = wrap.querySelector('#show-more-wrap');
+                if (btn) btn.remove();
+            } else {
+                wrap.querySelector('#show-more-btn').textContent = `Show more (${shown} of ${totalLines} lines shown)`;
+            }
+            window.requestAnimationFrame(syncRowHeights);
+        });
+    }
 
     window.requestAnimationFrame(syncRowHeights);
     attachInlineDict(document.querySelector('#source-body'));
 }
 
 /**
- * Fall-back preview when a work has no usable headings: show the first N
- * non-empty lines with a banner pointing to the desktop app.
+ * Fall-back preview when a work has no usable headings. Shows all lines for
+ * small works (<200), otherwise paginates in chunks of 50 with a "Show more"
+ * button.
  */
-function renderFirstNLines(sourceWork, n, route, mount) {
-    const lines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, n);
+function renderFirstNLines(sourceWork, _unused, route, mount) {
+    const PAGE = 50;
+    const allLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
+    const totalLines = allLines.length;
+    const showAll = totalLines <= 200;
+    let shown = showAll ? totalLines : PAGE;
+
     const titleZh = sourceWork.titleZh || route.workId;
     const titleEn = sourceWork.titleEn || '';
     const titleLine = titleEn
@@ -335,17 +372,30 @@ function renderFirstNLines(sourceWork, n, route, mount) {
         <article class="panel outline-panel">
             <header class="outline-head">
                 <h2 class="outline-title">${titleLine}</h2>
-                <p class="outline-sub">Preview · first ${lines.length} line${lines.length === 1 ? '' : 's'}</p>
+                <p class="outline-sub">Preview · ${showAll ? totalLines : shown + ' of ' + totalLines} line${totalLines === 1 ? '' : 's'}</p>
             </header>
-            <div class="outline-banner">
-                Showing first ${lines.length} lines. Open in Read Zen for the full text.
-            </div>
             <div class="panel-body panel-body--source" id="firstn-source-body">
-                ${renderLinesHtml(lines)}
+                ${renderLinesHtml(allLines.slice(0, shown))}
             </div>
         </article>
+        ${shown < totalLines ? buildShowMoreBtn(shown, totalLines) : ''}
+        ${buildPassageFooter()}
     `;
     attachInlineDict(document.querySelector('#firstn-source-body'));
+
+    if (shown < totalLines) {
+        wrap.querySelector('#show-more-btn').addEventListener('click', () => {
+            shown = Math.min(shown + PAGE, totalLines);
+            document.querySelector('#firstn-source-body').innerHTML = renderLinesHtml(allLines.slice(0, shown));
+            attachInlineDict(document.querySelector('#firstn-source-body'));
+            if (shown >= totalLines) {
+                const btn = wrap.querySelector('#show-more-wrap');
+                if (btn) btn.remove();
+            } else {
+                wrap.querySelector('#show-more-btn').textContent = `Show more (${shown} of ${totalLines} lines shown)`;
+            }
+        });
+    }
 }
 
 /**
@@ -460,6 +510,96 @@ function corpusLabel(corpus) {
     return 'known';
 }
 
+/** Insert a small bookmark toggle above the passage content. */
+function mountBookmarkButton(mount, fileId, title) {
+    const saved = isInList(DEFAULT_LIST, fileId);
+    const btn = document.createElement('button');
+    btn.className = 'bookmark-btn';
+    btn.textContent = saved ? '\u2605 Saved' : '\u2606 Save';
+    btn.addEventListener('click', () => {
+        if (isInList(DEFAULT_LIST, fileId)) {
+            removeFromList(DEFAULT_LIST, fileId);
+            btn.textContent = '\u2606 Save';
+        } else {
+            addToList(DEFAULT_LIST, fileId, title);
+            btn.textContent = '\u2605 Saved';
+        }
+    });
+    mount.prepend(btn);
+}
+
+/** Track scroll position so the landing page can offer "Continue reading". */
+function trackScrollProgress(mount, fileId, title) {
+    let ticking = false;
+    window.addEventListener('scroll', () => {
+        if (ticking) return;
+        ticking = true;
+        window.requestAnimationFrame(() => {
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const pct = docHeight > 0 ? Math.round((scrollTop / docHeight) * 100) : 0;
+            setLastRead(fileId, title, pct);
+            ticking = false;
+        });
+    });
+}
+
+/** Build the passage toolbar fragment with Copy and Cite buttons. */
+function buildPassageToolbar(route) {
+    const frag = document.createDocumentFragment();
+
+    // --- Copy with Citation ---
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'btn btn--small';
+    copyBtn.textContent = 'Copy';
+    copyBtn.addEventListener('click', () => {
+        const sel = window.getSelection();
+        const text = sel && sel.toString().trim()
+            ? sel.toString().trim()
+            : (document.querySelector('#source-body') || document.querySelector('#view-mount')).innerText.trim();
+        const title = document.querySelector('#shell-title')?.textContent || route.workId;
+        const url = location.origin + location.pathname + '#/' + (route.rawRoute || route.workId);
+        const citation = text + '\n\n\u2014 ' + title + ', ' + route.workId + '. ' + url;
+        navigator.clipboard.writeText(citation).then(() => {
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+        });
+    });
+    frag.appendChild(copyBtn);
+
+    // --- Cite button ---
+    const citeBtn = document.createElement('button');
+    citeBtn.className = 'btn btn--small';
+    citeBtn.textContent = 'Cite';
+    citeBtn.addEventListener('click', () => {
+        // Remove existing popup
+        const old = document.querySelector('.cite-popup');
+        if (old) { old.remove(); return; }
+
+        const title = document.querySelector('#shell-title')?.textContent || route.workId;
+        const url = location.origin + location.pathname + '#/' + (route.rawRoute || route.workId);
+        const chicago = '"' + title + '." In ReadZen. ' + url + '.';
+
+        const popup = document.createElement('div');
+        popup.className = 'cite-popup';
+        popup.innerHTML =
+            '<p class="cite-popup-head">Citation</p>' +
+            '<div class="cite-row"><span class="cite-label">Chicago</span>' +
+            '<code class="cite-text">' + escapeHtml(chicago) + '</code>' +
+            '<button class="btn btn--small cite-copy">Copy</button></div>';
+        popup.querySelector('.cite-copy').addEventListener('click', (ev) => {
+            navigator.clipboard.writeText(chicago).then(() => {
+                ev.target.textContent = 'Copied!';
+                setTimeout(() => { ev.target.textContent = 'Copy'; }, 1500);
+            });
+        });
+        citeBtn.parentElement.appendChild(popup);
+    });
+    frag.appendChild(citeBtn);
+
+    return frag;
+}
+
 /** Sync min-heights of parallel lines so rows line up across the two panels. */
 function syncRowHeights() {
     const sourceRows = document.querySelectorAll('#source-body .line-row');
@@ -478,3 +618,110 @@ function syncRowHeights() {
     }
 }
 
+// ━━ Bilingual view toggle ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function readViewPref() {
+    try { return localStorage.getItem(VIEW_PREF_KEY) || 'both'; } catch { return 'both'; }
+}
+
+function saveViewPref(pref) {
+    try { localStorage.setItem(VIEW_PREF_KEY, pref); } catch {}
+}
+
+function buildViewToggle(active) {
+    const opts = [
+        { value: 'zh', label: 'Chinese' },
+        { value: 'both', label: 'Both' },
+        { value: 'en', label: 'English' }
+    ];
+    const btns = opts.map((o) =>
+        `<button class="view-seg${o.value === active ? ' view-seg--active' : ''}" data-view="${o.value}">${o.label}</button>`
+    ).join('');
+    return `<div class="view-toggle" id="view-toggle">${btns}</div>`;
+}
+
+function wireViewToggle(container) {
+    const toggle = container.querySelector('#view-toggle');
+    if (!toggle) return;
+    toggle.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-view]');
+        if (!btn) return;
+        const pref = btn.dataset.view;
+        saveViewPref(pref);
+
+        // Update active class
+        toggle.querySelectorAll('.view-seg').forEach((b) => b.classList.remove('view-seg--active'));
+        btn.classList.add('view-seg--active');
+
+        // Show/hide panels
+        const src = document.querySelector('#source-panel');
+        const trn = document.querySelector('#translation-panel');
+        const grid = document.querySelector('#preview-grid');
+        if (src) src.hidden = pref === 'en';
+        if (trn) trn.hidden = pref === 'zh';
+
+        // Adjust grid columns when showing single panel
+        if (grid) {
+            grid.style.gridTemplateColumns = pref === 'both'
+                ? 'minmax(0, 1fr) minmax(0, 1fr)'
+                : '1fr';
+        }
+        window.requestAnimationFrame(syncRowHeights);
+    });
+}
+
+// ━━ Translator switcher ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function buildTranslatorSwitcher(route) {
+    const current = route.translator || 'community';
+    return `
+        <div class="translator-switcher" id="translator-switcher">
+            <label class="translator-label">
+                Switch translator
+                <input class="translator-input" id="translator-input"
+                    type="text" placeholder="GitHub username"
+                    value="${current === 'community' ? '' : escapeHtml(current)}" />
+            </label>
+            <button class="btn btn--small" id="translator-go">Load</button>
+            <span class="translator-hint">Leave blank for the community translation</span>
+        </div>
+    `;
+}
+
+function wireTranslatorSwitcher(container, route) {
+    const goBtn = container.querySelector('#translator-go');
+    const input = container.querySelector('#translator-input');
+    if (!goBtn || !input) return;
+
+    const doSwitch = () => {
+        const user = input.value.trim();
+        // Rebuild hash with new translator (or without, for community)
+        const base = '#/' + route.workId;
+        const rangePart = route.startLine
+            ? '/' + route.startLine + (route.endLine && route.endLine !== route.startLine ? '-' + route.endLine : '')
+            : '';
+        const modePart = '/en';
+        const translatorPart = user ? '/' + encodeURIComponent(user) : '';
+        location.hash = base + rangePart + modePart + translatorPart;
+    };
+
+    goBtn.addEventListener('click', doSwitch);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSwitch(); });
+}
+
+// ━━ Show-more button + footer ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function buildShowMoreBtn(shown, total) {
+    return `<div class="show-more-wrap" id="show-more-wrap">
+        <button class="btn show-more-btn" id="show-more-btn">Show more (${shown} of ${total} lines shown)</button>
+    </div>`;
+}
+
+function buildPassageFooter() {
+    return `<div class="passage-footer">
+        Full reading experience in
+        <a class="text-link text-link--accent" href="https://github.com/Fabulu/ReadZen/releases">Read Zen</a>
+        &middot;
+        <a class="text-link" href="https://ko-fi.com/readzen">Support on Ko-fi</a>
+    </div>`;
+}

@@ -16,6 +16,20 @@ import { buildZenUri, describeRoute } from '../lib/route.js';
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 const AUTO_OPEN_PREF_KEY = 'readzen-auto-open';
+const THEME_PREF_KEY = 'readzen-theme';
+
+function getTheme() {
+    try { return localStorage.getItem(THEME_PREF_KEY) || 'dark'; }
+    catch { return 'dark'; }
+}
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : '');
+    try { localStorage.setItem(THEME_PREF_KEY, theme); } catch {}
+}
+
+// Apply saved theme immediately on module load.
+applyTheme(getTheme());
 
 /** Default-on. The footer toggle in this file flips it. */
 function isAutoOpenEnabled() {
@@ -91,6 +105,14 @@ export function mountShell(root, route) {
                     Auto-open links in the Read Zen app:
                     <a href="#" id="auto-open-toggle" class="shell-foot-toggle"></a>
                 </p>
+                <p class="shell-foot-pref font-size-ctrl">
+                    Text size:
+                    <button class="font-btn" id="font-decrease" aria-label="Decrease text size">A&minus;</button>
+                    <button class="font-btn" id="font-increase" aria-label="Increase text size">A+</button>
+                </p>
+                <p class="shell-foot-pref">
+                    <a href="#" id="theme-toggle" class="shell-foot-toggle" title="Toggle light/dark theme"></a>
+                </p>
             </footer>
         </div>
     `;
@@ -156,6 +178,31 @@ export function mountShell(root, route) {
             window.location.reload();
         });
     }
+
+    // Theme toggle: flips between dark (default) and light.
+    const themeBtn = root.querySelector('#theme-toggle');
+    if (themeBtn) {
+        const cur = getTheme();
+        themeBtn.textContent = cur === 'light' ? '\u2600\ufe0f dark' : '\u263c light';
+        themeBtn.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            const next = getTheme() === 'light' ? 'dark' : 'light';
+            applyTheme(next);
+            themeBtn.textContent = next === 'light' ? '\u2600\ufe0f dark' : '\u263c light';
+        });
+    }
+
+    // Font size buttons
+    const fontDecrease = root.querySelector('#font-decrease');
+    const fontIncrease = root.querySelector('#font-increase');
+    function adjustFontSize(delta) {
+        const cur = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--text-size') || '16', 10);
+        const next = Math.min(24, Math.max(12, cur + delta));
+        document.documentElement.style.setProperty('--text-size', next + 'px');
+        try { localStorage.setItem('readzen-font-size', String(next)); } catch {}
+    }
+    if (fontDecrease) fontDecrease.addEventListener('click', () => adjustFontSize(-2));
+    if (fontIncrease) fontIncrease.addEventListener('click', () => adjustFontSize(2));
 
     // Ko-fi overlay: opens the donation form in an iframe modal so the user
     // stays on readzen.pages.dev. No external SDK needed.

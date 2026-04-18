@@ -208,19 +208,12 @@ function renderMasterProfile(m, appearances) {
         if (appearances.primary && appearances.primary.length > 0) {
             html += `<p class="master-label" style="margin-top:0.8rem;">Primary texts (author/subject)</p>`;
             html += renderAppearanceList(appearances.primary);
-            const hiddenPrimary = appearances.primary_count - appearances.primary.length;
-            if (hiddenPrimary > 0) {
-                html += `<p class="master-appearance-more">+ ${hiddenPrimary} more primary text${hiddenPrimary === 1 ? '' : 's'} — <a href="https://github.com/Fabulu/ReadZen" target="_blank" rel="noopener">see all in the Read Zen app</a></p>`;
-            }
         }
         if (appearances.secondary && appearances.secondary.length > 0) {
             html += `<p class="master-label" style="margin-top:0.8rem;">Also mentioned in</p>`;
             html += renderAppearanceList(appearances.secondary);
-            const hiddenSecondary = appearances.secondary_count - appearances.secondary.length;
-            if (hiddenSecondary > 0) {
-                html += `<p class="master-appearance-more">+ ${hiddenSecondary} more text${hiddenSecondary === 1 ? '' : 's'} — <a href="https://github.com/Fabulu/ReadZen" target="_blank" rel="noopener">see all in the Read Zen app</a></p>`;
-            }
         }
+        html += `<p class="master-appearance-upsell">Full corpus search in <a href="https://github.com/Fabulu/ReadZen" target="_blank" rel="noopener">Read Zen desktop</a> · <a href="https://ko-fi.com/readzen" target="_blank" rel="noopener">Support on Ko-fi</a></p>`;
         html += `</section>`;
     }
 
@@ -228,14 +221,38 @@ function renderMasterProfile(m, appearances) {
     return html;
 }
 
-/** Render a list of text appearances. */
+/** Convert a corpus path like "T/T49/T49n2035.xml" or "ws/gateless-barrier/..." to a fileId. */
+function fileIdFromPath(path) {
+    if (!path) return null;
+    const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
+    if (parts.length === 0) return null;
+    // OpenZen: ws/gateless-barrier/... → ws.gateless-barrier
+    if (parts.length >= 2 && /^(ws|pd|ce|mit)$/i.test(parts[0])) return `${parts[0]}.${parts[1]}`;
+    // CBETA: T/T49/T49n2035.xml → T49n2035
+    const filename = parts[parts.length - 1];
+    const dot = filename.lastIndexOf('.');
+    return dot > 0 ? filename.substring(0, dot) : filename;
+}
+
+const INITIAL_SHOW = 10;
+const SHOW_MORE_STEP = 20;
+
+/** Render a list of text appearances with progressive disclosure. */
 function renderAppearanceList(items) {
-    let html = `<div class="master-appearances">`;
-    for (const item of items) {
+    const listId = 'app-list-' + (++renderAppearanceList._seq);
+    let html = `<div class="master-appearances" id="${listId}">`;
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
         const title = item.title_zh || item.title || item.path;
         const sub = item.title && item.title_zh ? item.title : '';
-        html += `<div class="master-appearance">`;
-        html += `<span class="master-appearance-title">${escapeHtml(title)}</span>`;
+        const fileId = fileIdFromPath(item.path);
+        const hidden = i >= INITIAL_SHOW ? ' style="display:none" data-app-hidden' : '';
+        html += `<div class="master-appearance"${hidden}>`;
+        if (fileId) {
+            html += `<a href="#/${encodeURIComponent(fileId)}" class="master-appearance-title">${escapeHtml(title)}</a>`;
+        } else {
+            html += `<span class="master-appearance-title">${escapeHtml(title)}</span>`;
+        }
         if (sub) html += ` <span class="master-appearance-sub">${escapeHtml(sub)}</span>`;
         html += ` <span class="master-appearance-count">${item.mentions}x</span>`;
         if (item.snippet) {
@@ -243,9 +260,23 @@ function renderAppearanceList(items) {
         }
         html += `</div>`;
     }
+    if (items.length > INITIAL_SHOW) {
+        const remaining = items.length - INITIAL_SHOW;
+        html += `<button class="master-appearance-showmore" data-list="${listId}" data-shown="${INITIAL_SHOW}" onclick="(function(btn){`
+            + `var list=document.getElementById(btn.dataset.list);`
+            + `var shown=parseInt(btn.dataset.shown,10);`
+            + `var next=shown+${SHOW_MORE_STEP};`
+            + `var items=list.querySelectorAll('[data-app-hidden]');`
+            + `for(var i=0;i<items.length&&shown<next;i++,shown++){items[i].style.display='';items[i].removeAttribute('data-app-hidden');}`
+            + `btn.dataset.shown=''+shown;`
+            + `var left=list.querySelectorAll('[data-app-hidden]').length;`
+            + `if(!left){btn.remove();}else{btn.textContent='Show more ('+left+' remaining)';}`
+            + `})(this)">Show more (${remaining} remaining)</button>`;
+    }
     html += `</div>`;
     return html;
 }
+renderAppearanceList._seq = 0;
 
 /** Build a clickable link to another master's profile using underscore URLs. */
 function buildMasterLink(name) {
