@@ -43,7 +43,7 @@ export function render(_route, mount, shell) {
     const lastRead = getLastRead();
     const continueHtml = lastRead
         ? `<div class="continue-reading">
-               <a class="continue-reading-link" href="#/${escapeHtml(lastRead.fileId)}">
+               <a class="continue-reading-link" href="#/${escapeHtml(lastRead.route || lastRead.fileId)}">
                    Continue reading: ${escapeHtml(lastRead.title)} (${lastRead.scrollPercent}%)
                </a>
            </div>`
@@ -57,7 +57,7 @@ export function render(_route, mount, shell) {
                <h3 class="reading-list-heading">My Reading List</h3>
                <div class="reading-list-items">
                    ${myList.map((i) =>
-                       `<a class="reading-list-item" href="#/${escapeHtml(i.fileId)}">${escapeHtml(i.title)}</a>`
+                       `<a class="reading-list-item" href="#/${escapeHtml(i.route || i.fileId)}">${escapeHtml(i.title)}</a>`
                    ).join('')}
                </div>
            </div>`

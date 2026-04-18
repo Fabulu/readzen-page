@@ -203,8 +203,8 @@ export async function render(route, mount, shell) {
 
         // Bookmark button + scroll tracking
         const titleText = sourceWork.titleZh || sourceWork.titleEn || route.workId;
-        mountBookmarkButton(mount, route.workId, titleText);
-        trackScrollProgress(mount, route.workId, titleText);
+        mountBookmarkButton(mount, route.workId, titleText, route);
+        trackScrollProgress(mount, route.workId, titleText, route);
     } catch (error) {
         const detail = (error && error.message) || 'Unknown error while loading preview data.';
         shell.showError('Preview failed to load', detail, buildZenUri(route));
@@ -527,7 +527,8 @@ function corpusLabel(corpus) {
 }
 
 /** Insert a small bookmark toggle above the passage content. */
-function mountBookmarkButton(mount, fileId, title) {
+function mountBookmarkButton(mount, fileId, title, route) {
+    const rawRoute = route && route.rawRoute ? route.rawRoute : fileId;
     const saved = isInList(DEFAULT_LIST, fileId);
     const btn = document.createElement('button');
     btn.className = 'bookmark-btn';
@@ -538,7 +539,7 @@ function mountBookmarkButton(mount, fileId, title) {
             removeFromList(DEFAULT_LIST, fileId);
             btn.textContent = '\u2606 Save to reading list';
         } else {
-            addToList(DEFAULT_LIST, fileId, title);
+            addToList(DEFAULT_LIST, fileId, title, rawRoute);
             btn.textContent = '\u2605 Saved to reading list';
         }
     });
@@ -546,7 +547,8 @@ function mountBookmarkButton(mount, fileId, title) {
 }
 
 /** Track scroll position so the landing page can offer "Continue reading". */
-function trackScrollProgress(mount, fileId, title) {
+function trackScrollProgress(mount, fileId, title, route) {
+    const rawRoute = route && route.rawRoute ? route.rawRoute : fileId;
     let ticking = false;
     window.addEventListener('scroll', () => {
         if (ticking) return;
@@ -555,7 +557,7 @@ function trackScrollProgress(mount, fileId, title) {
             const scrollTop = window.scrollY || document.documentElement.scrollTop;
             const docHeight = document.documentElement.scrollHeight - window.innerHeight;
             const pct = docHeight > 0 ? Math.round((scrollTop / docHeight) * 100) : 0;
-            setLastRead(fileId, title, pct);
+            setLastRead(fileId, title, pct, rawRoute);
             ticking = false;
         });
     });
