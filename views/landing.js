@@ -313,7 +313,12 @@ export function render(_route, mount, shell) {
                 const titles = await loadAllTitlesAsArray();
                 if (titles.length === 0) return;
                 const entry = titles[Math.floor(Math.random() * titles.length)];
-                const fileId = entry.fileId || entry.path;
+                let fileId = entry.fileId || '';
+                if (!fileId && entry.path) {
+                    // Derive fileId from path like "T/T48/T48n2005.xml" -> "T48n2005"
+                    const fname = entry.path.split('/').pop() || '';
+                    fileId = fname.replace(/\.xml$/i, '');
+                }
                 if (fileId) window.location.hash = '#/' + fileId;
             } catch { /* silent */ }
             randomTextBtn.disabled = false;
