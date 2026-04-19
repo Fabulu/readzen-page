@@ -102,7 +102,7 @@ export function mountShell(root, route) {
             </aside>
 
             <footer class="shell-foot">
-                <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA + OpenZenTexts · <a href="https://ko-fi.com/readzen" target="_blank" rel="noreferrer">Support this project</a></p>
+                <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA + OpenZenTexts · <a href="https://ko-fi.com/readzen" target="_blank" rel="noreferrer">Support this project</a> · <a href="#" id="contact-link" class="shell-foot-contact">Contact</a></p>
                 <p class="shell-foot-pref">
                     Auto-open in desktop app:
                     <a href="#" id="auto-open-toggle" class="shell-foot-toggle"></a>
@@ -224,6 +224,17 @@ export function mountShell(root, route) {
     }
     if (fontDecrease) fontDecrease.addEventListener('click', () => adjustFontSize(-2));
     if (fontIncrease) fontIncrease.addEventListener('click', () => adjustFontSize(2));
+
+    // Contact link — assembled in JS to defeat email scrapers
+    const contactLink = root.querySelector('#contact-link');
+    if (contactLink) {
+        contactLink.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            var u = 'fabian.trunz';
+            var d = 'gmail.com';
+            window.location.href = 'mai' + 'lto:' + u + '@' + d;
+        });
+    }
 
     // Ko-fi overlay: opens the donation form in an iframe modal so the user
     // stays on readzen.pages.dev. No external SDK needed.
