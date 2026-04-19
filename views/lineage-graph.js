@@ -673,19 +673,26 @@ function layoutNodes(nodes, edges) {
 }
 
 function isLineageOf(nodeKey, focusKey, edges) {
-    // Full BFS closure: walk ancestors and descendants from focusKey
+    // Walk ancestors (teacher chain: edges pointing TO focusKey and above)
     const visited = new Set([focusKey]);
-    const queue = [focusKey];
-    while (queue.length > 0) {
-        const cur = queue.shift();
+    const aq = [focusKey];
+    while (aq.length > 0) {
+        const cur = aq.shift();
+        for (const e of edges) {
+            if (e.to.key === cur && !visited.has(e.from.key)) {
+                visited.add(e.from.key);
+                aq.push(e.from.key);
+            }
+        }
+    }
+    // Walk descendants (student chain: edges pointing FROM focusKey and below)
+    const dq = [focusKey];
+    while (dq.length > 0) {
+        const cur = dq.shift();
         for (const e of edges) {
             if (e.from.key === cur && !visited.has(e.to.key)) {
                 visited.add(e.to.key);
-                queue.push(e.to.key);
-            }
-            if (e.to.key === cur && !visited.has(e.from.key)) {
-                visited.add(e.from.key);
-                queue.push(e.from.key);
+                dq.push(e.to.key);
             }
         }
     }
