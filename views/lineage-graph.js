@@ -20,6 +20,7 @@ const SCHOOL_COLORS = {
     'Niutou':     { fill: '#2a6a2a', stroke: '#40a040', text: '#c0e8c0' },
     'Early Chan': { fill: '#6a5a3a', stroke: '#9a8860', text: '#e0d8c0' },
     'Chan':       { fill: '#4a4540', stroke: '#6a6560', text: '#d8d4cc' },
+    'Korean Seon': { fill: '#1a7a6a', stroke: '#30a898', text: '#b8e8dc' },
 };
 const DEFAULT_COLOR = { fill: '#3a3530', stroke: '#5a5550', text: '#ddd8d0' };
 
@@ -102,6 +103,14 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
         const c = SCHOOL_COLORS[s] || DEFAULT_COLOR;
         return `<span class="lineage-legend-item"><span class="lineage-legend-swatch" style="background:${c.fill};border-color:${c.stroke}"></span>${escapeHtml(s)}</span>`;
     }).join('');
+
+    // Attestation tier legend
+    legendEl.innerHTML += '<div class="lineage-legend-section"><span class="lineage-legend-heading">Attestation</span>' +
+        '<span class="lineage-legend-item"><span class="lineage-legend-line" style="border-top:2px solid #888"></span>Chinese source</span>' +
+        '<span class="lineage-legend-item"><span class="lineage-legend-line" style="border-top:2px dashed #888"></span>Korean stele</span>' +
+        '<span class="lineage-legend-item"><span class="lineage-legend-line" style="border-top:2px dotted #888"></span>Textual only</span>' +
+        '<span class="lineage-legend-item"><span class="lineage-legend-line" style="border-top:1px dotted #555"></span>Retroactive</span>' +
+        '</div>';
 
     // State
     let state = {
@@ -206,12 +215,21 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
                 alpha = relevant ? 0.6 : 0.06;
             }
 
+            // Attestation-based edge style
+            const att = e.to.attestation || '';
+            if (att === 'D') { ctx.setLineDash([2, 4]); ctx.globalAlpha = alpha * 0.5; }
+            else if (att === 'C') { ctx.setLineDash([3, 3]); }
+            else if (att === 'B') { ctx.setLineDash([6, 3]); }
+            else { ctx.setLineDash([]); }
+
             ctx.beginPath();
             ctx.moveTo(from.x + NODE_W / 2, from.y);
             ctx.lineTo(to.x - NODE_W / 2, to.y);
             ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
             ctx.lineWidth = 1.2;
             ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 1.0; // reset
         }
 
         // Nodes
@@ -248,11 +266,16 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
             ctx.arcTo(rx, ry, rx + r, ry, r);
             ctx.closePath();
 
+            // Dashed border for Korean Seon nodes
+            const isKoreanSeon = n.school === 'Korean Seon';
+            if (isKoreanSeon) ctx.setLineDash([4, 3]);
+
             ctx.fillStyle = col.fill;
             ctx.fill();
             ctx.strokeStyle = (n.key === state.hovered || n.key === state.focused || isSearchHit) ? '#d4ab58' : col.stroke;
             ctx.lineWidth = (n.key === state.focused || isSearchHit) ? 2.0 : 1.0;
             ctx.stroke();
+            if (isKoreanSeon) ctx.setLineDash([]);
 
             // Name text
             ctx.fillStyle = col.text;
@@ -541,6 +564,7 @@ function buildNodes(masters) {
             primary,
             names,
             school: m.school || '',
+            attestation: m.attestation || '',
             teacher: m.teacher || '',
             students: m.students || [],
             death,
