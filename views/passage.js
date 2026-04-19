@@ -153,20 +153,14 @@ export async function render(route, mount, shell) {
             }
 
             if (translationWork) {
-                // Translated works: side-by-side first N body lines.
+                // Translated works: side-by-side paginated view.
                 renderRangelessBilingual(sourceWork, translationWork, route, mount);
             } else {
-                // Untranslated works: show the source TOC as-is. The headings
-                // are in Chinese (CBETA forbids altering them) but they're
-                // still useful navigation entry points — each row links to a
-                // ranged passage URL. Falls back to first-N-lines if the work
-                // has no usable headings.
-                const headings = (sourceWork.headings || []).filter((h) => h.lineId);
-                if (headings.length >= 3) {
-                    renderSourceOutline(sourceWork, headings, route, mount);
-                } else {
-                    renderFirstNLines(sourceWork, 30, route, mount, true);
-                }
+                // Untranslated works: show the full text paginated.
+                // No TOC-only view — clicking individual headings one by one
+                // is a terrible reading experience for koan collections and
+                // recorded sayings with hundreds of sections.
+                renderFirstNLines(sourceWork, 30, route, mount, true);
             }
             shell.hideStatus();
             window.scrollTo(0, 0);
