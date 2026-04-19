@@ -14,6 +14,7 @@ const SCHOOL_COLORS = {
     'Hongzhou':   { bg: 'rgba(200, 120, 50, 0.22)', border: 'rgba(200, 120, 50, 0.55)', text: '#f0d0a0' },
     'Niutou':     { bg: 'rgba(80, 160, 80, 0.22)', border: 'rgba(80, 160, 80, 0.55)', text: '#c0e8c0' },
     'Early Chan': { bg: 'rgba(154, 136, 96, 0.22)', border: 'rgba(154, 136, 96, 0.55)', text: '#e0d8c0' },
+    'Chan':       { bg: 'rgba(106, 101, 96, 0.22)', border: 'rgba(106, 101, 96, 0.55)', text: '#d8d4cc' },
 };
 
 function schoolStyle(school) {

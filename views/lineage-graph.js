@@ -19,6 +19,7 @@ const SCHOOL_COLORS = {
     'Hongzhou':   { fill: '#8c5020', stroke: '#c07830', text: '#f0d0a0' },
     'Niutou':     { fill: '#2a6a2a', stroke: '#40a040', text: '#c0e8c0' },
     'Early Chan': { fill: '#6a5a3a', stroke: '#9a8860', text: '#e0d8c0' },
+    'Chan':       { fill: '#4a4540', stroke: '#6a6560', text: '#d8d4cc' },
 };
 const DEFAULT_COLOR = { fill: '#3a3530', stroke: '#5a5550', text: '#ddd8d0' };
 
