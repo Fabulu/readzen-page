@@ -63,10 +63,14 @@ export async function render(route, mount, shell) {
         return;
     }
 
-    // Load corpus appearances (non-blocking — render profile first, add appearances after)
+    // Load corpus appearances — use the master's canonical name (first in names array)
+    // rather than the route name, since the corpus index is keyed by canonical name.
     let corpus = null;
     try { corpus = await loadCorpus(); } catch { /* optional */ }
-    const appearances = corpus ? (corpus.masters || {})[name] || null : null;
+    const canonicalName = (master.names && master.names[0]) || name;
+    const appearances = corpus
+        ? (corpus.masters || {})[canonicalName] || (corpus.masters || {})[name] || null
+        : null;
 
     mount.innerHTML = renderMasterProfile(master, appearances);
 }
