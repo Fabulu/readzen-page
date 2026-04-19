@@ -2810,9 +2810,9 @@ a.master-appearance-title:hover {
     white-space: nowrap;
 }
 
-.lineage-legend-section { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
-.lineage-legend-heading { font-size: 0.7rem; color: var(--muted); width: 100%; }
-.lineage-legend-line { display: inline-block; width: 20px; height: 0; margin-right: 4px; vertical-align: middle; }
+.lineage-legend-att { display: flex; gap: 0.3rem; margin-top: 0.3rem; flex-wrap: wrap; }
+.ll-att { font-size: 0.6rem; color: var(--muted); display: flex; align-items: center; gap: 2px; }
+.ll-line { display: inline-block; width: 14px; height: 0; vertical-align: middle; }
 
 .lineage-legend-swatch {
     display: inline-block;

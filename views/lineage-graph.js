@@ -104,12 +104,12 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
         return `<span class="lineage-legend-item"><span class="lineage-legend-swatch" style="background:${c.fill};border-color:${c.stroke}"></span>${escapeHtml(s)}</span>`;
     }).join('');
 
-    // Attestation tier legend
-    legendEl.innerHTML += '<div class="lineage-legend-section"><span class="lineage-legend-heading">Attestation</span>' +
-        '<span class="lineage-legend-item"><span class="lineage-legend-line" style="border-top:2px solid #888"></span>Chinese source</span>' +
-        '<span class="lineage-legend-item"><span class="lineage-legend-line" style="border-top:2px dashed #888"></span>Korean stele</span>' +
-        '<span class="lineage-legend-item"><span class="lineage-legend-line" style="border-top:2px dotted #888"></span>Textual only</span>' +
-        '<span class="lineage-legend-item"><span class="lineage-legend-line" style="border-top:1px dotted #555"></span>Retroactive</span>' +
+    // Attestation tier legend (compact)
+    legendEl.innerHTML += '<div class="lineage-legend-att">' +
+        '<span class="ll-att"><span class="ll-line" style="border-top:2px solid #888"></span>verified</span>' +
+        '<span class="ll-att"><span class="ll-line" style="border-top:2px dashed #888"></span>stele</span>' +
+        '<span class="ll-att"><span class="ll-line" style="border-top:2px dotted #888"></span>textual</span>' +
+        '<span class="ll-att"><span class="ll-line" style="border-top:1px dotted #555"></span>retro.</span>' +
         '</div>';
 
     // State
