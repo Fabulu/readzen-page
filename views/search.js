@@ -202,15 +202,24 @@ export async function render(route, mount, shell) {
             var href = workId ? '#/' + workId : '#';
             var enLine = en || enShort;
             var translated = translatedIds.has(workId);
-            var badge = translated ? '<span class="search-row-badge">EN</span>' : '';
+            var isOpenZen = t.corpus === 'openzen';
+            var badges = '';
+            if (translated) badges += '<span class="search-row-badge">EN</span>';
+            if (isOpenZen) badges += '<span class="search-row-badge search-row-badge--oz">OZ</span>';
+
+            // Clean display ID: "ws.gateless-barrier" → "Gateless Barrier" if we have a title
+            var displayId = workId || '\u2014';
+            if (isOpenZen && (enLine || zh)) {
+                displayId = ''; // hide cryptic ID when we have a title
+            }
 
             return '<a class="search-row" href="' + escapeHtml(href) + '">' +
-                '<span class="search-row-id">' + escapeHtml(workId || '\u2014') + '</span>' +
+                (displayId ? '<span class="search-row-id">' + escapeHtml(displayId) + '</span>' : '<span class="search-row-id search-row-id--oz">OpenZen</span>') +
                 '<span class="search-row-text">' +
                     '<span class="search-row-zh">' + escapeHtml(zh || '[no title]') + '</span>' +
                     (enLine ? '<span class="search-row-en">' + escapeHtml(enLine) + '</span>' : '') +
                 '</span>' +
-                badge +
+                badges +
                 '<span class="search-row-path">' + escapeHtml(path) + '</span>' +
             '</a>';
         }).join('');

@@ -577,6 +577,16 @@ code, .mono { font-family: var(--mono); }
     flex-shrink: 0;
 }
 
+.search-row-badge--oz {
+    color: #80c0a0;
+    background: rgba(80, 160, 120, 0.12);
+}
+
+.search-row-id--oz {
+    color: #80c0a0;
+    font-size: 0.78rem;
+}
+
 .landing .hero-actions {
     display: flex;
     justify-content: center;
