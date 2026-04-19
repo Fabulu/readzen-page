@@ -642,7 +642,7 @@ function layoutNodes(nodes, edges) {
         n.x = n.layer * LAYER_GAP_X + 60;
         n.y = (n.temporalY - minYear) * PX_PER_YEAR;
         // Push Korean Seon nodes rightward for physical separation
-        if (n.school === 'Korean Seon') n.x += LAYER_GAP_X * 2;
+        if (n.school === 'Korean Seon' || n.school === 'Early Korean Buddhism') n.x += LAYER_GAP_X * 5;
     }
 
     // Collision resolution within layers
