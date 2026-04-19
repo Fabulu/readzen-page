@@ -124,7 +124,7 @@ export function render(_route, mount, shell) {
                 <div class="corpus-card corpus-card--openzen">
                     <h3 class="corpus-card-title">OpenZen</h3>
                     <p class="corpus-card-desc">Freely-licensed critical editions and community translations. A growing collection you can build on.</p>
-                    <p class="corpus-card-license">CC0 / CC BY 4.0 &middot; <a href="https://github.com/OpenZenTexts" target="_blank" rel="noopener">OpenZenTexts</a></p>
+                    <p class="corpus-card-license">CC0 / CC BY 4.0 &middot; <a href="https://github.com/Fabulu/OpenZenTexts" target="_blank" rel="noopener">OpenZenTexts</a></p>
                 </div>
             </div>
 
