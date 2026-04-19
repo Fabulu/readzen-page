@@ -673,30 +673,12 @@ function layoutNodes(nodes, edges) {
 }
 
 function isLineageOf(nodeKey, focusKey, edges) {
-    // Walk ancestors (teacher chain: edges pointing TO focusKey and above)
-    const visited = new Set([focusKey]);
-    const aq = [focusKey];
-    while (aq.length > 0) {
-        const cur = aq.shift();
-        for (const e of edges) {
-            if (e.to.key === cur && !visited.has(e.from.key)) {
-                visited.add(e.from.key);
-                aq.push(e.from.key);
-            }
-        }
+    // Direct connections only: immediate teacher + immediate students
+    for (const e of edges) {
+        if (e.from.key === focusKey && e.to.key === nodeKey) return true;
+        if (e.to.key === focusKey && e.from.key === nodeKey) return true;
     }
-    // Walk descendants (student chain: edges pointing FROM focusKey and below)
-    const dq = [focusKey];
-    while (dq.length > 0) {
-        const cur = dq.shift();
-        for (const e of edges) {
-            if (e.from.key === cur && !visited.has(e.to.key)) {
-                visited.add(e.to.key);
-                dq.push(e.to.key);
-            }
-        }
-    }
-    return visited.has(nodeKey);
+    return false;
 }
 
 function graphBounds(nodes) {
