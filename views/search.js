@@ -99,7 +99,16 @@ export async function render(route, mount, shell) {
         const [titlesResult, idsResult, zenResult] = await Promise.all([
             loadAllTitlesAsArray(),
             loadTranslatedFileIds(),
-            fetch('zen-texts.json').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; })
+            fetch(DATA_REPO_BASE + 'zen_texts.json').then(function(r) {
+                if (!r.ok) return [];
+                return r.json().then(function(data) {
+                    // Extract fileIds from paths like "T/T48/T48n2005.xml" -> "T48n2005"
+                    return (data.Zen || data.zen || []).map(function(p) {
+                        var fname = p.split('/').pop() || '';
+                        return fname.replace(/\.xml$/i, '');
+                    });
+                });
+            }).catch(function() { return []; })
         ]);
         titles = titlesResult;
         translatedIds = idsResult;
