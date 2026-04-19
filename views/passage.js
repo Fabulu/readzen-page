@@ -13,7 +13,8 @@ import {
     sourceXmlUrl,
     authoritativeTranslationUrl,
     communityTranslationUrl,
-    fetchText
+    fetchText,
+    fetchStarCounts
 } from '../lib/github.js';
 import { buildZenUri } from '../lib/route.js';
 import * as cache from '../lib/cache.js';
@@ -834,17 +835,49 @@ function wireTranslatorSwitcher(container, route) {
                    route.workId?.startsWith('ce.') || route.workId?.startsWith('mit.')
         ? 'open' : 'cbeta';
 
-    discoverTranslators(corpus).then(users => {
+    Promise.all([
+        discoverTranslators(corpus),
+        fetchStarCounts(corpus)
+    ]).then(([users, starCounts]) => {
+        // Determine star count per translator for this work
+        const translatorStars = new Map();
+        for (const u of users) {
+            const key = route.workId + ':' + u;
+            const count = starCounts.get(key) || 0;
+            translatorStars.set(u, count);
+        }
+
+        // Find most-starred translator for auto-selection
+        let mostStarred = '';
+        let mostStarredCount = 0;
+        for (const [u, count] of translatorStars) {
+            if (count > mostStarredCount) {
+                mostStarred = u;
+                mostStarredCount = count;
+            }
+        }
+
         users.forEach(u => {
             const opt = document.createElement('option');
             opt.value = u;
-            opt.textContent = u;
+            const stars = translatorStars.get(u) || 0;
+            opt.textContent = stars > 0 ? `${u} (${stars}\u2605)` : u;
             if (u === route.translator) opt.selected = true;
             select.appendChild(opt);
         });
-        if (!route.translator) select.value = '';
+
+        // Auto-select most-starred translator when none specified in URL
+        if (!route.translator && mostStarred) {
+            select.value = mostStarred;
+            select.dispatchEvent(new Event('change'));
+        } else if (!route.translator) {
+            select.value = '';
+        }
+
+        const hasStars = mostStarredCount > 0;
         if (hint) hint.textContent = users.length
-            ? `${users.length} translator${users.length === 1 ? '' : 's'} available`
+            ? `${users.length} translator${users.length === 1 ? '' : 's'} available` +
+              (hasStars ? ` \u00b7 \u2605 = community stars` : '')
             : 'No community translators yet';
     });
 
