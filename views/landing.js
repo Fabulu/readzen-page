@@ -13,13 +13,13 @@ const SOURCE_URL = 'https://github.com/Fabulu/ReadZen';
 
 const START_HERE = [
     { id: 'T48n2005', zh: '\u7121\u9580\u95DC', en: 'Gateless Barrier (Wumenguan)' },
-    { id: 'T48n2010', zh: '\u78A7\u5DCC\u9304', en: 'Blue Cliff Record (Biyan Lu)' },
+    { id: 'T48n2003', zh: '\u78A7\u5DCC\u9304', en: 'Blue Cliff Record (Biyan Lu)' },
     { id: 'T48n2004', zh: '\u5F9E\u5BB9\u9304', en: 'Book of Equanimity (Congrong Lu)' },
-    { id: 'T48n2003', zh: '\u50B3\u71C8\u9304', en: 'Transmission of the Lamp (Chuandeng Lu)' },
-    { id: 'T48n2012A', zh: '\u4EBA\u5929\u773C\u76EE', en: 'Eye of Humans and Gods' },
-    { id: 'T47n1987A', zh: '\u5927\u6167\u666E\u899A\u79AA\u5E2B\u8A9E\u9304', en: 'Record of Dahui Pujue' },
-    { id: 'T47n1987B', zh: '\u5927\u6167\u666E\u899A\u79AA\u5E2B\u5B97\u9580\u6B66\u5EAB', en: 'Arsenal of Dahui' },
-    { id: 'J24nB137', zh: '\u7121\u9580\u95DC', en: 'Wumenguan (Jiaxing ed.)' }
+    { id: 'T51n2076', zh: '\u666F\u5FB7\u50B3\u71C8\u9304', en: 'Transmission of the Lamp (Chuandeng Lu)' },
+    { id: 'T48n2006', zh: '\u4EBA\u5929\u773C\u76EE', en: 'Eye of Humans and Gods' },
+    { id: 'T47n1998A', zh: '\u5927\u6167\u666E\u899A\u79AA\u5E2B\u8A9E\u9304', en: 'Record of Dahui Pujue' },
+    { id: 'J24nB137', zh: '\u8D99\u5DDE\u548C\u5C1A\u8A9E\u9304', en: 'Recorded Sayings of Zhaozhou' },
+    { id: 'T47n1998B', zh: '\u5927\u6167\u666E\u899A\u79AA\u5E2B\u5B97\u9580\u6B66\u5EAB', en: 'Arsenal of Dahui' }
 ];
 
 /** Returns `true` when there is no route (or an empty one). */
