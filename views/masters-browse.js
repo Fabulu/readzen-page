@@ -16,6 +16,7 @@ const SCHOOL_COLORS = {
     'Early Chan': { bg: 'rgba(154, 136, 96, 0.22)', border: 'rgba(154, 136, 96, 0.55)', text: '#e0d8c0' },
     'Chan':       { bg: 'rgba(106, 101, 96, 0.22)', border: 'rgba(106, 101, 96, 0.55)', text: '#d8d4cc' },
     'Korean Seon': { bg: 'rgba(26, 122, 106, 0.22)', border: 'rgba(26, 122, 106, 0.55)', text: '#b8e8dc' },
+    'Early Korean Buddhism': { bg: 'rgba(58, 104, 88, 0.22)', border: 'rgba(58, 104, 88, 0.55)', text: '#c0d8c8' },
 };
 
 function schoolStyle(school) {

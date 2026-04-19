@@ -21,6 +21,7 @@ const SCHOOL_COLORS = {
     'Early Chan': { fill: '#6a5a3a', stroke: '#9a8860', text: '#e0d8c0' },
     'Chan':       { fill: '#4a4540', stroke: '#6a6560', text: '#d8d4cc' },
     'Korean Seon': { fill: '#1a7a6a', stroke: '#30a898', text: '#b8e8dc' },
+    'Early Korean Buddhism': { fill: '#3a6858', stroke: '#508878', text: '#c0d8c8' },
 };
 const DEFAULT_COLOR = { fill: '#3a3530', stroke: '#5a5550', text: '#ddd8d0' };
 
@@ -640,6 +641,8 @@ function layoutNodes(nodes, edges) {
     for (const n of treeNodes) {
         n.x = n.layer * LAYER_GAP_X + 60;
         n.y = (n.temporalY - minYear) * PX_PER_YEAR;
+        // Push Korean Seon nodes rightward for physical separation
+        if (n.school === 'Korean Seon') n.x += LAYER_GAP_X * 2;
     }
 
     // Collision resolution within layers
@@ -670,14 +673,23 @@ function layoutNodes(nodes, edges) {
 }
 
 function isLineageOf(nodeKey, focusKey, edges) {
-    // Check if nodeKey is directly connected to focusKey via any edge
-    for (const e of edges) {
-        if ((e.from.key === focusKey && e.to.key === nodeKey) ||
-            (e.to.key === focusKey && e.from.key === nodeKey)) {
-            return true;
+    // Full BFS closure: walk ancestors and descendants from focusKey
+    const visited = new Set([focusKey]);
+    const queue = [focusKey];
+    while (queue.length > 0) {
+        const cur = queue.shift();
+        for (const e of edges) {
+            if (e.from.key === cur && !visited.has(e.to.key)) {
+                visited.add(e.to.key);
+                queue.push(e.to.key);
+            }
+            if (e.to.key === cur && !visited.has(e.from.key)) {
+                visited.add(e.from.key);
+                queue.push(e.from.key);
+            }
         }
     }
-    return false;
+    return visited.has(nodeKey);
 }
 
 function graphBounds(nodes) {
