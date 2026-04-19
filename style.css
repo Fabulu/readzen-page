@@ -2153,7 +2153,7 @@ code, .mono { font-family: var(--mono); }
 
 .search-row {
     display: grid;
-    grid-template-columns: 7rem minmax(0, 1fr) auto;
+    grid-template-columns: 9rem minmax(0, 1fr) auto;
     gap: 1rem;
     align-items: start;
     padding: 0.9rem 1.1rem;
