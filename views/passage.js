@@ -20,7 +20,7 @@ import { buildZenUri } from '../lib/route.js';
 import * as cache from '../lib/cache.js';
 import { lookupTitle } from '../lib/titles.js';
 import { attachInlineDict } from '../lib/inline-dict.js';
-import { addToList, removeFromList, isInList, setLastRead } from '../lib/reading-lists.js';
+import { addToList, removeFromList, isInList, setLastRead, resumeLastReadTracking } from '../lib/reading-lists.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const DEFAULT_LIST = 'My Reading List';
@@ -39,6 +39,7 @@ export function preferAppFirst(_route) {
  * Render the passage preview into `mount`, using `shell` for chrome updates.
  */
 export async function render(route, mount, shell) {
+    resumeLastReadTracking(); // user intentionally opened a text — re-enable progress tracking
     shell.setTitle(route.workId);
     shell.setContext(
         describeRange(route),
