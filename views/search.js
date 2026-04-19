@@ -66,6 +66,9 @@ export async function render(route, mount, shell) {
                 '<label class="search-filter-label">' +
                     '<input type="radio" name="trans-filter" value="untranslated"' + (defaultFilter === 'untranslated' ? ' checked' : '') + ' /> Untranslated' +
                 '</label>' +
+                '<label class="search-filter-label search-filter-zen">' +
+                    '<input type="checkbox" id="zen-only" /> Zen texts only' +
+                '</label>' +
                 '<span class="search-filter-hint">Full-text search in the ' +
                     '<a class="text-link text-link--accent" href="https://github.com/Fabulu/ReadZen/releases">desktop app</a>' +
                 '</span>' +
@@ -85,18 +88,22 @@ export async function render(route, mount, shell) {
     const titleEl = document.querySelector('#search-title');
     const navEl = document.querySelector('#search-nav');
     const filterRadios = mount.querySelectorAll('input[name="trans-filter"]');
+    const zenCheckbox = document.querySelector('#zen-only');
 
     shell.setStatus('Loading titles\u2026', 'Downloading the title index.', false);
 
     let titles;
     let translatedIds = new Set();
+    let zenIds = new Set();
     try {
-        const [titlesResult, idsResult] = await Promise.all([
+        const [titlesResult, idsResult, zenResult] = await Promise.all([
             loadAllTitlesAsArray(),
-            loadTranslatedFileIds()
+            loadTranslatedFileIds(),
+            fetch('zen-texts.json').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; })
         ]);
         titles = titlesResult;
         translatedIds = idsResult;
+        zenIds = new Set(zenResult);
     } catch (error) {
         shell.showError(
             'Search index unavailable',
@@ -142,6 +149,7 @@ export async function render(route, mount, shell) {
             }
             if (transFilter === 'translated' && !isTranslated(t)) continue;
             if (transFilter === 'untranslated' && isTranslated(t)) continue;
+            if (zenCheckbox && zenCheckbox.checked && !zenIds.has(getWorkId(t))) continue;
 
             if (trimmed) {
                 const zh = (t.zh || t.Zh || '').toString();
@@ -278,6 +286,9 @@ export async function render(route, mount, shell) {
     filterRadios.forEach(function(r) {
         r.addEventListener('change', function() { doSearch(input.value, 1); });
     });
+    if (zenCheckbox) {
+        zenCheckbox.addEventListener('change', function() { doSearch(input.value, 1); });
+    }
 
     // Initial search — empty query with "translated" filter shows all translated texts
     doSearch(initialQuery, 1);
