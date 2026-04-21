@@ -313,7 +313,7 @@ export async function render(route, mount, shell) {
 
             for (var j = 0; j < pageItems.length; j++) {
                 var t = pageItems[j];
-                var fileId = t.fileId || t.fileID || t.workId || '';
+                var fileId = getWorkId(t);
                 var href = fileId ? '#/' + fileId : '#';
                 var tZh = (t.zh || t.Zh || '').toString();
                 var tEn = (t.en || t.En || t.enShort || t.EnShort || '').toString();
