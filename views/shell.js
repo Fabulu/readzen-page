@@ -197,6 +197,10 @@ export function mountShell(root, route) {
 
     const autoOpenOn = isAutoOpenEnabled();
 
+    // Hide header search on landing page (hero search is already prominent there)
+    const headerSearchForm = root.querySelector('#header-search-form');
+    if (headerSearchForm) headerSearchForm.style.display = route ? '' : 'none';
+
     if (route) {
         chip.hidden = false;
         chip.textContent = describeRoute(route);

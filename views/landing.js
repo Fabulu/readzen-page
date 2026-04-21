@@ -87,7 +87,7 @@ export function render(_route, mount, shell) {
 
             <form class="landing-search" id="landing-search-form" autocomplete="off">
                 <input class="landing-search-input" id="landing-search-input" type="text"
-                       placeholder="Search texts, masters, and passages\u2026" />
+                       placeholder="Search texts and masters\u2026" />
                 <button class="btn" type="submit">Search</button>
             </form>
 

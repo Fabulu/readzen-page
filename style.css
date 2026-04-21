@@ -212,6 +212,30 @@ code, .mono { font-family: var(--mono); }
 .header-search-input:focus ~ .header-search-kbd { display: none; }
 .header-search-toggle { display: none; }
 
+/* ── Typeahead Dropdown ── */
+.ta-wrap { position: relative; }
+.ta-dropdown {
+    position: absolute; top: calc(100% + 0.4rem); left: 0; right: 0;
+    background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px;
+    max-height: 380px; overflow-y: auto; z-index: 200;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+.ta-section-label {
+    padding: 0.5rem 0.8rem 0.25rem; font-size: 0.7rem; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--muted); font-weight: 600;
+}
+.ta-item {
+    padding: 0.5rem 0.8rem; cursor: pointer; display: flex; flex-direction: column;
+    gap: 0.15rem; transition: background 100ms ease; min-height: 40px; justify-content: center;
+}
+.ta-item:hover, .ta-item[aria-selected="true"] { background: var(--paper-strong); }
+.ta-item-primary { display: block; color: var(--text); font-size: 0.88rem; font-weight: 500; }
+.ta-item-meta { display: block; color: var(--text-soft); font-size: 0.75rem; }
+.ta-item-zh { display: block; color: var(--text); font-size: 0.88rem; font-family: var(--serif); }
+.ta-item-en { display: block; color: var(--text-soft); font-size: 0.75rem; }
+.ta-item--action { color: var(--muted); font-size: 0.82rem; font-style: italic; }
+.ta-item + .ta-item { border-top: 1px solid rgba(255,255,255,0.03); }
+
 @media (max-width: 640px) {
     .header-search {
         flex: 0 0 auto;
