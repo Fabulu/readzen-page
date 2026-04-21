@@ -42,6 +42,60 @@ function applyTheme(theme) {
 // Apply saved theme immediately on module load.
 applyTheme(getTheme());
 
+// ── Reading engagement tracking for support toast ──
+let readingStartTime = 0;
+let toastShown = false;
+
+function trackReading() {
+    if (toastShown) return;
+    if (!readingStartTime) { readingStartTime = Date.now(); return; }
+
+    var elapsed = (Date.now() - readingStartTime) / 1000;
+    if (elapsed < 120) return; // 2 minutes minimum
+
+    // Check 7-day cooldown
+    var key = 'readzen-toast-dismissed';
+    var dismissed = localStorage.getItem(key);
+    if (dismissed && Date.now() - parseInt(dismissed, 10) < 7 * 24 * 3600 * 1000) return;
+
+    // Check minimum engagement (at least 2 page views this session)
+    var views = parseInt(sessionStorage.getItem('readzen-views') || '0', 10);
+    if (views < 2) return;
+
+    toastShown = true;
+    showSupportToast();
+}
+
+function showSupportToast() {
+    var toast = document.createElement('div');
+    toast.className = 'support-toast';
+    toast.innerHTML =
+        '<div class="support-toast-content">' +
+        '<p class="support-toast-title">Enjoying ReadZen?</p>' +
+        '<p class="support-toast-text">Help keep it free and open source.</p>' +
+        '<a href="#" class="support-toast-btn" id="support-toast-btn">\u2661 Support</a>' +
+        '<button class="support-toast-close" aria-label="Dismiss">\u00d7</button>' +
+        '</div>';
+    document.body.appendChild(toast);
+
+    // Auto-dismiss after 10 seconds
+    var autoHide = setTimeout(function() { toast.remove(); }, 10000);
+
+    toast.querySelector('.support-toast-close').addEventListener('click', function() {
+        clearTimeout(autoHide);
+        toast.remove();
+        localStorage.setItem('readzen-toast-dismissed', String(Date.now()));
+    });
+
+    toast.querySelector('#support-toast-btn').addEventListener('click', function(e) {
+        e.preventDefault();
+        clearTimeout(autoHide);
+        toast.remove();
+        var supportBtn = document.querySelector('#support-btn');
+        if (supportBtn) supportBtn.click();
+    });
+}
+
 
 /**
  * Render the shell into `#app` and return the inner mount node plus a set of
@@ -58,6 +112,12 @@ export function mountShell(root, route) {
                         <h1 class="shell-title" id="shell-title">Read Zen</h1>
                     </div>
                 </a>
+                <form class="header-search" id="header-search-form" autocomplete="off">
+                    <button type="button" class="header-search-toggle" aria-label="Search">&#x1F50D;</button>
+                    <input class="header-search-input" id="header-search-input"
+                           type="text" placeholder="Search texts..." />
+                    <kbd class="header-search-kbd">Ctrl K</kbd>
+                </form>
                 <div class="shell-route" id="shell-route-box">
                     <span class="route-chip" id="route-chip" hidden></span>
                     <span class="route-chip route-chip--corpus" id="corpus-chip" hidden></span>
@@ -259,6 +319,43 @@ export function mountShell(root, route) {
         document.body.appendChild(overlay);
     }
 
+    // Header search bar: submit navigates to #/search?q=...
+    const headerSearchForm = root.querySelector('#header-search-form');
+    const headerSearchInput = root.querySelector('#header-search-input');
+
+    if (headerSearchForm && headerSearchInput) {
+        headerSearchForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const q = headerSearchInput.value.trim();
+            window.location.hash = q ? '#/search?q=' + encodeURIComponent(q) : '#/search';
+            headerSearchInput.blur();
+        });
+    }
+
+    // Ctrl+K / Cmd+K focuses the search bar; Escape blurs it
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            headerSearchInput.focus();
+            headerSearchInput.select();
+        }
+        if (e.key === 'Escape' && document.activeElement === headerSearchInput) {
+            headerSearchInput.blur();
+        }
+    });
+
+    // Mobile toggle: magnifying glass expands to full-width input
+    const searchToggle = root.querySelector('.header-search-toggle');
+    if (searchToggle) {
+        searchToggle.addEventListener('click', () => {
+            headerSearchForm.classList.add('header-search--expanded');
+            headerSearchInput.focus();
+        });
+        headerSearchInput.addEventListener('blur', () => {
+            setTimeout(() => headerSearchForm.classList.remove('header-search--expanded'), 200);
+        });
+    }
+
     // Wire all support links to open the overlay instead of navigating away
     const supportBtn = root.querySelector('#support-btn');
     if (supportBtn) supportBtn.addEventListener('click', openKofiOverlay);
@@ -267,8 +364,28 @@ export function mountShell(root, route) {
         a.removeAttribute('target');
     });
 
+    // ── Reading engagement: increment page view count and start tracking ──
+    var currentViews = parseInt(sessionStorage.getItem('readzen-views') || '0', 10);
+    sessionStorage.setItem('readzen-views', String(currentViews + 1));
+    if (route) {
+        // Start the reading timer on the first routed view
+        if (!readingStartTime) readingStartTime = Date.now();
+        // Debounced scroll handler checks reading engagement
+        var scrollTick = false;
+        window.addEventListener('scroll', function() {
+            if (scrollTick) return;
+            scrollTick = true;
+            window.requestAnimationFrame(function() {
+                scrollTick = false;
+                trackReading();
+            });
+        }, { passive: true });
+    }
+
     return {
         mount,
+        headerSearchInput,
+        focusSearch() { headerSearchInput?.focus(); headerSearchInput?.select(); },
         setTitle(text) { titleEl.textContent = text || 'Read Zen'; document.title = text ? 'Read Zen · ' + text : 'Read Zen'; },
         setContext(title, subtitle) {
             ctxTitle.textContent = title || '';

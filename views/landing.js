@@ -7,6 +7,7 @@ import { loadAllTitlesAsArray } from '../lib/titles.js';
 import { loadMasters } from './master.js';
 import { initGraph } from './lineage-graph.js';
 import { escapeHtml } from '../lib/format.js';
+import { initTypeahead } from '../lib/typeahead.js';
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 const SOURCE_URL = 'https://github.com/Fabulu/ReadZen';
@@ -86,7 +87,7 @@ export function render(_route, mount, shell) {
 
             <form class="landing-search" id="landing-search-form" autocomplete="off">
                 <input class="landing-search-input" id="landing-search-input" type="text"
-                       placeholder="Search 5,000+ texts by title\u2026" />
+                       placeholder="Search texts, masters, and passages\u2026" />
                 <button class="btn" type="submit">Search</button>
             </form>
 
@@ -331,6 +332,30 @@ export function render(_route, mount, shell) {
             const q = (landingSearchInput.value || '').trim();
             window.location.hash = '#/search' + (q ? '?q=' + encodeURIComponent(q) : '');
         });
+    }
+
+    // ── Typeahead autocomplete on hero search ──
+    if (landingSearchInput) {
+        // Pagefind preload: start downloading WASM on first keystroke
+        landingSearchInput.addEventListener('input', () => {
+            import('/pagefind/pagefind.js').catch(() => {});
+        }, { once: true });
+
+        // Wire typeahead once data is available
+        Promise.all([loadAllTitlesAsArray(), loadMasters()]).then(([titles, masters]) => {
+            if (!landingSearchInput.isConnected) return;
+            initTypeahead(landingSearchInput, {
+                titles: titles,
+                masters: masters,
+                onSelect(item) {
+                    if (item.kind === 'fulltext') {
+                        window.location.hash = '#/search?q=' + encodeURIComponent(item.query);
+                    } else if (item.href) {
+                        window.location.hash = item.href;
+                    }
+                }
+            });
+        }).catch(() => { /* typeahead is non-essential */ });
     }
 
     // ── Reading list remove buttons ──

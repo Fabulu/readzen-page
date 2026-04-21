@@ -12,6 +12,9 @@ const TITLES_URL = DATA_REPO_BASE + 'titles.jsonl';
 const OPEN_TITLES_URL = OPEN_DATA_REPO_BASE + 'titles.jsonl';
 const PAGE_SIZE = 50;
 
+// ── Session tracking for support prompt ──
+let resultClickedThisSession = false;
+
 export function match(route) {
     return route && route.kind === 'search';
 }
@@ -263,6 +266,11 @@ export async function render(route, mount, shell) {
             '</a>';
         }).join('');
 
+        // Track clicks on results to gate the support prompt
+        body.querySelectorAll('.search-row').forEach(function(row) {
+            row.addEventListener('click', function() { resultClickedThisSession = true; });
+        });
+
         // Pagination
         if (totalPages > 1) {
             navEl.hidden = false;
@@ -272,6 +280,7 @@ export async function render(route, mount, shell) {
             navEl.hidden = true;
         }
 
+        maybeShowSupportPrompt(body);
         window.scrollTo(0, 0);
     }
 
@@ -386,6 +395,12 @@ export async function render(route, mount, shell) {
                 '</a>';
             }).join('');
 
+            // Track clicks on full-text results to gate the support prompt
+            body.querySelectorAll('.search-row').forEach(function(row) {
+                row.addEventListener('click', function() { resultClickedThisSession = true; });
+            });
+            maybeShowSupportPrompt(body);
+
             // Pagination
             if (totalPages > 1) {
                 navEl.hidden = false;
@@ -440,6 +455,43 @@ export async function render(route, mount, shell) {
 
     // Initial search — empty query with "translated" filter shows all translated texts
     doSearch(initialQuery, 1);
+}
+
+/**
+ * Show a subtle inline support prompt at the bottom of the results list,
+ * but only after the user has clicked through to at least one result.
+ */
+function maybeShowSupportPrompt(container) {
+    if (!resultClickedThisSession) return;
+
+    var key = 'readzen-support-dismissed';
+    var dismissed = localStorage.getItem(key);
+    if (dismissed) {
+        var ts = parseInt(dismissed, 10);
+        if (Date.now() - ts < 30 * 24 * 3600 * 1000) return; // 30 day cooldown
+    }
+
+    // Only show once per page render
+    if (container.querySelector('.support-prompt')) return;
+
+    var div = document.createElement('div');
+    div.className = 'support-prompt';
+    div.innerHTML =
+        '<span class="support-prompt-text">ReadZen is free and open source.</span>' +
+        ' <a href="#" class="support-prompt-link" id="support-prompt-link">\u2661 Support on Ko-fi</a>' +
+        ' <button class="support-prompt-dismiss" aria-label="Dismiss">\u00d7</button>';
+    container.appendChild(div);
+
+    div.querySelector('.support-prompt-dismiss').addEventListener('click', function() {
+        div.remove();
+        localStorage.setItem(key, String(Date.now()));
+    });
+
+    div.querySelector('#support-prompt-link').addEventListener('click', function(e) {
+        e.preventDefault();
+        var supportBtn = document.querySelector('#support-btn');
+        if (supportBtn) supportBtn.click();
+    });
 }
 
 /** Best-effort workId extraction from a relative path. */
