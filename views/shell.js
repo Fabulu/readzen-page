@@ -324,7 +324,6 @@ export function mountShell(root, route) {
     }
 
     // Header search bar: submit navigates to #/search?q=...
-    const headerSearchForm = root.querySelector('#header-search-form');
     const headerSearchInput = root.querySelector('#header-search-input');
 
     if (headerSearchForm && headerSearchInput) {
