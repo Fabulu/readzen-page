@@ -334,12 +334,12 @@ export function mountShell(root, route) {
 
     // Ctrl+K / Cmd+K focuses the search bar; Escape blurs it
     document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        if (headerSearchInput && (e.ctrlKey || e.metaKey) && e.key === 'k') {
             e.preventDefault();
             headerSearchInput.focus();
             headerSearchInput.select();
         }
-        if (e.key === 'Escape' && document.activeElement === headerSearchInput) {
+        if (headerSearchInput && e.key === 'Escape' && document.activeElement === headerSearchInput) {
             headerSearchInput.blur();
         }
     });

@@ -305,6 +305,7 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
     canvas.addEventListener('mousedown', e => {
         const hit = hitTest(e.offsetX, e.offsetY);
         if (!hit) {
+            removeNodePopup();
             state.dragging = true;
             state.dragStartX = e.clientX;
             state.dragStartY = e.clientY;
@@ -348,16 +349,49 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
         }
     });
 
+    // ── Node popup ──
+    function showNodePopup(node) {
+        removeNodePopup();
+        const rect = canvas.getBoundingClientRect();
+        const sx = node.x * state.zoom + state.panX + rect.left;
+        const sy = node.y * state.zoom + state.panY + rect.top;
+
+        const slug = node.primary.replace(/ /g, '_');
+        const dates = node.datesText || '';
+        const school = node.school || '';
+        const meta = [school, dates].filter(Boolean).join(' \u00b7 ');
+
+        const popup = document.createElement('div');
+        popup.className = 'lineage-popup';
+        popup.style.left = sx + 'px';
+        popup.style.top = (sy - 10) + 'px';
+        popup.innerHTML =
+            '<strong>' + escapeHtml(node.primary || '') + '</strong>' +
+            (meta ? '<br><span class="lineage-popup-meta">' + escapeHtml(meta) + '</span>' : '') +
+            '<div class="lineage-popup-actions">' +
+            '<a href="#/master/' + encodeURIComponent(slug) + '">Profile</a>' +
+            '<a href="#/search?master=' + encodeURIComponent(slug) + '">Search Texts</a>' +
+            '</div>';
+        document.body.appendChild(popup);
+    }
+
+    function removeNodePopup() {
+        document.querySelectorAll('.lineage-popup').forEach(el => el.remove());
+    }
+
     canvas.addEventListener('click', e => {
         if (state.dragging) return;
         if (state.wasDragging) { state.wasDragging = false; return; }
         const hit = hitTest(e.offsetX, e.offsetY);
         if (hit) {
             state.focused = hit.key;
+            draw();
+            showNodePopup(hit);
         } else {
             state.focused = null;
+            removeNodePopup();
+            draw();
         }
-        draw();
     });
 
     canvas.addEventListener('dblclick', e => {
@@ -370,6 +404,7 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
 
     canvas.addEventListener('wheel', e => {
         e.preventDefault();
+        removeNodePopup();
         const factor = e.deltaY < 0 ? 1.1 : 0.9;
         const newZoom = Math.min(5.0, Math.max(0.1, state.zoom * factor));
         // Zoom toward cursor
@@ -390,6 +425,7 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
     let lastTapTime = 0;
 
     canvas.addEventListener('touchstart', e => {
+        removeNodePopup();
         if (e.touches.length === 1) {
             touchPanning = true;
             state.dragStartX = e.touches[0].clientX;
@@ -459,8 +495,10 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
                 } else if (hit) {
                     state.focused = hit.key;
                     draw();
+                    showNodePopup(hit);
                 } else {
                     state.focused = null;
+                    removeNodePopup();
                     draw();
                 }
                 lastTapTime = now;
@@ -473,6 +511,7 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
     const zoomBtns = canvas.parentElement.querySelectorAll('.lineage-zoom-btn');
     for (const btn of zoomBtns) {
         btn.addEventListener('click', () => {
+            removeNodePopup();
             const dir = btn.dataset.dir;
             if (dir === 'reset') {
                 state.zoom = 0.7;
@@ -529,6 +568,26 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
         }
         draw();
     });
+
+    // ── Escape key dismisses popup ──
+    function onKeyDown(e) {
+        if (e.key === 'Escape') {
+            removeNodePopup();
+            state.focused = null;
+            draw();
+        }
+    }
+    window.addEventListener('keydown', onKeyDown);
+
+    // ── Clean up popup on route change (canvas detach) ──
+    const popupObserver = new MutationObserver(() => {
+        if (!canvas.isConnected) {
+            removeNodePopup();
+            window.removeEventListener('keydown', onKeyDown);
+            popupObserver.disconnect();
+        }
+    });
+    popupObserver.observe(canvas.parentElement || document.body, { childList: true, subtree: true });
 
     // ── Init ──
     window.addEventListener('resize', resize);

@@ -238,7 +238,8 @@ async function main() {
             filters: {
                 corpus: ['openzen'],
                 translated: ['true'],
-                side: ['translation']
+                side: ['translation'],
+                zen: ['false']
             }
         });
         count++;

@@ -3039,6 +3039,39 @@ a.master-appearance-title:hover {
     background: rgba(212, 171, 88, 0.15);
 }
 
+/* ── Lineage node popup ── */
+.lineage-popup {
+    position: fixed;
+    z-index: 100;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    font-size: 0.85rem;
+    color: var(--text);
+    max-width: 250px;
+    transform: translateX(-50%);
+    pointer-events: auto;
+}
+.lineage-popup-meta {
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+.lineage-popup-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.4rem;
+}
+.lineage-popup-actions a {
+    font-size: 0.78rem;
+    color: var(--accent);
+    text-decoration: none;
+}
+.lineage-popup-actions a:hover {
+    text-decoration: underline;
+}
+
 /* ━━ Responsive: Masters & Lineage ━━ */
 
 @media (max-width: 600px) {
