@@ -551,6 +551,44 @@ code, .mono { font-family: var(--mono); }
     flex-wrap: wrap;
 }
 
+.search-mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.search-filter-separator {
+    width: 1px;
+    height: 1.2rem;
+    background: var(--border);
+    flex-shrink: 0;
+}
+
+.search-row--fulltext {
+    flex-wrap: wrap;
+}
+
+.search-row-excerpt {
+    width: 100%;
+    font-size: 0.82rem;
+    color: var(--text-soft);
+    line-height: 1.5;
+    margin-top: 0.25rem;
+}
+
+.search-row-excerpt mark {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 2px;
+    padding: 0 0.1em;
+}
+
+.search-error {
+    padding: 12px;
+    color: var(--danger, #c44);
+    font-size: 0.88rem;
+}
+
 .search-filter-label {
     font-size: 0.82rem;
     color: var(--text-soft);

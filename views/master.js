@@ -14,7 +14,8 @@ import { escapeHtml } from '../lib/format.js';
 
 const MASTER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const MASTERS_URL = DATA_REPO_BASE + 'masters.json';
-const CORPUS_URL = DATA_REPO_BASE + 'master-corpus.json';
+const CORPUS_INDEX_URL = DATA_REPO_BASE + 'corpus/masters/_index.json';
+const CORPUS_SHARD_BASE = DATA_REPO_BASE + 'corpus/masters/';
 
 /** Route-kind matcher. */
 export function match(route) {
@@ -63,14 +64,11 @@ export async function render(route, mount, shell) {
         return;
     }
 
-    // Load corpus appearances — use the master's canonical name (first in names array)
+    // Load per-master corpus shard — use the master's canonical name (first in names array)
     // rather than the route name, since the corpus index is keyed by canonical name.
-    let corpus = null;
-    try { corpus = await loadCorpus(); } catch { /* optional */ }
     const canonicalName = (master.names && master.names[0]) || name;
-    const appearances = corpus
-        ? (corpus.masters || {})[canonicalName] || (corpus.masters || {})[name] || null
-        : null;
+    let appearances = null;
+    try { appearances = await loadMasterCorpus(canonicalName); } catch {}
 
     mount.innerHTML = renderMasterProfile(master, appearances);
 }
@@ -93,17 +91,46 @@ function applyChrome(shell, name) {
     shell.hideStatus();
 }
 
-/** Fetch + cache the corpus appearance index. */
-async function loadCorpus() {
-    const cacheKey = 'masters:corpus';
-    const cached = cache.get(cacheKey);
+/** Fetch the lightweight corpus index (cached). */
+async function loadCorpusIndex() {
+    const key = 'masters:corpus-index';
+    const cached = cache.get(key);
+    if (cached) return cached;
+    const resp = await fetch(CORPUS_INDEX_URL);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    cache.set(key, data, MASTER_CACHE_TTL_MS);
+    return data;
+}
+
+/** Fetch a single master's corpus shard (cached). */
+async function loadMasterCorpus(canonicalName) {
+    const key = 'masters:corpus:' + canonicalName;
+    const cached = cache.get(key);
     if (cached) return cached;
 
-    const resp = await fetch(CORPUS_URL);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    cache.set(cacheKey, data, MASTER_CACHE_TTL_MS);
-    return data;
+    // Get slug from index, or derive it
+    let slug;
+    try {
+        const idx = await loadCorpusIndex();
+        const entry = idx && idx.masters && idx.masters[canonicalName];
+        slug = entry && entry.slug;
+    } catch {}
+    if (!slug) slug = slugify(canonicalName);
+
+    try {
+        const resp = await fetch(CORPUS_SHARD_BASE + slug + '.json');
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        cache.set(key, data, MASTER_CACHE_TTL_MS);
+        return data;
+    } catch { return null; }
+}
+
+function slugify(name) {
+    return name.toLowerCase()
+        .replace(/[\u2019']/g, '')
+        .replace(/ /g, '_');
 }
 
 /** Fetch + cache the canonical masters.json. */

@@ -6,6 +6,10 @@
   "scripts": {
     "test": "node --test test/",
     "build": "node build/build-dict-shards.js",
+    "build:search": "node build/build-pagefind-index.js",
     "deploy": "npm run build"
+  },
+  "dependencies": {
+    "pagefind": "^1.5.2"
   }
 }

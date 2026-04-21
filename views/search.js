@@ -36,8 +36,7 @@ export async function render(route, mount, shell) {
         corpusLabel ? 'Corpus: ' + corpusLabel : 'Browse and search work titles.'
     );
     shell.setUpsell(
-        'This is a title-only preview. The desktop app gives you ' +
-        '<strong>full-text search across both corpora</strong>, ' +
+        'The desktop app gives you ' +
         'instant jump-to-passage with ZH/EN side-by-side, the full ' +
         'reading and translation workflow, and the ability to share ' +
         'search links like this one.'
@@ -52,11 +51,20 @@ export async function render(route, mount, shell) {
         '<section class="list-wrap search-wrap">' +
             '<form class="search-form" id="search-form" autocomplete="off">' +
                 '<input class="search-input" id="search-input" type="text" ' +
-                    'placeholder="Search work titles\u2026" ' +
+                    'placeholder="Search titles or full text\u2026" ' +
                     'value="' + escapeHtml(initialQuery) + '" />' +
                 '<button class="btn btn--small" type="submit">Search</button>' +
             '</form>' +
             '<div class="search-filters">' +
+                '<div class="search-mode-toggle">' +
+                    '<label class="search-filter-label">' +
+                        '<input type="radio" name="search-mode" value="titles" checked /> Titles' +
+                    '</label>' +
+                    '<label class="search-filter-label">' +
+                        '<input type="radio" name="search-mode" value="fulltext" /> Full Text' +
+                    '</label>' +
+                '</div>' +
+                '<div class="search-filter-separator"></div>' +
                 '<label class="search-filter-label">' +
                     '<input type="radio" name="trans-filter" value="all"' + (defaultFilter === 'all' ? ' checked' : '') + ' /> All' +
                 '</label>' +
@@ -69,9 +77,6 @@ export async function render(route, mount, shell) {
                 '<label class="search-filter-label search-filter-zen">' +
                     '<input type="checkbox" id="zen-only" /> Zen texts only' +
                 '</label>' +
-                '<span class="search-filter-hint">Full-text search in the ' +
-                    '<a class="text-link text-link--accent" href="https://github.com/Fabulu/ReadZen/releases">desktop app</a>' +
-                '</span>' +
             '</div>' +
             '<header class="list-head">' +
                 '<h2 class="list-title" id="search-title">Results</h2>' +
@@ -89,6 +94,18 @@ export async function render(route, mount, shell) {
     const navEl = document.querySelector('#search-nav');
     const filterRadios = mount.querySelectorAll('input[name="trans-filter"]');
     const zenCheckbox = document.querySelector('#zen-only');
+
+    // ── Search mode state ──
+    let searchMode = 'titles'; // 'titles' or 'fulltext'
+    let pagefindLoaded = null;
+
+    const modeRadios = mount.querySelectorAll('input[name="search-mode"]');
+    modeRadios.forEach(function(r) {
+        r.addEventListener('change', function() {
+            searchMode = r.value;
+            doSearch(input.value, 1);
+        });
+    });
 
     shell.setStatus('Loading titles\u2026', 'Downloading the title index.', false);
 
@@ -143,6 +160,19 @@ export async function render(route, mount, shell) {
 
     function doSearch(query, page) {
         const trimmed = (query || '').trim();
+
+        // Empty query always falls back to title browse
+        if (!trimmed) {
+            searchMode = 'titles';
+            var titlesRadio = mount.querySelector('input[name="search-mode"][value="titles"]');
+            if (titlesRadio) titlesRadio.checked = true;
+        }
+
+        if (searchMode === 'fulltext' && trimmed) {
+            doFullTextSearch(trimmed, page);
+            return;
+        }
+
         const transFilter = getTransFilter();
         const lower = trimmed.toLowerCase();
 
@@ -286,6 +316,106 @@ export async function render(route, mount, shell) {
                     renderPage();
                 }
             });
+        }
+    }
+
+    // ── Full-text search via Pagefind ──
+    async function doFullTextSearch(q, page) {
+        // Lazy-load Pagefind
+        if (!pagefindLoaded) {
+            try {
+                body.innerHTML = '<p class="muted" style="padding:12px;">Loading search index\u2026</p>';
+                pagefindLoaded = await import('/pagefind/pagefind.js');
+                await pagefindLoaded.options({ excerptLength: 20 });
+            } catch (err) {
+                body.innerHTML = '<p class="search-error">Full-text search index not available. Try title search.</p>';
+                console.error('Pagefind load failed:', err);
+                navEl.hidden = true;
+                return;
+            }
+        }
+
+        body.innerHTML = '<p class="muted" style="padding:12px;">Searching full corpus\u2026</p>';
+
+        try {
+            const filters = {};
+            if (zenCheckbox && zenCheckbox.checked) filters.zen = 'true';
+            var transRadio = mount.querySelector('input[name="trans-filter"]:checked');
+            if (transRadio && transRadio.value === 'translated') filters.translated = 'true';
+            if (transRadio && transRadio.value === 'untranslated') filters.translated = 'false';
+
+            var search = await pagefindLoaded.search(q, { filters });
+
+            var pageSize = PAGE_SIZE;
+            var totalPages = Math.ceil(search.results.length / pageSize) || 1;
+            var safePage = Math.max(1, Math.min(page || 1, totalPages));
+            var start = (safePage - 1) * pageSize;
+            var pageResults = search.results.slice(start, start + pageSize);
+
+            var loaded = await Promise.all(pageResults.map(function(r) { return r.data(); }));
+
+            // Update header
+            titleEl.textContent = 'Full-text results for \u201c' + q + '\u201d';
+            subEl.textContent = search.results.length + ' result' + (search.results.length === 1 ? '' : 's');
+            shell.setContext(
+                'Full-text search',
+                search.results.length + ' results for \u201c' + q + '\u201d'
+            );
+
+            if (loaded.length === 0) {
+                body.innerHTML = '<div class="list-empty"><p>No results found in full text.</p></div>';
+                navEl.hidden = true;
+                return;
+            }
+
+            body.innerHTML = loaded.map(function(r) {
+                var meta = r.meta || {};
+                var title = meta.title || meta.file_id || 'Unknown';
+                var titleEn = meta.title_en || '';
+                var fileId = meta.file_id || '';
+                var href = fileId ? '#/' + fileId : '#';
+                var excerpt = r.excerpt || '';
+
+                return '<a class="search-row search-row--fulltext" href="' + escapeHtml(href) + '">' +
+                    (fileId ? '<span class="search-row-id">' + escapeHtml(fileId) + '</span>' : '') +
+                    '<span class="search-row-text">' +
+                        '<span class="search-row-zh">' + escapeHtml(title) + '</span>' +
+                        (titleEn ? '<span class="search-row-en">' + escapeHtml(titleEn) + '</span>' : '') +
+                    '</span>' +
+                    '<div class="search-row-excerpt">' + excerpt + '</div>' +
+                '</a>';
+            }).join('');
+
+            // Pagination
+            if (totalPages > 1) {
+                navEl.hidden = false;
+                navEl.innerHTML = buildPageNav(safePage, totalPages);
+                // Wire pagination for full-text mode
+                navEl.querySelectorAll('[data-page]').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var p = parseInt(btn.dataset.page, 10);
+                        if (p >= 1 && p <= totalPages && p !== safePage) {
+                            doFullTextSearch(q, p);
+                        }
+                    });
+                });
+                var jumpInput = navEl.querySelector('.page-jump');
+                if (jumpInput) {
+                    jumpInput.addEventListener('change', function() {
+                        var p = parseInt(jumpInput.value, 10);
+                        if (p >= 1 && p <= totalPages && p !== safePage) {
+                            doFullTextSearch(q, p);
+                        }
+                    });
+                }
+            } else {
+                navEl.hidden = true;
+            }
+
+            window.scrollTo(0, 0);
+        } catch (err) {
+            body.innerHTML = '<p class="search-error">Search failed: ' + escapeHtml(err.message) + '</p>';
+            console.error('Pagefind search error:', err);
         }
     }
 
