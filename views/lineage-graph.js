@@ -372,6 +372,8 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
             '<a href="#/master/' + encodeURIComponent(slug) + '">Profile</a>' +
             '<a href="#/search?master=' + encodeURIComponent(slug) + '">Search Texts</a>' +
             '</div>';
+        // Remove popup when any link inside is clicked
+        popup.querySelectorAll('a').forEach(a => a.addEventListener('click', () => removeNodePopup()));
         document.body.appendChild(popup);
     }
 
