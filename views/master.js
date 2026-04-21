@@ -210,6 +210,13 @@ function renderMasterProfile(m, appearances) {
         html += `</section>`;
     }
 
+    // Action buttons
+    const slug = primary.replace(/ /g, '_');
+    html += '<div class="master-actions">';
+    html += '<a class="btn btn--small" href="#/search?master=' + encodeURIComponent(slug) + '">Search Texts</a>';
+    html += ' <a class="btn btn--small btn--outline" href="#/lineage?focus=' + encodeURIComponent(slug) + '">View in Lineage</a>';
+    html += '</div>';
+
     // Biography
     if (m.notes) {
         html += `<section class="master-section">`;
