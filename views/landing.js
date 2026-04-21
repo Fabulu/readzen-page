@@ -298,17 +298,6 @@ export function render(_route, mount, shell) {
                 </div>
             </details>
 
-            <div class="trust-strip">
-                <span>MIT licensed</span>
-                <span class="trust-sep">&middot;</span>
-                <span>1,132 tests</span>
-                <span class="trust-sep">&middot;</span>
-                <span>Built by an independent scholar</span>
-                <span class="trust-sep">&middot;</span>
-                <a href="https://ko-fi.com/readzen" target="_blank" rel="noopener">Support on Ko-fi</a>
-                <span class="trust-sep">&middot;</span>
-                <a href="${SOURCE_URL}">Source on GitHub</a>
-            </div>
         </section>
     `;
 
