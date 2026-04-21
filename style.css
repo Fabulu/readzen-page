@@ -699,6 +699,91 @@ code, .mono { font-family: var(--mono); }
     font-size: 0.78rem;
 }
 
+/* ── Federated search sections ── */
+
+.search-section-label {
+    font-size: 0.76rem;
+    font-family: var(--mono);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.8rem 1.1rem 0.3rem;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.search-masters-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+}
+
+.search-master-card {
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--text);
+    transition: background 100ms ease;
+    min-width: 140px;
+}
+
+.search-master-card:hover {
+    background: var(--accent-soft);
+}
+
+.search-master-name {
+    font-weight: 600;
+    font-size: 0.92rem;
+}
+
+.search-master-zh {
+    color: var(--text-soft);
+    font-size: 0.85rem;
+}
+
+.search-master-meta {
+    font-size: 0.76rem;
+    color: var(--muted);
+    margin-top: 0.15rem;
+}
+
+.search-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.75rem;
+    margin: 0.5rem 1rem;
+    background: var(--accent-soft);
+    border-radius: 999px;
+    font-size: 0.82rem;
+    color: var(--accent);
+}
+
+.search-filter-chip a {
+    color: var(--text-soft);
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.ft-loading-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 1s infinite;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
 .landing .hero-actions {
     display: flex;
     justify-content: center;

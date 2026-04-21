@@ -1,12 +1,14 @@
 // views/search.js
-// Title-only search across the CBETA and OpenZen corpora.
+// Federated search across Masters, Titles, and Full-text.
 // Empty search shows all titles (filtered by translation status).
-// Results are paginated with prev/next and jump-to-page controls.
+// Active query shows three stacked sections: Masters, Titles, Full-text.
 
 import { escapeHtml } from '../lib/format.js';
 import { DATA_REPO_BASE, OPEN_DATA_REPO_BASE, loadTranslatedFileIds } from '../lib/github.js';
 import { inferCorpusForRelPath } from '../lib/corpus.js';
 import { loadAllTitlesAsArray } from '../lib/titles.js';
+import { federatedSearch } from '../lib/search.js';
+import { loadMasters } from './master.js';
 
 const TITLES_URL = DATA_REPO_BASE + 'titles.jsonl';
 const OPEN_TITLES_URL = OPEN_DATA_REPO_BASE + 'titles.jsonl';
@@ -32,6 +34,7 @@ export async function render(route, mount, shell) {
     const corpusLabel = cfNamed === 'cbeta'
         ? 'CBETA'
         : (cfNamed === 'openzen' ? 'OpenZen' : (cf || ''));
+    const corpusFilter = cfNamed || '';
 
     shell.setTitle(initialQuery ? 'Search \u00b7 ' + initialQuery : 'Search');
     shell.setContext(
@@ -59,15 +62,6 @@ export async function render(route, mount, shell) {
                 '<button class="btn btn--small" type="submit">Search</button>' +
             '</form>' +
             '<div class="search-filters">' +
-                '<div class="search-mode-toggle">' +
-                    '<label class="search-filter-label">' +
-                        '<input type="radio" name="search-mode" value="titles" checked /> Titles' +
-                    '</label>' +
-                    '<label class="search-filter-label">' +
-                        '<input type="radio" name="search-mode" value="fulltext" /> Full Text' +
-                    '</label>' +
-                '</div>' +
-                '<div class="search-filter-separator"></div>' +
                 '<label class="search-filter-label">' +
                     '<input type="radio" name="trans-filter" value="all"' + (defaultFilter === 'all' ? ' checked' : '') + ' /> All' +
                 '</label>' +
@@ -98,41 +92,31 @@ export async function render(route, mount, shell) {
     const filterRadios = mount.querySelectorAll('input[name="trans-filter"]');
     const zenCheckbox = document.querySelector('#zen-only');
 
-    // ── Search mode state ──
-    let searchMode = 'titles'; // 'titles' or 'fulltext'
-    let pagefindLoaded = null;
-
-    const modeRadios = mount.querySelectorAll('input[name="search-mode"]');
-    modeRadios.forEach(function(r) {
-        r.addEventListener('change', function() {
-            searchMode = r.value;
-            doSearch(input.value, 1);
-        });
-    });
-
     shell.setStatus('Loading titles\u2026', 'Downloading the title index.', false);
 
     let titles;
     let translatedIds = new Set();
     let zenIds = new Set();
+    let mastersData = [];
     try {
-        const [titlesResult, idsResult, zenResult] = await Promise.all([
+        const [titlesResult, idsResult, zenResult, mastersResult] = await Promise.all([
             loadAllTitlesAsArray(),
             loadTranslatedFileIds(),
             fetch(DATA_REPO_BASE + 'zen_texts.json').then(function(r) {
                 if (!r.ok) return [];
                 return r.json().then(function(data) {
-                    // Extract fileIds from paths like "T/T48/T48n2005.xml" -> "T48n2005"
                     return (data.Zen || data.zen || []).map(function(p) {
                         var fname = p.split('/').pop() || '';
                         return fname.replace(/\.xml$/i, '');
                     });
                 });
-            }).catch(function() { return []; })
+            }).catch(function() { return []; }),
+            loadMasters().catch(function() { return []; })
         ]);
         titles = titlesResult;
         translatedIds = idsResult;
         zenIds = new Set(zenResult);
+        mastersData = mastersResult || [];
     } catch (error) {
         shell.showError(
             'Search index unavailable',
@@ -157,29 +141,50 @@ export async function render(route, mount, shell) {
         return translatedIds.has(getWorkId(t));
     }
 
+    function isZenOnly() {
+        return zenCheckbox && zenCheckbox.checked;
+    }
+
     // ── Current search state ──
     let lastResults = [];
     let currentPage = 1;
 
-    function doSearch(query, page) {
+    async function doSearch(query, page) {
         const trimmed = (query || '').trim();
 
-        // Empty query always falls back to title browse
+        // Empty query: show all titles (existing browse behavior)
         if (!trimmed) {
-            searchMode = 'titles';
-            var titlesRadio = mount.querySelector('input[name="search-mode"][value="titles"]');
-            if (titlesRadio) titlesRadio.checked = true;
-        }
-
-        if (searchMode === 'fulltext' && trimmed) {
-            doFullTextSearch(trimmed, page);
+            doBrowseAll(page);
             return;
         }
 
-        const transFilter = getTransFilter();
-        const lower = trimmed.toLowerCase();
+        const masterFilter = route.master || '';
+        // Map filter radio values to the 'true'/'false'/undefined expected by lib/search.js
+        var transVal = getTransFilter();
+        var transParam = transVal === 'translated' ? 'true'
+            : transVal === 'untranslated' ? 'false'
+            : undefined;
+        const results = await federatedSearch(trimmed, {
+            masters: mastersData,
+            titles: titles,
+            filters: {
+                translated: transParam,
+                zen: isZenOnly(),
+                corpus: corpusFilter
+            },
+            masterFilter: masterFilter
+        });
 
-        // Build filtered results (no cap — pagination handles display)
+        renderFederatedResults(trimmed, results, page);
+    }
+
+    /** Browse all titles with filters (no query). */
+    function doBrowseAll(page) {
+        const transFilter = getTransFilter();
+
+        titleEl.textContent = transFilter === 'translated' ? 'Translated texts'
+            : transFilter === 'untranslated' ? 'Untranslated texts' : 'All texts';
+
         const results = [];
         for (const t of titles) {
             if (!t) continue;
@@ -191,46 +196,28 @@ export async function render(route, mount, shell) {
             }
             if (transFilter === 'translated' && !isTranslated(t)) continue;
             if (transFilter === 'untranslated' && isTranslated(t)) continue;
-            if (zenCheckbox && zenCheckbox.checked && !zenIds.has(getWorkId(t))) continue;
-
-            if (trimmed) {
-                const zh = (t.zh || t.Zh || '').toString();
-                const en = (t.en || t.En || '').toString();
-                const enShort = (t.enShort || t.EnShort || '').toString();
-                const blob = (zh + ' ' + en + ' ' + enShort + ' ' + path).toLowerCase();
-                if (!blob.includes(lower)) continue;
-            }
+            if (isZenOnly() && !zenIds.has(getWorkId(t))) continue;
             results.push(t);
         }
 
         lastResults = results;
         currentPage = Math.max(1, Math.min(page || 1, Math.ceil(results.length / PAGE_SIZE) || 1));
 
-        // Title
-        if (trimmed) {
-            titleEl.textContent = 'Results for "' + trimmed + '"';
-        } else {
-            var filterLabel = transFilter === 'translated' ? 'Translated texts'
-                : transFilter === 'untranslated' ? 'Untranslated texts' : 'All texts';
-            titleEl.textContent = filterLabel;
-        }
-
         if (results.length === 0) {
             body.innerHTML = '';
             navEl.hidden = true;
             subEl.textContent = '0 matches';
             body.innerHTML = '<div class="list-empty"><p>No titles match' +
-                (trimmed ? ' <strong>' + escapeHtml(trimmed) + '</strong>' : '') +
                 (corpusLabel ? ' in corpus ' + escapeHtml(corpusLabel) : '') +
                 ' with this filter.</p></div>';
             return;
         }
 
         subEl.textContent = results.length + ' text' + (results.length === 1 ? '' : 's');
-        renderPage();
+        renderBrowsePage();
     }
 
-    function renderPage() {
+    function renderBrowsePage() {
         const totalPages = Math.max(1, Math.ceil(lastResults.length / PAGE_SIZE));
         const start = (currentPage - 1) * PAGE_SIZE;
         const pageItems = lastResults.slice(start, start + PAGE_SIZE);
@@ -249,10 +236,9 @@ export async function render(route, mount, shell) {
             if (translated) badges += '<span class="search-row-badge">EN</span>';
             if (isOpenZen) badges += '<span class="search-row-badge search-row-badge--oz">OZ</span>';
 
-            // Clean display ID: "ws.gateless-barrier" → "Gateless Barrier" if we have a title
             var displayId = workId || '\u2014';
             if (isOpenZen && (enLine || zh)) {
-                displayId = ''; // hide cryptic ID when we have a title
+                displayId = '';
             }
 
             return '<a class="search-row" href="' + escapeHtml(href) + '">' +
@@ -284,6 +270,205 @@ export async function render(route, mount, shell) {
         window.scrollTo(0, 0);
     }
 
+    /** Render federated results in three stacked sections. */
+    function renderFederatedResults(query, results, page) {
+        var html = '';
+
+        // Master filter chip
+        if (route.master) {
+            var masterName = route.master.replace(/_/g, ' ');
+            html += '<div class="search-filter-chip">' +
+                'Filtered by: ' + escapeHtml(masterName) +
+                ' <a href="#/search?q=' + encodeURIComponent(query) + '">\u00d7</a>' +
+                '</div>';
+        }
+
+        // Section 1: Masters (if any match)
+        if (results.masters.length > 0) {
+            html += '<div class="search-section-label">Zen Masters</div>';
+            html += '<div class="search-masters-strip">';
+            for (var i = 0; i < results.masters.length; i++) {
+                var m = results.masters[i];
+                var name = (m.names && m.names[0]) || '';
+                var slug = name.replace(/ /g, '_');
+                var zh = (m.names && m.names[1]) || '';
+                var dates = m.death ? 'd. ' + m.death : (m.floruit ? 'fl. ' + m.floruit : '');
+                html += '<a class="search-master-card" href="#/master/' + encodeURIComponent(slug) + '">';
+                html += '<span class="search-master-name">' + escapeHtml(name) + '</span>';
+                if (zh) html += ' <span class="search-master-zh">' + escapeHtml(zh) + '</span>';
+                html += '<span class="search-master-meta">' + escapeHtml([m.school, dates].filter(Boolean).join(' \u00b7 ')) + '</span>';
+                html += '</a>';
+            }
+            html += '</div>';
+        }
+
+        // Section 2: Title matches (paginated)
+        if (results.titles.length > 0) {
+            html += '<div class="search-section-label">Title Matches (' + results.titles.length + ')</div>';
+            var pageSize = 30;
+            var totalPages = Math.ceil(results.titles.length / pageSize);
+            var safePage = Math.max(1, Math.min(page || 1, totalPages));
+            var start = (safePage - 1) * pageSize;
+            var pageItems = results.titles.slice(start, start + pageSize);
+
+            for (var j = 0; j < pageItems.length; j++) {
+                var t = pageItems[j];
+                var fileId = t.fileId || t.fileID || t.workId || '';
+                var href = fileId ? '#/' + fileId : '#';
+                var tZh = (t.zh || t.Zh || '').toString();
+                var tEn = (t.en || t.En || t.enShort || t.EnShort || '').toString();
+                var tPath = (t.path || t.Path || '').toString();
+                var tTranslated = translatedIds.has(fileId);
+                var tIsOpenZen = t.corpus === 'openzen';
+                var tBadges = '';
+                if (tTranslated) tBadges += '<span class="search-row-badge">EN</span>';
+                if (tIsOpenZen) tBadges += '<span class="search-row-badge search-row-badge--oz">OZ</span>';
+
+                var tDisplayId = fileId || '\u2014';
+                if (tIsOpenZen && (tEn || tZh)) {
+                    tDisplayId = '';
+                }
+
+                html += '<a class="search-row" href="' + escapeHtml(href) + '">';
+                html += (tDisplayId ? '<span class="search-row-id">' + escapeHtml(tDisplayId) + '</span>' : '<span class="search-row-id search-row-id--oz">OpenZen</span>');
+                html += '<span class="search-row-text">';
+                html += '<span class="search-row-zh">' + escapeHtml(tZh || '[no title]') + '</span>';
+                if (tEn) html += '<span class="search-row-en">' + escapeHtml(tEn) + '</span>';
+                html += '</span>';
+                html += tBadges;
+                html += '<span class="search-row-path">' + escapeHtml(tPath) + '</span>';
+                html += '</a>';
+            }
+
+            // Pagination for titles
+            if (totalPages > 1) {
+                html += '<nav class="page-nav" id="title-page-nav">';
+                html += buildTitlePagination(safePage, totalPages, query);
+                html += '</nav>';
+            }
+        } else {
+            html += '<div class="search-section-label">Title Matches (0)</div>';
+            html += '<p class="muted" style="padding:0.5rem 1rem;">No title matches.</p>';
+        }
+
+        // Section 3: Full-text (async, rendered when ready)
+        html += '<div class="search-section-label" id="ft-section-label">';
+        html += 'Full-Text Matches <span class="ft-loading-dot" id="ft-loading"></span>';
+        html += '</div>';
+        html += '<div id="ft-results"><p class="muted" style="padding:0.5rem 1rem;">Searching full corpus\u2026</p></div>';
+
+        // Update header
+        titleEl.textContent = 'Results for \u201c' + query + '\u201d';
+        subEl.textContent = '';
+        navEl.hidden = true;
+
+        body.innerHTML = html;
+
+        // Track clicks on results
+        body.querySelectorAll('.search-row').forEach(function(row) {
+            row.addEventListener('click', function() { resultClickedThisSession = true; });
+        });
+
+        // Wire title pagination clicks
+        wireTitlePageClicks(query);
+
+        // Load full-text results async
+        results.fulltext.then(function(ftResults) {
+            var ftContainer = mount.querySelector('#ft-results');
+            var ftLabel = mount.querySelector('#ft-section-label');
+            if (!ftContainer) return;
+
+            if (ftResults.length === 0) {
+                ftContainer.innerHTML = '<p class="muted" style="padding:0.5rem 1rem;">No full-text matches.</p>';
+                if (ftLabel) {
+                    var dot = ftLabel.querySelector('.ft-loading-dot');
+                    if (dot) dot.remove();
+                    ftLabel.textContent = 'Full-Text Matches (0)';
+                }
+                return;
+            }
+
+            if (ftLabel) {
+                ftLabel.innerHTML = 'Full-Text Matches (' + ftResults.length + ')';
+            }
+
+            var ftHtml = '';
+            var ftSlice = ftResults.slice(0, 30);
+            for (var k = 0; k < ftSlice.length; k++) {
+                var r = ftSlice[k];
+                var meta = r.meta || {};
+                var fFileId = meta.file_id || '';
+                var fHref = fFileId ? '#/' + fFileId : '#';
+                var fTitle = meta.title || fFileId || '';
+                var fTitleEn = meta.title_en || '';
+                ftHtml += '<a class="search-row search-row--fulltext" href="' + escapeHtml(fHref) + '">';
+                ftHtml += (fFileId ? '<span class="search-row-id">' + escapeHtml(fFileId) + '</span>' : '');
+                ftHtml += '<span class="search-row-text">';
+                ftHtml += '<span class="search-row-zh">' + escapeHtml(fTitle) + '</span>';
+                if (fTitleEn) ftHtml += '<span class="search-row-en">' + escapeHtml(fTitleEn) + '</span>';
+                ftHtml += '</span>';
+                if (r.excerpt) ftHtml += '<div class="search-row-excerpt">' + r.excerpt + '</div>';
+                ftHtml += '</a>';
+            }
+
+            if (ftResults.length > 30) {
+                ftHtml += '<p class="muted" style="padding:0.5rem 1rem;">Showing first 30 of ' + ftResults.length + ' results.</p>';
+            }
+
+            ftContainer.innerHTML = ftHtml;
+
+            // Track clicks on full-text results
+            ftContainer.querySelectorAll('.search-row').forEach(function(row) {
+                row.addEventListener('click', function() { resultClickedThisSession = true; });
+            });
+
+            maybeShowSupportPrompt(body);
+        }).catch(function() {
+            var ftContainer = mount.querySelector('#ft-results');
+            if (ftContainer) {
+                ftContainer.innerHTML = '<p class="muted" style="padding:0.5rem 1rem;">Full-text search not available.</p>';
+            }
+            var ftLabel = mount.querySelector('#ft-section-label');
+            if (ftLabel) {
+                var dot = ftLabel.querySelector('.ft-loading-dot');
+                if (dot) dot.remove();
+            }
+        });
+
+        maybeShowSupportPrompt(body);
+        window.scrollTo(0, 0);
+    }
+
+    function buildTitlePagination(current, total, query) {
+        var btns = [];
+        btns.push('<button class="page-btn" data-title-page="' + (current - 1) + '"' + (current <= 1 ? ' disabled' : '') + '>\u2190 Prev</button>');
+        var pages = new Set([1, total, current, current - 1, current + 1]);
+        var sorted = Array.from(pages).filter(function(p) { return p >= 1 && p <= total; }).sort(function(a, b) { return a - b; });
+        var last = 0;
+        for (var i = 0; i < sorted.length; i++) {
+            var p = sorted[i];
+            if (p - last > 1) btns.push('<span class="page-ellipsis">\u2026</span>');
+            btns.push('<button class="page-btn' + (p === current ? ' page-btn--active' : '') + '" data-title-page="' + p + '">' + p + '</button>');
+            last = p;
+        }
+        btns.push('<button class="page-btn" data-title-page="' + (current + 1) + '"' + (current >= total ? ' disabled' : '') + '>Next \u2192</button>');
+        btns.push('<span class="page-info">' + current + ' of ' + total + '</span>');
+        return btns.join('');
+    }
+
+    function wireTitlePageClicks(query) {
+        var titleNav = mount.querySelector('#title-page-nav');
+        if (!titleNav) return;
+        titleNav.querySelectorAll('[data-title-page]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var p = parseInt(btn.dataset.titlePage, 10);
+                if (p >= 1) {
+                    doSearch(query, p);
+                }
+            });
+        });
+    }
+
     function buildPageNav(current, total) {
         var btns = [];
         btns.push('<button class="page-btn" data-page="' + (current - 1) + '"' + (current <= 1 ? ' disabled' : '') + '>\u2190 Prev</button>');
@@ -311,7 +496,7 @@ export async function render(route, mount, shell) {
                 var totalPages = Math.ceil(lastResults.length / PAGE_SIZE);
                 if (p >= 1 && p <= totalPages && p !== currentPage) {
                     currentPage = p;
-                    renderPage();
+                    renderBrowsePage();
                 }
             });
         });
@@ -322,115 +507,9 @@ export async function render(route, mount, shell) {
                 var totalPages = Math.ceil(lastResults.length / PAGE_SIZE);
                 if (p >= 1 && p <= totalPages && p !== currentPage) {
                     currentPage = p;
-                    renderPage();
+                    renderBrowsePage();
                 }
             });
-        }
-    }
-
-    // ── Full-text search via Pagefind ──
-    async function doFullTextSearch(q, page) {
-        // Lazy-load Pagefind
-        if (!pagefindLoaded) {
-            try {
-                body.innerHTML = '<p class="muted" style="padding:12px;">Loading search index\u2026</p>';
-                pagefindLoaded = await import('/pagefind/pagefind.js');
-                await pagefindLoaded.options({ excerptLength: 20 });
-            } catch (err) {
-                body.innerHTML = '<p class="search-error">Full-text search index not available. Try title search.</p>';
-                console.error('Pagefind load failed:', err);
-                navEl.hidden = true;
-                return;
-            }
-        }
-
-        body.innerHTML = '<p class="muted" style="padding:12px;">Searching full corpus\u2026</p>';
-
-        try {
-            const filters = {};
-            if (zenCheckbox && zenCheckbox.checked) filters.zen = 'true';
-            var transRadio = mount.querySelector('input[name="trans-filter"]:checked');
-            if (transRadio && transRadio.value === 'translated') filters.translated = 'true';
-            if (transRadio && transRadio.value === 'untranslated') filters.translated = 'false';
-
-            var search = await pagefindLoaded.search(q, { filters });
-
-            var pageSize = PAGE_SIZE;
-            var totalPages = Math.ceil(search.results.length / pageSize) || 1;
-            var safePage = Math.max(1, Math.min(page || 1, totalPages));
-            var start = (safePage - 1) * pageSize;
-            var pageResults = search.results.slice(start, start + pageSize);
-
-            var loaded = await Promise.all(pageResults.map(function(r) { return r.data(); }));
-
-            // Update header
-            titleEl.textContent = 'Full-text results for \u201c' + q + '\u201d';
-            subEl.textContent = search.results.length + ' result' + (search.results.length === 1 ? '' : 's');
-            shell.setContext(
-                'Full-text search',
-                search.results.length + ' results for \u201c' + q + '\u201d'
-            );
-
-            if (loaded.length === 0) {
-                body.innerHTML = '<div class="list-empty"><p>No results found in full text.</p></div>';
-                navEl.hidden = true;
-                return;
-            }
-
-            body.innerHTML = loaded.map(function(r) {
-                var meta = r.meta || {};
-                var title = meta.title || meta.file_id || 'Unknown';
-                var titleEn = meta.title_en || '';
-                var fileId = meta.file_id || '';
-                var href = fileId ? '#/' + fileId : '#';
-                var excerpt = r.excerpt || '';
-
-                return '<a class="search-row search-row--fulltext" href="' + escapeHtml(href) + '">' +
-                    (fileId ? '<span class="search-row-id">' + escapeHtml(fileId) + '</span>' : '') +
-                    '<span class="search-row-text">' +
-                        '<span class="search-row-zh">' + escapeHtml(title) + '</span>' +
-                        (titleEn ? '<span class="search-row-en">' + escapeHtml(titleEn) + '</span>' : '') +
-                    '</span>' +
-                    '<div class="search-row-excerpt">' + excerpt + '</div>' +
-                '</a>';
-            }).join('');
-
-            // Track clicks on full-text results to gate the support prompt
-            body.querySelectorAll('.search-row').forEach(function(row) {
-                row.addEventListener('click', function() { resultClickedThisSession = true; });
-            });
-            maybeShowSupportPrompt(body);
-
-            // Pagination
-            if (totalPages > 1) {
-                navEl.hidden = false;
-                navEl.innerHTML = buildPageNav(safePage, totalPages);
-                // Wire pagination for full-text mode
-                navEl.querySelectorAll('[data-page]').forEach(function(btn) {
-                    btn.addEventListener('click', function() {
-                        var p = parseInt(btn.dataset.page, 10);
-                        if (p >= 1 && p <= totalPages && p !== safePage) {
-                            doFullTextSearch(q, p);
-                        }
-                    });
-                });
-                var jumpInput = navEl.querySelector('.page-jump');
-                if (jumpInput) {
-                    jumpInput.addEventListener('change', function() {
-                        var p = parseInt(jumpInput.value, 10);
-                        if (p >= 1 && p <= totalPages && p !== safePage) {
-                            doFullTextSearch(q, p);
-                        }
-                    });
-                }
-            } else {
-                navEl.hidden = true;
-            }
-
-            window.scrollTo(0, 0);
-        } catch (err) {
-            body.innerHTML = '<p class="search-error">Search failed: ' + escapeHtml(err.message) + '</p>';
-            console.error('Pagefind search error:', err);
         }
     }
 
@@ -453,7 +532,7 @@ export async function render(route, mount, shell) {
         zenCheckbox.addEventListener('change', function() { doSearch(input.value, 1); });
     }
 
-    // Initial search — empty query with "translated" filter shows all translated texts
+    // Initial search -- empty query with "translated" filter shows all translated texts
     doSearch(initialQuery, 1);
 }
 

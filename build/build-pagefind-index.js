@@ -8,13 +8,13 @@ import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join, relative, basename } from 'path';
 
 // === Configuration ===
-const CBETA_XML_DIR = 'C:/Programmieren/CbetaZenTexts/xml-p5';
-const OPENZEN_XML_DIR = 'C:/Programmieren/OpenZenTexts/xml-open';
-const CBETA_TITLES = 'C:/Programmieren/CbetaZenTranslations/titles.jsonl';
-const OPENZEN_TITLES = 'C:/Programmieren/OpenZenTranslations/titles.jsonl';
-const CBETA_TRANSLATED_DIR = 'C:/Programmieren/CbetaZenTranslations/xml-p5t';
-const OPENZEN_TRANSLATED_DIR = 'C:/Programmieren/OpenZenTranslations/xml-open-t';
-const ZEN_TEXTS_PATH = 'C:/Programmieren/CbetaZenTranslations/zen_texts.json';
+const CBETA_XML_DIR = process.env.CBETA_XML_DIR || 'C:/Programmieren/CbetaZenTexts/xml-p5';
+const OPENZEN_XML_DIR = process.env.OPENZEN_XML_DIR || 'C:/Programmieren/OpenZenTexts/xml-open';
+const CBETA_TITLES = process.env.CBETA_TITLES || 'C:/Programmieren/CbetaZenTranslations/titles.jsonl';
+const OPENZEN_TITLES = process.env.OPENZEN_TITLES || 'C:/Programmieren/OpenZenTranslations/titles.jsonl';
+const CBETA_TRANSLATED_DIR = process.env.CBETA_TRANSLATED_DIR || 'C:/Programmieren/CbetaZenTranslations/xml-p5t';
+const OPENZEN_TRANSLATED_DIR = process.env.OPENZEN_TRANSLATED_DIR || 'C:/Programmieren/OpenZenTranslations/xml-open-t';
+const ZEN_TEXTS_PATH = process.env.ZEN_TEXTS_PATH || 'C:/Programmieren/CbetaZenTranslations/zen_texts.json';
 const OUTPUT_DIR = './pagefind';
 
 // === Text extraction (ported from C# MakeSearchableTextFromXml_Fast) ===
@@ -181,7 +181,115 @@ async function main() {
         count++;
     }
 
-    console.log(`Total indexed: ${count} files`);
+    // Process CBETA translations
+    const cbetaTransFiles = findXmlFiles(CBETA_TRANSLATED_DIR);
+    console.log(`Found ${cbetaTransFiles.length} CBETA translation files`);
+
+    for (const absPath of cbetaTransFiles) {
+        const relPath = relative(CBETA_TRANSLATED_DIR, absPath).replace(/\\/g, '/');
+        const xml = readFileSync(absPath, 'utf-8');
+        const text = extractTextFromXml(xml);
+        if (!text) continue;
+
+        const fileId = basename(absPath, '.xml');
+        const titleEntry = cbetaTitles.get(relPath) || {};
+
+        await index.addCustomRecord({
+            url: '/' + fileId,
+            content: text,
+            language: 'en',
+            meta: {
+                title: titleEntry.en || titleEntry.zh || fileId,
+                title_zh: titleEntry.zh || '',
+                file_id: fileId
+            },
+            filters: {
+                corpus: ['cbeta'],
+                translated: ['true'],
+                side: ['translation'],
+                zen: [zenIds.has(fileId) ? 'true' : 'false']
+            }
+        });
+        count++;
+    }
+
+    // Process OpenZen translations
+    const openzenTransFiles = findXmlFiles(OPENZEN_TRANSLATED_DIR);
+    console.log(`Found ${openzenTransFiles.length} OpenZen translation files`);
+
+    for (const absPath of openzenTransFiles) {
+        const relPath = relative(OPENZEN_TRANSLATED_DIR, absPath).replace(/\\/g, '/');
+        const xml = readFileSync(absPath, 'utf-8');
+        const text = extractTextFromXml(xml);
+        if (!text) continue;
+
+        const fileId = 'oz.' + basename(absPath, '.xml');
+        const titleEntry = openzenTitles.get(relPath) || {};
+
+        await index.addCustomRecord({
+            url: '/' + fileId,
+            content: text,
+            language: 'en',
+            meta: {
+                title: titleEntry.en || titleEntry.zh || fileId,
+                title_zh: titleEntry.zh || '',
+                file_id: fileId
+            },
+            filters: {
+                corpus: ['openzen'],
+                translated: ['true'],
+                side: ['translation']
+            }
+        });
+        count++;
+    }
+
+    // Process community translations
+    const COMMUNITY_DIR = process.env.COMMUNITY_DIR || 'C:/Programmieren/CbetaZenTranslations/community/translations';
+    if (existsSync(COMMUNITY_DIR)) {
+        const users = readdirSync(COMMUNITY_DIR, { withFileTypes: true })
+            .filter(d => d.isDirectory())
+            .map(d => d.name);
+
+        console.log(`Found ${users.length} community translators: ${users.join(', ')}`);
+
+        for (const user of users) {
+            const userDir = join(COMMUNITY_DIR, user);
+            const userFiles = findXmlFiles(userDir);
+
+            for (const absPath of userFiles) {
+                const relPath = relative(userDir, absPath).replace(/\\/g, '/');
+                const xml = readFileSync(absPath, 'utf-8');
+                const text = extractTextFromXml(xml);
+                if (!text) continue;
+
+                const fileId = basename(absPath, '.xml');
+                const titleEntry = cbetaTitles.get(relPath) || {};
+
+                await index.addCustomRecord({
+                    url: '/' + fileId,
+                    content: text,
+                    language: 'en',
+                    meta: {
+                        title: titleEntry.en || titleEntry.zh || fileId,
+                        title_zh: titleEntry.zh || '',
+                        file_id: fileId,
+                        translator: user
+                    },
+                    filters: {
+                        corpus: ['cbeta'],
+                        translated: ['true'],
+                        side: ['community'],
+                        translator: [user]
+                    }
+                });
+                count++;
+            }
+            console.log(`  ${user}: ${userFiles.length} files`);
+        }
+    }
+
+    console.log(`Total indexed: ${count} files (source + translations + community)`);
     console.log(`Writing Pagefind output to ${OUTPUT_DIR}...`);
 
     await index.writeFiles({ outputPath: OUTPUT_DIR });

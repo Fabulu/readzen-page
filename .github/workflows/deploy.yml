@@ -1,0 +1,76 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout SPA
+        uses: actions/checkout@v4
+
+      - name: Checkout CBETA texts
+        uses: actions/checkout@v4
+        with:
+          repository: Fabulu/CbetaZenTexts
+          path: corpus/CbetaZenTexts
+          token: ${{ secrets.CORPUS_TOKEN }}
+
+      - name: Checkout CBETA translations
+        uses: actions/checkout@v4
+        with:
+          repository: Fabulu/CbetaZenTranslations
+          path: corpus/CbetaZenTranslations
+          token: ${{ secrets.CORPUS_TOKEN }}
+
+      - name: Checkout OpenZen texts
+        uses: actions/checkout@v4
+        with:
+          repository: Fabulu/OpenZenTexts
+          path: corpus/OpenZenTexts
+          token: ${{ secrets.CORPUS_TOKEN }}
+
+      - name: Checkout OpenZen translations
+        uses: actions/checkout@v4
+        with:
+          repository: Fabulu/OpenZenTranslations
+          path: corpus/OpenZenTranslations
+          token: ${{ secrets.CORPUS_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build dictionary shards
+        run: node build/build-dict-shards.js
+
+      - name: Build Pagefind search index
+        run: |
+          # Set paths for CI environment
+          export CBETA_XML_DIR=corpus/CbetaZenTexts/xml-p5
+          export OPENZEN_XML_DIR=corpus/OpenZenTexts/xml-open
+          export CBETA_TITLES=corpus/CbetaZenTranslations/titles.jsonl
+          export OPENZEN_TITLES=corpus/OpenZenTranslations/titles.jsonl
+          export CBETA_TRANSLATED_DIR=corpus/CbetaZenTranslations/xml-p5t
+          export OPENZEN_TRANSLATED_DIR=corpus/OpenZenTranslations/xml-open-t
+          export ZEN_TEXTS_PATH=corpus/CbetaZenTranslations/zen_texts.json
+          export COMMUNITY_DIR=corpus/CbetaZenTranslations/community/translations
+          node build/build-pagefind-index.js
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy . --project-name=readzen
