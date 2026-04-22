@@ -629,6 +629,7 @@ code, .mono { font-family: var(--mono); }
 
 .landing-search-input {
     flex: 1;
+    width: 100%;
     min-width: 0;
     padding: 0.6rem 1rem;
     font-size: 1rem;
