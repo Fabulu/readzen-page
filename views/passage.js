@@ -142,6 +142,10 @@ export async function render(route, mount, shell) {
                 tCandidates.push(communityTranslationUrl(route.workId, route.translator, route.corpus));
             }
             tCandidates.push(authoritativeTranslationUrl(route.workId, route.corpus));
+            // Fallback: try default community translator if no explicit one given
+            if (!route.translator) {
+                tCandidates.push(communityTranslationUrl(route.workId, 'Fabulu', route.corpus));
+            }
             for (const turl of tCandidates) {
                 if (!turl) continue;
                 try {

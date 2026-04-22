@@ -213,7 +213,7 @@ code, .mono { font-family: var(--mono); }
 .header-search-toggle { display: none; }
 
 /* ── Typeahead Dropdown ── */
-.ta-wrap { position: relative; }
+.ta-wrap { position: relative; flex: 1; min-width: 0; }
 .ta-dropdown {
     position: absolute; top: calc(100% + 0.4rem); left: 0; right: 0;
     background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px;
