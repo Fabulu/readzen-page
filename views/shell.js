@@ -131,6 +131,7 @@ export function mountShell(root, route) {
                     <p class="context-subtitle" id="context-subtitle"></p>
                 </div>
                 <div class="shell-actions-buttons">
+                    <a class="btn btn--small" id="open-desktop" href="#" hidden>Open in Read Zen</a>
                     <a class="text-link" id="shell-extra-link" href="#" target="_blank" rel="noreferrer" hidden></a>
                 </div>
             </section>
@@ -243,7 +244,7 @@ export function mountShell(root, route) {
         // communicates "this is a Read Zen link, the desktop app handles it".
         // Hidden on landing (the else branch below leaves it hidden by default).
         const zenUri = buildZenUri(route);
-        if (zenUri && openDesktop) {
+        if (zenUri) {
             openDesktop.href = zenUri;
             openDesktop.hidden = false;
         }
