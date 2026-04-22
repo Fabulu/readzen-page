@@ -314,7 +314,7 @@ export async function render(route, mount, shell) {
             for (var j = 0; j < pageItems.length; j++) {
                 var t = pageItems[j];
                 var fileId = getWorkId(t);
-                var href = fileId ? '#/' + fileId : '#';
+                var href = fileId ? '#/' + fileId + (query ? '?q=' + encodeURIComponent(query) : '') : '#';
                 var tZh = (t.zh || t.Zh || '').toString();
                 var tEn = (t.en || t.En || t.enShort || t.EnShort || '').toString();
                 var tPath = (t.path || t.Path || '').toString();
@@ -398,7 +398,7 @@ export async function render(route, mount, shell) {
                 var r = ftSlice[k];
                 var meta = r.meta || {};
                 var fFileId = meta.file_id || '';
-                var fHref = fFileId ? '#/' + fFileId : '#';
+                var fHref = fFileId ? '#/' + fFileId + (query ? '?q=' + encodeURIComponent(query) : '') : '#';
                 var fTitle = meta.title || fFileId || '';
                 var fTitleEn = meta.title_en || '';
                 ftHtml += '<a class="search-row search-row--fulltext" href="' + escapeHtml(fHref) + '">';

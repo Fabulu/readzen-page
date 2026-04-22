@@ -8,6 +8,7 @@
 // tab, this view simply never finishes loading — which is fine.
 
 import { escapeHtml, sliceLines, sliceFirstN, renderLinesHtml } from '../lib/format.js';
+import { highlightTextInHtml, scrollToFirstHighlight, scrollToLineId, findPageForTerm, findPageForLineId } from '../lib/highlight.js';
 import { parseTei } from '../lib/tei.js';
 import {
     sourceXmlUrl,
@@ -189,8 +190,24 @@ export async function render(route, mount, shell) {
         }
 
         document.querySelector('#source-meta').textContent = sourceWork.titleZh || route.workId;
-        document.querySelector('#source-body').innerHTML = renderLinesHtml(sourceLines);
+        const rangeSearchTerm = route.q || route.highlight || '';
+        let sourceHtml = renderLinesHtml(sourceLines);
+        if (rangeSearchTerm) sourceHtml = highlightTextInHtml(sourceHtml, rangeSearchTerm);
+        document.querySelector('#source-body').innerHTML = sourceHtml;
         attachInlineDict(document.querySelector('#source-body'));
+
+        // "View in Full Text" button for ranged views
+        if (route.hasExplicitRange) {
+            const fullBtn = document.createElement('a');
+            fullBtn.className = 'btn btn--small btn--outline';
+            fullBtn.style.margin = '0.5rem 1rem';
+            fullBtn.textContent = 'View in Full Text';
+            const scrollParam = route.startLine ? '?scroll=' + encodeURIComponent(route.startLine) : '';
+            const qParam = rangeSearchTerm ? (scrollParam ? '&' : '?') + 'q=' + encodeURIComponent(rangeSearchTerm) : '';
+            fullBtn.href = '#/' + route.workId + scrollParam + qParam;
+            const grid = document.querySelector('#preview-grid');
+            if (grid) grid.parentNode.insertBefore(fullBtn, grid);
+        }
 
         // Only attempt translation loading when the route actually asked for it.
         if (route.mode === 'en') {
@@ -198,7 +215,11 @@ export async function render(route, mount, shell) {
         }
 
         shell.hideStatus();
-        window.scrollTo(0, 0);
+        if (rangeSearchTerm) {
+            scrollToFirstHighlight(document.querySelector('#source-body'));
+        } else {
+            window.scrollTo(0, 0);
+        }
         window.requestAnimationFrame(syncRowHeights);
 
         // Bookmark button + scroll tracking
@@ -228,7 +249,15 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
     const totalLines = allSourceLines.length;
     const totalPages = Math.max(1, Math.ceil(totalLines / PAGE));
     const showAll = totalLines <= 200;
+    const searchTerm = route.q || '';
+    const scrollLineId = route.scroll || '';
     let currentPage = 1;
+    // Jump to the right page if search term or scroll target is specified
+    if (!showAll && scrollLineId) {
+        currentPage = findPageForLineId(allSourceLines, scrollLineId, PAGE);
+    } else if (!showAll && searchTerm) {
+        currentPage = findPageForTerm(allSourceLines, searchTerm, PAGE);
+    }
 
     const tranMap = translationWork.linesById;
     const pairTranslation = (lines) => lines.map((src) => {
@@ -250,12 +279,25 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
 
     function renderPage(page) {
         const lines = pageSlice(page);
-        document.querySelector('#source-body').innerHTML = renderLinesHtml(lines);
-        document.querySelector('#translation-body').innerHTML = renderLinesHtml(pairTranslation(lines));
-        attachInlineDict(document.querySelector('#source-body'));
+        let srcHtml = renderLinesHtml(lines);
+        let trnHtml = renderLinesHtml(pairTranslation(lines));
+        if (searchTerm) {
+            srcHtml = highlightTextInHtml(srcHtml, searchTerm);
+            trnHtml = highlightTextInHtml(trnHtml, searchTerm);
+        }
+        const srcBody = document.querySelector('#source-body');
+        srcBody.innerHTML = srcHtml;
+        document.querySelector('#translation-body').innerHTML = trnHtml;
+        attachInlineDict(srcBody);
         window.requestAnimationFrame(syncRowHeights);
         updatePaginationUI();
-        window.scrollTo(0, 0);
+        if (scrollLineId && page === findPageForLineId(allSourceLines, scrollLineId, PAGE)) {
+            scrollToLineId(srcBody, scrollLineId);
+        } else if (searchTerm) {
+            scrollToFirstHighlight(srcBody);
+        } else {
+            window.scrollTo(0, 0);
+        }
     }
 
     function updatePaginationUI() {
@@ -337,7 +379,14 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
     const totalLines = allLines.length;
     const totalPages = Math.max(1, Math.ceil(totalLines / PAGE));
     const showAll = totalLines <= 200;
+    const searchTerm2 = route.q || '';
+    const scrollLineId2 = route.scroll || '';
     let currentPage = 1;
+    if (!showAll && scrollLineId2) {
+        currentPage = findPageForLineId(allLines, scrollLineId2, PAGE);
+    } else if (!showAll && searchTerm2) {
+        currentPage = findPageForTerm(allLines, searchTerm2, PAGE);
+    }
 
     const titleZh = sourceWork.titleZh || route.workId;
     const titleEn = sourceWork.titleEn || '';
@@ -356,10 +405,19 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
     }
 
     function renderPage(page) {
-        document.querySelector('#firstn-source-body').innerHTML = renderLinesHtml(pageSlice(page));
-        attachInlineDict(document.querySelector('#firstn-source-body'));
+        let html = renderLinesHtml(pageSlice(page));
+        if (searchTerm2) html = highlightTextInHtml(html, searchTerm2);
+        const body = document.querySelector('#firstn-source-body');
+        body.innerHTML = html;
+        attachInlineDict(body);
         updateNav();
-        window.scrollTo(0, 0);
+        if (scrollLineId2 && page === findPageForLineId(allLines, scrollLineId2, PAGE)) {
+            scrollToLineId(body, scrollLineId2);
+        } else if (searchTerm2) {
+            scrollToFirstHighlight(body);
+        } else {
+            window.scrollTo(0, 0);
+        }
     }
 
     function updateNav() {

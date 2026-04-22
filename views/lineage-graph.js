@@ -704,13 +704,24 @@ function layoutNodes(nodes, edges) {
         n.y = (n.temporalY - minYear) * PX_PER_YEAR;
     }
 
-    // Push Korean Seon nodes rightward past ALL Chinese nodes
+    // Position Korean Seon nodes in a compressed lane next to the earliest
+    // Chinese teacher that connects to a Korean student. Korean masters span
+    // ~44 generations, so use tighter spacing to keep the lane compact.
+    // Position Korean Seon nodes in a compact lane past the Chinese tree.
+    // Compact their generation layers (skip empty ones) and use tighter spacing.
+    const KOREAN_GAP = 300;
+    const KOREAN_SPACING = 100;
     const isKorean = n => n.school === 'Korean Seon' || n.school === 'Early Korean Buddhism';
-    const maxChineseX = treeNodes.filter(n => !isKorean(n)).reduce((mx, n) => Math.max(mx, n.x), 0);
-    const koreanOffset = maxChineseX + LAYER_GAP_X / 3;
-    const minKoreanLayer = treeNodes.filter(isKorean).reduce((mn, n) => Math.min(mn, n.layer), Infinity);
-    for (const n of treeNodes) {
-        if (isKorean(n)) n.x = koreanOffset + (n.layer - minKoreanLayer) * LAYER_GAP_X;
+    const koreanNodes = treeNodes.filter(isKorean);
+    if (koreanNodes.length > 0) {
+        const maxChineseX = treeNodes.filter(n => !isKorean(n)).reduce((mx, n) => Math.max(mx, n.x), 0);
+        const koreanOffset = maxChineseX + KOREAN_GAP;
+        const uniqueLayers = [...new Set(koreanNodes.map(n => n.layer))].sort((a, b) => a - b);
+        const layerToIndex = new Map();
+        uniqueLayers.forEach((layer, idx) => { layerToIndex.set(layer, idx); });
+        for (const n of koreanNodes) {
+            n.x = koreanOffset + layerToIndex.get(n.layer) * KOREAN_SPACING;
+        }
     }
 
     // Collision resolution within layers

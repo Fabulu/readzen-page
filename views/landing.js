@@ -341,7 +341,8 @@ export function render(_route, mount, shell) {
                     if (item.kind === 'fulltext') {
                         window.location.hash = '#/search?q=' + encodeURIComponent(item.query);
                     } else if (item.href) {
-                        window.location.hash = item.href;
+                        const qSuffix = item.query ? '?q=' + encodeURIComponent(item.query) : '';
+                        window.location.hash = item.href + qSuffix;
                     }
                 }
             });

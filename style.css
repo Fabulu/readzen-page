@@ -682,6 +682,24 @@ code, .mono { font-family: var(--mono); }
     padding: 0 0.1em;
 }
 
+/* ── In-text search highlight ── */
+.search-highlight {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 2px;
+    padding: 0 0.1em;
+    scroll-margin-top: 6rem;
+}
+.scroll-target {
+    background: var(--accent-soft);
+    scroll-margin-top: 6rem;
+    animation: highlight-pulse 2s ease-out;
+}
+@keyframes highlight-pulse {
+    0%   { background: rgba(212, 171, 88, 0.4); }
+    100% { background: var(--accent-soft); }
+}
+
 .search-error {
     padding: 12px;
     color: var(--danger, #c44);
