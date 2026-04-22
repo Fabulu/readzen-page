@@ -594,7 +594,7 @@ code, .mono { font-family: var(--mono); }
 .landing {
     max-width: 720px;
     margin: 0 auto;
-    padding: 0.5rem 0 2rem;
+    padding: 0.5rem 1rem 2rem;
 }
 
 .landing .hero {

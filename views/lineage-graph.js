@@ -388,10 +388,8 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
         if (hit) {
             state.focused = hit.key;
             draw();
-            showNodePopup(hit);
         } else {
             state.focused = null;
-            removeNodePopup();
             draw();
         }
     });
