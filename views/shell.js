@@ -243,7 +243,7 @@ export function mountShell(root, route) {
         // communicates "this is a Read Zen link, the desktop app handles it".
         // Hidden on landing (the else branch below leaves it hidden by default).
         const zenUri = buildZenUri(route);
-        if (zenUri) {
+        if (zenUri && openDesktop) {
             openDesktop.href = zenUri;
             openDesktop.hidden = false;
         }
