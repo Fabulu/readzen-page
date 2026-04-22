@@ -82,12 +82,12 @@ export function render(_route, mount, shell) {
 
             <div class="hero">
                 <h2 class="hero-title">Read Zen</h2>
-                <p class="hero-tagline">Read, search, and study classical Chinese Zen texts &mdash; with English translations and a built-in dictionary.</p>
+                <p class="hero-tagline">Read, search, and study classical Chinese Zen texts &mdash; with full-text corpus search, English translations, and a built-in dictionary.</p>
             </div>
 
             <form class="landing-search" id="landing-search-form" autocomplete="off">
                 <input class="landing-search-input" id="landing-search-input" type="text"
-                       placeholder="Search texts and masters\u2026" />
+                       placeholder="Search 5,000+ texts and 298 masters\u2026" />
                 <button class="btn" type="submit">Search</button>
             </form>
 
@@ -144,7 +144,8 @@ export function render(_route, mount, shell) {
                     <h3 class="feature-group-title">Research</h3>
                     <ul class="feature-group-list">
                         <li>Search work titles across both corpora</li>
-                        <li class="feature-desktop">Full-text search with co-occurrence analysis</li>
+                        <li>Full-text corpus search across 5,000+ texts</li>
+                        <li class="feature-desktop">Co-occurrence analysis, n-gram charts, and TSV export</li>
                         <li class="feature-desktop">Tag &amp; code passages for qualitative research</li>
                         <li class="feature-desktop">Scholar collections with export &amp; comparison</li>
                     </ul>
@@ -172,7 +173,7 @@ export function render(_route, mount, shell) {
                     </div>
                     <div class="desktop-feature-card">
                         <h4>Search Assistant</h4>
-                        <p>Full-text search with co-occurrence bubbles, n-gram analysis, Zipf curves, and export to six formats.</p>
+                        <p>Full-text search with co-occurrence charts, n-gram analysis, association metrics, and TSV export.</p>
                     </div>
                     <div class="desktop-feature-card">
                         <h4>Scholar Assistant</h4>

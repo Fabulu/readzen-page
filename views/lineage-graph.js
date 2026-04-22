@@ -707,7 +707,7 @@ function layoutNodes(nodes, edges) {
     // Push Korean Seon nodes rightward past ALL Chinese nodes
     const isKorean = n => n.school === 'Korean Seon' || n.school === 'Early Korean Buddhism';
     const maxChineseX = treeNodes.filter(n => !isKorean(n)).reduce((mx, n) => Math.max(mx, n.x), 0);
-    const koreanOffset = maxChineseX + LAYER_GAP_X * 2;
+    const koreanOffset = maxChineseX + LAYER_GAP_X / 3;
     const minKoreanLayer = treeNodes.filter(isKorean).reduce((mn, n) => Math.min(mn, n.layer), Infinity);
     for (const n of treeNodes) {
         if (isKorean(n)) n.x = koreanOffset + (n.layer - minKoreanLayer) * LAYER_GAP_X;
