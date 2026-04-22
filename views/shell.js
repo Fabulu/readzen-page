@@ -131,8 +131,6 @@ export function mountShell(root, route) {
                     <p class="context-subtitle" id="context-subtitle"></p>
                 </div>
                 <div class="shell-actions-buttons">
-                    <button class="btn btn--small btn--copy-link" id="copy-link-btn" hidden title="Copy a shareable link to this view">Copy Link</button>
-                    <a class="btn btn--small" id="open-desktop" href="#" hidden>Open in Read Zen</a>
                     <a class="text-link" id="shell-extra-link" href="#" target="_blank" rel="noreferrer" hidden></a>
                 </div>
             </section>
@@ -145,14 +143,12 @@ export function mountShell(root, route) {
             <main class="shell-main" id="view-mount"></main>
 
             <aside class="upsell" id="upsell" hidden>
-                <p class="upsell-kicker">This is just a preview</p>
-                <h2 class="upsell-title">Get the full Read Zen desktop app</h2>
+                <p class="upsell-kicker">Want more power?</p>
+                <h2 class="upsell-title">Read Zen Desktop</h2>
                 <p class="upsell-desc" id="upsell-desc">
-                    Read both the CBETA and OpenZen corpora, translate side-by-side with
-                    a hover dictionary and translation memory, search every
-                    text at once, build scholar collections, manage terminology,
-                    and <strong>create and share links like this one</strong>
-                    — all offline, all free.
+                    Full corpus search with co-occurrence analysis, hover dictionary,
+                    side-by-side translation editor, scholar collections, and
+                    terminology management — all offline, all free.
                 </p>
                 <div class="upsell-actions">
                     <a class="btn" id="upsell-download" href="${RELEASES_URL}">Download Read Zen</a>
