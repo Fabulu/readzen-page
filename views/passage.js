@@ -300,7 +300,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
         if (scrollLineId && page === findPageForLineId(allSourceLines, scrollLineId, PAGE)) {
             scrollToLineId(srcBody, scrollLineId);
         } else if (searchTerm) {
-            scrollToFirstHighlight(srcBody);
+            scrollToFirstHighlight(document.querySelector('#preview-grid') || srcBody);
         } else {
             window.scrollTo(0, 0);
         }
@@ -382,7 +382,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
     if (scrollLineId) {
         scrollToLineId(document.querySelector('#source-body'), scrollLineId);
     } else if (searchTerm) {
-        scrollToFirstHighlight(document.querySelector('#source-body'));
+        scrollToFirstHighlight(document.querySelector('#preview-grid'));
     }
 }
 
