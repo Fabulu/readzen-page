@@ -251,20 +251,26 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
     const showAll = totalLines <= 200;
     const searchTerm = route.q || '';
     const scrollLineId = route.scroll || '';
-    let currentPage = 1;
-    // Jump to the right page if search term or scroll target is specified
-    if (!showAll && scrollLineId) {
-        currentPage = findPageForLineId(allSourceLines, scrollLineId, PAGE);
-    } else if (!showAll && searchTerm) {
-        currentPage = findPageForTerm(allSourceLines, searchTerm, PAGE);
-    }
-
     const tranMap = translationWork.linesById;
     const pairTranslation = (lines) => lines.map((src) => {
         if (!src) return { id: '', text: '' };
         const t = tranMap && tranMap.get ? tranMap.get(src.id) : null;
         return { id: src.id, text: (t && t.text) || '' };
     });
+
+    // Compute starting page: search both source AND translation for the term
+    let currentPage = 1;
+    if (!showAll && scrollLineId) {
+        currentPage = findPageForLineId(allSourceLines, scrollLineId, PAGE);
+    } else if (!showAll && searchTerm) {
+        const srcPage = findPageForTerm(allSourceLines, searchTerm, PAGE);
+        const allTranLines = pairTranslation(allSourceLines);
+        const trnPage = findPageForTerm(allTranLines, searchTerm, PAGE);
+        // Use whichever found a match (lower page = earlier match)
+        currentPage = (srcPage === 1 && trnPage > 1) ? trnPage
+                    : (trnPage === 1 && srcPage > 1) ? srcPage
+                    : Math.min(srcPage, trnPage);
+    }
 
     const titleZh = sourceWork.titleZh || route.workId;
     const titleEn = translationWork.titleEn || sourceWork.titleEn || '';
