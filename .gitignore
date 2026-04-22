@@ -1,3 +1,4 @@
 # Dict shards are committed — they're static assets served by Cloudflare Pages.
 # Regenerate with: node build/build-dict-shards.js
 pagefind/
+dict-bundled/

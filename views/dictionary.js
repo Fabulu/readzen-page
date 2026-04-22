@@ -123,13 +123,30 @@ async function renderDictCard(term, mount) {
  * The character is percent-encoded so CJK works regardless of the server's
  * URL handling.
  */
+let _dictManifest = null;
+const _bucketCache = new Map();
+
+async function loadDictManifest() {
+    if (_dictManifest) return _dictManifest;
+    _dictManifest = await fetchJson('dict/_manifest.json');
+    return _dictManifest;
+}
+
 export async function loadShard(char) {
     const cacheKey = 'dict-shard:' + char;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    const url = 'dict/' + encodeURIComponent(char) + '.json';
-    const shard = await fetchJson(url);
+    // Bundled dict: manifest maps char -> bucket number, bucket contains multiple chars
+    const manifest = await loadDictManifest();
+    const bucketId = manifest[char];
+    if (bucketId === undefined) return [];
+
+    if (!_bucketCache.has(bucketId)) {
+        _bucketCache.set(bucketId, await fetchJson('dict/' + bucketId + '.json'));
+    }
+    const bucket = _bucketCache.get(bucketId);
+    const shard = bucket[char] || [];
     cache.set(cacheKey, shard, SHARD_CACHE_TTL_MS);
     return shard;
 }
