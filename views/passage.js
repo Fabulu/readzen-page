@@ -330,7 +330,13 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
     }
 
     const wrap = document.querySelector('#outline-wrap') || mount;
-    const initLines = pageSlice(1);
+    const initLines = pageSlice(currentPage);
+    let initSrcHtml = renderLinesHtml(initLines);
+    let initTrnHtml = renderLinesHtml(pairTranslation(initLines));
+    if (searchTerm) {
+        initSrcHtml = highlightTextInHtml(initSrcHtml, searchTerm);
+        initTrnHtml = highlightTextInHtml(initTrnHtml, searchTerm);
+    }
     wrap.innerHTML = `
         ${buildViewToggle(viewPref)}
         ${buildTranslatorSwitcher(route)}
@@ -342,7 +348,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
                 </div>
                 <div class="panel-title">Chinese source</div>
                 <div class="panel-body panel-body--source" id="source-body">
-                    ${renderLinesHtml(initLines)}
+                    ${initSrcHtml}
                 </div>
             </article>
             <article class="panel" id="translation-panel" ${viewPref === 'zh' ? 'hidden' : ''}>
@@ -352,11 +358,11 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
                 </div>
                 <div class="panel-title">English rendering</div>
                 <div class="panel-body" id="translation-body">
-                    ${renderLinesHtml(pairTranslation(initLines))}
+                    ${initTrnHtml}
                 </div>
             </article>
         </div>
-        ${!showAll ? `<nav class="page-nav" id="page-nav">${buildPageButtons(1, totalPages)}</nav>` : ''}
+        ${!showAll ? `<nav class="page-nav" id="page-nav">${buildPageButtons(currentPage, totalPages)}</nav>` : ''}
         ${buildPassageFooter()}
     `;
 
@@ -366,6 +372,12 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
 
     window.requestAnimationFrame(syncRowHeights);
     attachInlineDict(document.querySelector('#source-body'));
+
+    if (scrollLineId) {
+        scrollToLineId(document.querySelector('#source-body'), scrollLineId);
+    } else if (searchTerm) {
+        scrollToFirstHighlight(document.querySelector('#source-body'));
+    }
 }
 
 /**
@@ -450,6 +462,8 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
     }
 
     const wrap = document.querySelector('#outline-wrap') || mount;
+    let initHtml = renderLinesHtml(pageSlice(currentPage));
+    if (searchTerm2) initHtml = highlightTextInHtml(initHtml, searchTerm2);
     wrap.innerHTML = `
         <article class="panel outline-panel">
             <header class="outline-head">
@@ -457,14 +471,20 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
                 <p class="outline-sub">${subtitle}</p>
             </header>
             <div class="panel-body panel-body--source" id="firstn-source-body">
-                ${renderLinesHtml(pageSlice(1))}
+                ${initHtml}
             </div>
         </article>
-        ${!showAll ? `<nav class="page-nav" id="page-nav">${buildPageButtons(1, totalPages)}</nav>` : ''}
+        ${!showAll ? `<nav class="page-nav" id="page-nav">${buildPageButtons(currentPage, totalPages)}</nav>` : ''}
         ${buildPassageFooter()}
     `;
     attachInlineDict(document.querySelector('#firstn-source-body'));
     if (!showAll) wireNav(wrap.querySelector('#page-nav'));
+
+    if (scrollLineId2) {
+        scrollToLineId(document.querySelector('#firstn-source-body'), scrollLineId2);
+    } else if (searchTerm2) {
+        scrollToFirstHighlight(document.querySelector('#firstn-source-body'));
+    }
 }
 
 /**
