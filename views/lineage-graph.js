@@ -704,29 +704,12 @@ function layoutNodes(nodes, edges) {
         n.y = (n.temporalY - minYear) * PX_PER_YEAR;
     }
 
-    // Position Korean Seon nodes in a compressed lane next to the earliest
-    // Chinese teacher that connects to a Korean student. Korean masters span
-    // ~44 generations, so use tighter spacing to keep the lane compact.
-    // Position Korean Seon nodes in a compact lane past the Chinese tree.
-    // Compact their generation layers (skip empty ones) and use tighter spacing.
-    const KOREAN_GAP = 300;
-    const KOREAN_SPACING = 100;
     const isKorean = n => n.school === 'Korean Seon' || n.school === 'Early Korean Buddhism';
-    const koreanNodes = treeNodes.filter(isKorean);
-    if (koreanNodes.length > 0) {
-        const maxChineseX = treeNodes.filter(n => !isKorean(n)).reduce((mx, n) => Math.max(mx, n.x), 0);
-        const koreanOffset = maxChineseX + KOREAN_GAP;
-        const uniqueLayers = [...new Set(koreanNodes.map(n => n.layer))].sort((a, b) => a - b);
-        const layerToIndex = new Map();
-        uniqueLayers.forEach((layer, idx) => { layerToIndex.set(layer, idx); });
-        for (const n of koreanNodes) {
-            n.x = koreanOffset + layerToIndex.get(n.layer) * KOREAN_SPACING;
-        }
-    }
 
-    // Collision resolution within layers
+    // Collision resolution within layers — Chinese only first
+    const chineseTreeNodes = treeNodes.filter(n => !isKorean(n));
     const layers = new Map();
-    for (const n of treeNodes) {
+    for (const n of chineseTreeNodes) {
         if (!layers.has(n.layer)) layers.set(n.layer, []);
         layers.get(n.layer).push(n);
     }
@@ -736,6 +719,37 @@ function layoutNodes(nodes, edges) {
             const gap = layerNodes[i].y - layerNodes[i - 1].y;
             if (gap < MIN_GAP_Y) {
                 layerNodes[i].y = layerNodes[i - 1].y + MIN_GAP_Y;
+            }
+        }
+    }
+
+    // Korean positioning AFTER Chinese collision resolution
+    const MIN_GAP = 200;
+    const Y_PROXIMITY = NODE_H * 15;
+    const koreanNodes = treeNodes.filter(isKorean);
+    if (koreanNodes.length > 0) {
+        const chineseNodes = treeNodes.filter(n => !isKorean(n));
+        for (const n of koreanNodes) {
+            let maxNearby = 0;
+            for (const c of chineseNodes) {
+                if (Math.abs(c.y - n.y) < Y_PROXIMITY && c.x > maxNearby) {
+                    maxNearby = c.x;
+                }
+            }
+            const minX = maxNearby + NODE_W + MIN_GAP;
+            if (n.x < minX) n.x = minX;
+        }
+
+        // Korean-specific collision: push overlapping Korean nodes rightward
+        koreanNodes.sort((a, b) => a.x - b.x || a.y - b.y);
+        for (let i = 0; i < koreanNodes.length; i++) {
+            for (let j = i + 1; j < koreanNodes.length; j++) {
+                const a = koreanNodes[i], b = koreanNodes[j];
+                const xOverlap = Math.abs(a.x - b.x) < NODE_W + 10;
+                const yOverlap = Math.abs(a.y - b.y) < NODE_H + 6;
+                if (xOverlap && yOverlap) {
+                    b.x = a.x + NODE_W + 20;
+                }
             }
         }
     }
