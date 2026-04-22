@@ -169,7 +169,7 @@ export async function render(route, mount, shell) {
                 renderFirstNLines(sourceWork, 30, route, mount, true);
             }
             shell.hideStatus();
-            window.scrollTo(0, 0);
+            if (!(route.q || route.scroll)) window.scrollTo(0, 0);
             return;
         }
 
