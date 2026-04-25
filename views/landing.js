@@ -94,7 +94,7 @@ export function render(_route, mount, shell) {
             <div class="lineage-showcase">
                 <h3 class="lineage-showcase-heading">The Zen Lineage</h3>
                 <p class="lineage-showcase-desc">
-                    298 Chan/Zen masters from Bodhidharma to the late Qing.
+                    301 Zen masters from Bodhidharma to the late Qing.
                     Click a master to trace their lineage. Double-click to visit their profile.
                 </p>
                 <input type="text" id="landing-lineage-search" class="lineage-search--landing"
