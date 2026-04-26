@@ -1,3 +1,7 @@
 # Cloudflare Pages redirect rules
-# (Passage fallback removed - 404.html handles SPA routing for sub-paths.
-#  Parent text pages at /T48n2005 etc. serve rich SEO metadata directly.)
+#
+# Note: passage sub-path proxy (e.g. /T48n2005/0292a26 -> parent page)
+# is not feasible on static hosting. Cloudflare's 200 proxy exposes the
+# internal destination URL to browser JS, breaking the SPA redirect.
+# Parent text pages (/T48n2005) serve rich SEO metadata directly.
+# Sub-paths fall through to 404.html which redirects users to the SPA.
