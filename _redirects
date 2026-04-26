@@ -1,2 +1,14 @@
-# Test: single passage proxy rule
+# Passage fallback: serve parent text SEO page for any sub-path.
+# Crawlers get parent-level rich metadata with HTTP 200.
+# Users get redirected to the exact passage via the landing page JS.
+
 /T48n2005/* /T48n2005/index.html 200
+/T48n2010/* /T48n2010/index.html 200
+/T48n2004/* /T48n2004/index.html 200
+/T48n2003/* /T48n2003/index.html 200
+/T48n2012A/* /T48n2012A/index.html 200
+/T47n1987A/* /T47n1987A/index.html 200
+/J24nB137/* /J24nB137/index.html 200
+/T47n1987B/* /T47n1987B/index.html 200
+/pd.wumenguan-1632/* /pd.wumenguan-1632/index.html 200
+/ws.gateless-barrier/* /ws.gateless-barrier/index.html 200
