@@ -5,7 +5,7 @@
 
 # Read Zen Web
 
-**[readzen.pages.dev](https://readzen.pages.dev)** — a zero-install web app for reading, searching, and exploring Chinese Zen Buddhist texts across the CBETA (~5000 texts) and OpenZen corpora.
+**[readzen.pages.dev](https://readzen.pages.dev)** — a zero-install web app for reading, searching, and exploring Chinese Zen texts across the CBETA (~5000 texts) and OpenZen corpora.
 
 This is the web companion to the [Read Zen desktop app](https://github.com/Fabulu/ReadZen). The web app handles reading, searching, and browsing; the desktop app adds the workbench layer (translation editing, Scholar collections, community sync, qualitative coding, and analytics).
 
