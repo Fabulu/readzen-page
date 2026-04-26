@@ -1,15 +1,14 @@
 # Passage fallback: serve parent text SEO page for sub-path passage links.
 # Uses :splat in query string to preserve the exact passage path.
-# Crawlers get parent-level rich metadata with HTTP 200.
-# Users get redirected to the exact passage via rz_target query param.
+# Destination omits .html (CF auto-resolves to the file).
 
-/T48n2005/* /_meta-T48n2005.html?rz_target=/T48n2005/:splat 200
-/T48n2010/* /_meta-T48n2010.html?rz_target=/T48n2010/:splat 200
-/T48n2004/* /_meta-T48n2004.html?rz_target=/T48n2004/:splat 200
-/T48n2003/* /_meta-T48n2003.html?rz_target=/T48n2003/:splat 200
-/T48n2012A/* /_meta-T48n2012A.html?rz_target=/T48n2012A/:splat 200
-/T47n1987A/* /_meta-T47n1987A.html?rz_target=/T47n1987A/:splat 200
-/J24nB137/* /_meta-J24nB137.html?rz_target=/J24nB137/:splat 200
-/T47n1987B/* /_meta-T47n1987B.html?rz_target=/T47n1987B/:splat 200
-/pd.wumenguan-1632/* /_meta-pd.wumenguan-1632.html?rz_target=/pd.wumenguan-1632/:splat 200
-/ws.gateless-barrier/* /_meta-ws.gateless-barrier.html?rz_target=/ws.gateless-barrier/:splat 200
+/T48n2005/* /_meta-T48n2005?rz_target=/T48n2005/:splat 200
+/T48n2010/* /_meta-T48n2010?rz_target=/T48n2010/:splat 200
+/T48n2004/* /_meta-T48n2004?rz_target=/T48n2004/:splat 200
+/T48n2003/* /_meta-T48n2003?rz_target=/T48n2003/:splat 200
+/T48n2012A/* /_meta-T48n2012A?rz_target=/T48n2012A/:splat 200
+/T47n1987A/* /_meta-T47n1987A?rz_target=/T47n1987A/:splat 200
+/J24nB137/* /_meta-J24nB137?rz_target=/J24nB137/:splat 200
+/T47n1987B/* /_meta-T47n1987B?rz_target=/T47n1987B/:splat 200
+/pd.wumenguan-1632/* /_meta-pd.wumenguan-1632?rz_target=/pd.wumenguan-1632/:splat 200
+/ws.gateless-barrier/* /_meta-ws.gateless-barrier?rz_target=/ws.gateless-barrier/:splat 200
