@@ -123,16 +123,16 @@ test('sliceFirstN: returns first N non-empty lines', () => {
     assert.deepEqual(out.map(l => l.id), ['a', 'b', 'c']);
 });
 
-test('sliceFirstN: skips empty/whitespace lines', () => {
+test('sliceFirstN: preserves empty/whitespace lines', () => {
     const linesById = new Map([
         ['a', { id: 'a', text: '' }],
         ['b', { id: 'b', text: '   ' }],
         ['c', { id: 'c', text: 'real' }],
         ['d', { id: 'd', text: 'also real' }]
     ]);
-    const out = sliceFirstN(linesById, ['a', 'b', 'c', 'd'], 2);
-    assert.equal(out.length, 2);
-    assert.deepEqual(out.map(l => l.id), ['c', 'd']);
+    const out = sliceFirstN(linesById, ['a', 'b', 'c', 'd'], 4);
+    assert.equal(out.length, 4);
+    assert.deepEqual(out.map(l => l.id), ['a', 'b', 'c', 'd']);
 });
 
 test('sliceFirstN: n larger than available → returns all non-empty', () => {

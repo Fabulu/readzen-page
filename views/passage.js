@@ -108,7 +108,7 @@ export async function render(route, mount, shell) {
                         <div class="panel-skeleton">Loading source XML…</div>
                     </div>
                 </article>
-                <article class="panel" id="translation-panel" ${route.mode === 'en' ? '' : 'hidden'}>
+                <article class="panel" id="translation-panel" hidden>
                     <div class="panel-head">
                         <p class="panel-label" id="translation-label">Translation</p>
                         <p class="panel-meta" id="translation-meta"></p>
@@ -209,10 +209,8 @@ export async function render(route, mount, shell) {
             if (grid) grid.parentNode.insertBefore(fullBtn, grid);
         }
 
-        // Only attempt translation loading when the route actually asked for it.
-        if (route.mode === 'en') {
-            await renderTranslation(route, sourceLines, shell);
-        }
+        // Always attempt to load translation (show bilingual if available).
+        await renderTranslation(route, sourceLines, shell);
 
         shell.hideStatus();
         if (rangeSearchTerm) {
