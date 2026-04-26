@@ -3,11 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Read Zen</title>
-    <meta name="description" content="Read Zen preview page for linked CBETA source texts and translations.">
+    <title>Read Zen — Chinese Zen Buddhist Texts: Read, Search, Explore</title>
+    <meta name="description" content="Read, search, and explore ~5000 Chinese Zen Buddhist texts from CBETA and OpenZen. Side-by-side bilingual reader, hover dictionary, 301 Zen master profiles with interactive lineage graph, and full-text corpus search. Free, no install needed.">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Read Zen — Chinese Zen Buddhist Texts">
+    <meta property="og:description" content="Side-by-side bilingual reader, hover dictionary, 301 Zen master profiles, interactive lineage graph, and full-text search across ~5000 Chinese Zen texts.">
+    <meta property="og:url" content="https://readzen.pages.dev">
+    <meta property="og:site_name" content="Read Zen">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Read Zen — Chinese Zen Buddhist Texts">
+    <meta name="twitter:description" content="Read, search, and explore ~5000 Chinese Zen Buddhist texts. Bilingual reader with hover dictionary, 301 Zen masters, lineage graph.">
+
+    <!-- Canonical -->
+    <link rel="canonical" href="https://readzen.pages.dev">
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Read Zen",
+        "url": "https://readzen.pages.dev",
+        "description": "A web environment for reading, searching, and exploring Chinese Zen Buddhist texts across the CBETA and OpenZen corpora.",
+        "applicationCategory": "EducationalApplication",
+        "operatingSystem": "Any",
+        "offers": { "@type": "Offer", "price": "0" },
+        "author": { "@type": "Person", "name": "Fabian Trunz" }
+    }
+    </script>
+
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+    <!-- Crawlable content for search engines (hidden by JS app mount) -->
+    <noscript>
+        <h1>Read Zen — Chinese Zen Buddhist Texts</h1>
+        <p>Read, search, and explore ~5000 Chinese Zen Buddhist texts from CBETA and OpenZen. Features include a side-by-side bilingual reader with hover dictionary, 301 Zen master profiles with interactive lineage graph, and full-text corpus search.</p>
+        <p><a href="https://github.com/Fabulu/ReadZen">Desktop app</a> | <a href="https://github.com/Fabulu/ReadZen/releases/latest">Download</a></p>
+    </noscript>
     <div id="app"></div>
     <script type="module" src="/app.js"></script>
 </body>

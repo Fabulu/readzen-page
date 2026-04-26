@@ -63,7 +63,7 @@ export async function render(route, mount, shell) {
         const t = entry.enShort || entry.en || entry.zh || workId;
         const sub = entry.zh && t !== entry.zh ? entry.zh : '';
         shell.setTitle(`Compare · ${sub ? `${t} · ${sub}` : t}`);
-        try { document.title = `Compare · ${t} · Read Zen Preview`; } catch {}
+        try { document.title = `Compare · ${t} · Read Zen`; } catch {}
     });
     shell.setStatus('Loading compare preview…', 'Fetching the original and both translations.', false);
 

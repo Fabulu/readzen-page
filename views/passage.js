@@ -61,7 +61,7 @@ export async function render(route, mount, shell) {
         const subtitle = entry.zh && titleText !== entry.zh ? entry.zh : '';
         shell.setTitle(subtitle ? `${titleText} · ${subtitle}` : titleText);
         try {
-            document.title = `${titleText} · Read Zen Preview`;
+            document.title = `${titleText} · Read Zen`;
         } catch {}
     });
     // Toolbar: copy-with-citation + cite buttons

@@ -76,7 +76,7 @@ export async function render(route, mount, shell) {
             user ? `Tags in ${t} by ${user}` : `Tags in ${t}`,
             tagIdFilter ? `Filtered to tag "${tagIdFilter}"` : 'Community tags from the Read Zen corpus'
         );
-        try { document.title = `Tags · ${t} · Read Zen Preview`; } catch {}
+        try { document.title = `Tags · ${t} · Read Zen`; } catch {}
     });
 
     if (!user) {
