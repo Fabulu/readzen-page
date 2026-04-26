@@ -121,16 +121,16 @@ async function main() {
         'T48n2005', 'T48n2010', 'T48n2004', 'T48n2003',
         'T48n2012A', 'T47n1987A', 'J24nB137', 'T47n1987B'
     ]);
-    // Also include any OpenZen texts (path starts with non-T)
+    // Also include any OpenZen texts
     const textEntries = allTitles.filter(e => {
+        const fid = e.fileId || '';
         const p = e.path || '';
-        const id = p.replace(/\.xml$/, '').split('/').pop();
-        return featuredIds.has(id) || p.startsWith('pd.') || p.startsWith('ws.') || p.startsWith('ce.') || p.startsWith('mit.');
+        const id = fid || p.replace(/\.xml$/, '').split('/').pop();
+        return featuredIds.has(id) || fid.startsWith('pd.') || fid.startsWith('ws.') || fid.startsWith('ce.') || fid.startsWith('mit.') || p.startsWith('pd.') || p.startsWith('ws.') || p.startsWith('ce.') || p.startsWith('mit.');
     });
 
     for (const entry of textEntries) {
-        const p = entry.path || '';
-        const id = p.replace(/\.xml$/, '').split('/').pop();
+        const id = entry.fileId || entry.path?.replace(/\.xml$/, '').split('/').pop() || '';
         if (!id) continue;
 
         const zh = entry.zh || '';
