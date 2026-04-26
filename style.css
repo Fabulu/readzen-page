@@ -1314,6 +1314,7 @@ code, .mono { font-family: var(--mono); }
 
 .panel {
     min-height: 20rem;
+    min-width: 0;
     border: 1px solid var(--border-soft);
     border-radius: 22px;
     background:
@@ -1329,6 +1330,7 @@ code, .mono { font-family: var(--mono); }
     gap: 1rem;
     align-items: baseline;
     padding: 1.2rem 1.35rem 0.55rem;
+    flex-wrap: wrap;
 }
 
 .panel-label {
@@ -1348,6 +1350,7 @@ code, .mono { font-family: var(--mono); }
     padding: 0 1.35rem 1rem;
     color: var(--text-soft);
     font-size: 0.92rem;
+    overflow-wrap: anywhere;
 }
 
 .panel-body { padding: 0.3rem 0 1rem; }
@@ -1396,6 +1399,8 @@ code, .mono { font-family: var(--mono); }
     font-family: var(--serif);
     font-size: 1rem;
     line-height: 1.82;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .panel-body--source .line-text {
