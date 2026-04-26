@@ -1,14 +1,14 @@
 # Passage fallback: serve parent text SEO page for any sub-path.
-# Crawlers get parent-level rich metadata with HTTP 200.
-# Users get redirected to the exact passage via the landing page JS.
+# Destination uses _meta- prefix to avoid Cloudflare's loop detection
+# (CF strips /index.html from destinations, causing source re-match).
 
-/T48n2005/* /T48n2005/index.html 200
-/T48n2010/* /T48n2010/index.html 200
-/T48n2004/* /T48n2004/index.html 200
-/T48n2003/* /T48n2003/index.html 200
-/T48n2012A/* /T48n2012A/index.html 200
-/T47n1987A/* /T47n1987A/index.html 200
-/J24nB137/* /J24nB137/index.html 200
-/T47n1987B/* /T47n1987B/index.html 200
-/pd.wumenguan-1632/* /pd.wumenguan-1632/index.html 200
-/ws.gateless-barrier/* /ws.gateless-barrier/index.html 200
+/T48n2005/* /_meta-T48n2005.html 200
+/T48n2010/* /_meta-T48n2010.html 200
+/T48n2004/* /_meta-T48n2004.html 200
+/T48n2003/* /_meta-T48n2003.html 200
+/T48n2012A/* /_meta-T48n2012A.html 200
+/T47n1987A/* /_meta-T47n1987A.html 200
+/J24nB137/* /_meta-J24nB137.html 200
+/T47n1987B/* /_meta-T47n1987B.html 200
+/pd.wumenguan-1632/* /_meta-pd.wumenguan-1632.html 200
+/ws.gateless-barrier/* /_meta-ws.gateless-barrier.html 200
