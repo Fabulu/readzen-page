@@ -82,8 +82,8 @@ function applyChrome(shell, name) {
     );
     shell.setUpsell(
         'Read Zen is a free desktop app for reading, translating, and studying ' +
-        'Chinese Chan Buddhist texts. It includes an interactive lineage web of ' +
-        '195 masters, full-corpus text search, hover dictionary, side-by-side ' +
+        'Chinese Chan/Zen texts. It includes an interactive lineage web of ' +
+        '301 masters, full-corpus text search, hover dictionary, side-by-side ' +
         'translation, and scholar collections. You can <strong>create and share ' +
         'your own master profile links</strong> just like this one — right-click ' +
         'any master and choose "Copy Reddit Link".'

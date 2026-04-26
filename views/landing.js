@@ -119,7 +119,7 @@ export function render(_route, mount, shell) {
             <div class="corpus-cards">
                 <div class="corpus-card">
                     <h3 class="corpus-card-title">CBETA</h3>
-                    <p class="corpus-card-desc">5,000+ texts from the Chinese Buddhist canon. The complete Taisho, supplementary collections, and more.</p>
+                    <p class="corpus-card-desc">5,000+ texts from the Chinese canon. The complete Taisho, supplementary collections, and more.</p>
                     <p class="corpus-card-license">Non-commercial use &middot; <a href="https://www.cbeta.org" target="_blank" rel="noopener">cbeta.org</a></p>
                 </div>
                 <div class="corpus-card corpus-card--openzen">
