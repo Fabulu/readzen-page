@@ -44,7 +44,7 @@ function makePage(route, title, description, noscriptHtml) {
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
 <link rel="canonical" href="${BASE}/${route}">
-<script>window.location.replace('/#/${route}');</script>
+<script>!function(){var p=window.location.pathname,s=window.location.search||"",h=window.location.hash||"";window.location.replace("/#"+p+s+h)}();</script>
 </head>
 <body>
 <noscript>
