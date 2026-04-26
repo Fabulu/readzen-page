@@ -149,7 +149,7 @@ export function mountShell(root, route) {
                 <p class="upsell-desc" id="upsell-desc">
                     Full corpus search with co-occurrence analysis, hover dictionary,
                     side-by-side translation editor, scholar collections, and
-                    terminology management — all offline, all free.
+                    terminology management - all offline, all free.
                 </p>
                 <div class="upsell-actions">
                     <a class="btn" id="upsell-download" href="${RELEASES_URL}">Download Read Zen</a>

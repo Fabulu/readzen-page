@@ -82,7 +82,7 @@ export function render(_route, mount, shell) {
 
             <div class="hero">
                 <h2 class="hero-title">Read Zen</h2>
-                <p class="hero-tagline">Read, search, and study classical Chinese Zen texts &mdash; with full-text corpus search, English translations, and a built-in dictionary.</p>
+                <p class="hero-tagline">Read, search, and study classical Chinese Zen texts - with full-text corpus search, English translations, and a built-in dictionary.</p>
             </div>
 
             <form class="landing-search" id="landing-search-form" autocomplete="off">
@@ -169,7 +169,7 @@ export function render(_route, mount, shell) {
                 <div class="desktop-features-grid">
                     <div class="desktop-feature-card">
                         <h4>Translation Assistant</h4>
-                        <p>Translation memory matches, terminology lookup, and QA warnings &mdash; all in a live sidebar while you translate.</p>
+                        <p>Translation memory matches, terminology lookup, and QA warnings - all in a live sidebar while you translate.</p>
                     </div>
                     <div class="desktop-feature-card">
                         <h4>Search Assistant</h4>
@@ -202,7 +202,7 @@ export function render(_route, mount, shell) {
 
             <div class="start-here">
                 <h3 class="start-here-heading">Start Here</h3>
-                <p class="start-here-desc">Core Zen texts &mdash; read them in Chinese with hover dictionary, or with community translations.</p>
+                <p class="start-here-desc">Core Zen texts - read them in Chinese with hover dictionary, or with community translations.</p>
                 <div class="start-here-grid">${startHereRows}</div>
                 <div class="start-here-random">
                     <button class="btn btn--outline" id="random-text-btn">\uD83C\uDFB2 Random Text</button>
@@ -227,26 +227,26 @@ export function render(_route, mount, shell) {
                         </summary>
                         <p class="install-intro"><strong>Three ways to install:</strong></p>
                         <ol class="install-steps">
-                            <li><strong>WinGet (recommended):</strong> <code>winget install ReadZen</code> &mdash; installs cleanly, SmartScreen-safe, and <code>winget upgrade</code> handles updates.</li>
-                            <li><strong>Installer:</strong> Download <code>Setup.exe</code> from the releases page. Run it &mdash; the app auto-updates from then on.</li>
-                            <li><strong>Portable ZIP:</strong> Download <code>ReadZen-win-x64.zip</code>, extract anywhere, and run <code>ReadZen.App.exe</code>. SmartScreen may warn once &mdash; click <strong>More info</strong> then <strong>Run anyway</strong>.</li>
+                            <li><strong>WinGet (recommended):</strong> <code>winget install ReadZen</code> - installs cleanly, SmartScreen-safe, and <code>winget upgrade</code> handles updates.</li>
+                            <li><strong>Installer:</strong> Download <code>Setup.exe</code> from the releases page. Run it - the app auto-updates from then on.</li>
+                            <li><strong>Portable ZIP:</strong> Download <code>ReadZen-win-x64.zip</code>, extract anywhere, and run <code>ReadZen.App.exe</code>. SmartScreen may warn once - click <strong>More info</strong> then <strong>Run anyway</strong>.</li>
                         </ol>
                         <p class="install-tip">
-                            <strong>Git is bundled.</strong> You do not need to install Git separately &mdash; Read Zen ships with Portable Git built in.
+                            <strong>Git is bundled.</strong> You do not need to install Git separately - Read Zen ships with Portable Git built in.
                         </p>
                     </details>
 
                     <details class="install-os">
                         <summary>
                             <span class="install-os-icon">\uD83C\uDF4E</span>
-                            macOS &mdash; "Read Zen.app cannot be opened"
+                            macOS - "Read Zen.app cannot be opened"
                         </summary>
                         <ol class="install-steps">
                             <li>Download <code>ReadZen-osx-arm64.zip</code> (Apple Silicon) or <code>ReadZen-osx-x64.zip</code> (Intel) from releases.</li>
                             <li>Extract and try to open <strong>Read Zen.app</strong>. macOS will block it: "cannot be opened because the developer cannot be verified."</li>
                             <li>Click <strong>Done</strong> on that warning.</li>
                             <li>Open <strong>System Settings &rarr; Privacy &amp; Security</strong>.</li>
-                            <li>Scroll down &mdash; you'll see "Read Zen was blocked..." with an <strong>Open Anyway</strong> button. Click it.</li>
+                            <li>Scroll down - you'll see "Read Zen was blocked..." with an <strong>Open Anyway</strong> button. Click it.</li>
                             <li>Confirm with your password. The next launch (and every one after) works normally.</li>
                         </ol>
                         <p class="install-tip">
@@ -257,7 +257,7 @@ export function render(_route, mount, shell) {
                         <p class="install-why">
                             Why? Apple notarization requires a $99/yr Apple Developer
                             account. We're holding off until requested by enough Mac users.
-                            The app is open source &mdash; verify on
+                            The app is open source - verify on
                             <a href="${SOURCE_URL}">GitHub</a>.
                         </p>
                     </details>
@@ -265,7 +265,7 @@ export function render(_route, mount, shell) {
                     <details class="install-os">
                         <summary>
                             <span class="install-os-icon">\uD83D\uDC27</span>
-                            Linux &mdash; make the binary executable
+                            Linux - make the binary executable
                         </summary>
                         <ol class="install-steps">
                             <li>Download <code>ReadZen-linux-x64.zip</code> from releases.</li>
@@ -274,7 +274,7 @@ export function render(_route, mount, shell) {
                             <li>Run it: <code>./ReadZen.App</code></li>
                         </ol>
                         <p class="install-tip">
-                            <strong>Coming in v4.5:</strong> AppImage with auto-update &mdash;
+                            <strong>Coming in v4.5:</strong> AppImage with auto-update -
                             single executable file, no extraction required, in-app updates
                             instead of redownloading.
                         </p>

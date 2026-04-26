@@ -132,7 +132,7 @@ export async function render(route, mount, shell) {
             const lines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, 30);
             origBody.innerHTML = `
                 <div class="outline-banner">
-                    No line range specified — showing the first ${lines.length} lines
+                    No line range specified - showing the first ${lines.length} lines
                     of each side. Add <code>?from=…&amp;to=…</code> for a targeted diff.
                 </div>
                 ${renderLinesHtml(lines)}

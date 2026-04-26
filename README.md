@@ -5,7 +5,7 @@
 
 # Read Zen Web
 
-**[readzen.pages.dev](https://readzen.pages.dev)** — a zero-install web app for reading, searching, and exploring Chinese Zen texts across the CBETA (~5000 texts) and OpenZen corpora.
+**[readzen.pages.dev](https://readzen.pages.dev)** - a zero-install web app for reading, searching, and exploring Chinese Zen texts across the CBETA (~5000 texts) and OpenZen corpora.
 
 This is the web companion to the [Read Zen desktop app](https://github.com/Fabulu/ReadZen). The web app handles reading, searching, and browsing; the desktop app adds the workbench layer (translation editing, Scholar collections, community sync, qualitative coding, and analytics).
 
@@ -13,21 +13,21 @@ This is the web companion to the [Read Zen desktop app](https://github.com/Fabul
 
 ### Reading
 - Side-by-side Chinese / English bilingual reader with paginated navigation
-- Translator switching — choose between community translations, with star counts showing popularity
+- Translator switching - choose between community translations, with star counts showing popularity
 - Passage links with optional line ranges for sharing specific excerpts
 - Compare mode: two translations side by side against the original
 
 ### Dictionary
-- **Hover dictionary** (mouse) — hover over any Chinese character for instant CC-CEDICT lookup with pinyin, definitions, and grammar particle hints
-- **Click dictionary** (touch/mobile) — tap for the same lookup card
+- **Hover dictionary** (mouse) - hover over any Chinese character for instant CC-CEDICT lookup with pinyin, definitions, and grammar particle hints
+- **Click dictionary** (touch/mobile) - tap for the same lookup card
 - Longest-prefix matching (4→3→2→1 characters) for multi-character terms
 - Dictionary data bucketed into 201 files from 120K+ CC-CEDICT entries for fast loading
 
 ### Search
 - **Title search** with typeahead suggestions for masters and texts
-- **Full-text search** via [Pagefind](https://pagefind.app) — client-side WASM search across the full corpus
+- **Full-text search** via [Pagefind](https://pagefind.app) - client-side WASM search across the full corpus
 - Federated results: master profiles + title matches + full-text hits
-- Master corpus association — searching a master's name surfaces their related texts
+- Master corpus association - searching a master's name surfaces their related texts
 
 ### Zen Masters
 - 301 master profiles with biographical details, dates, schools, and reference links
@@ -79,7 +79,7 @@ build/              Build scripts (Node.js)
 
 ## Data Sources
 
-All data is fetched at runtime from GitHub — nothing is bundled except the dictionary and Pagefind index.
+All data is fetched at runtime from GitHub - nothing is bundled except the dictionary and Pagefind index.
 
 | Data | Source | Repo |
 |------|--------|------|
@@ -127,7 +127,7 @@ node build/shard-master-corpus.js
 Deployed to Cloudflare Pages. Push to `main` triggers automatic deployment.
 
 **Cloudflare Pages limits:**
-- 20,000 files max per deployment — this is why the dictionary is bucketed (12K → 201 files) and the Pagefind index is deployed separately
+- 20,000 files max per deployment - this is why the dictionary is bucketed (12K → 201 files) and the Pagefind index is deployed separately
 
 ### Manual deploy (if GitHub Actions OOMs)
 

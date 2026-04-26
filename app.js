@@ -137,7 +137,7 @@ function renderPlaceholder(route, mount, messages) {
             <div class="passage-fallback visible">
                 <p class="fallback-msg">
                     This link opens in the <strong>Read Zen</strong> desktop app.<br>
-                    If you don't have it yet, download it below — it's free.
+                    If you don't have it yet, download it below - it's free.
                 </p>
                 <a class="btn" href="${RELEASES_URL}">Download Read Zen</a>
                 <p class="fallback-hint">After installing, click the shared link again to open it directly.</p>
