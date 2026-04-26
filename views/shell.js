@@ -170,6 +170,10 @@ export function mountShell(root, route) {
                     <button class="font-btn" id="font-increase" aria-label="Increase text size">A+</button>
                 </p>
                 <p class="shell-foot-pref">
+                    Hover dictionary:
+                    <a href="#" id="hover-dict-toggle" class="shell-foot-toggle"></a>
+                </p>
+                <p class="shell-foot-pref">
                     <a href="#" id="theme-toggle" class="shell-foot-toggle" title="Toggle light/dark theme"></a>
                 </p>
             </footer>
@@ -258,6 +262,19 @@ export function mountShell(root, route) {
             ev.preventDefault();
             setAutoOpenEnabled(!autoOpenOn);
             window.location.reload();
+        });
+    }
+
+    // Hover dictionary toggle
+    const dictToggle = root.querySelector('#hover-dict-toggle');
+    if (dictToggle) {
+        const dictOn = localStorage.getItem('readzen-hover-dict') !== 'off';
+        dictToggle.textContent = dictOn ? 'on' : 'off';
+        dictToggle.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            const nowOn = localStorage.getItem('readzen-hover-dict') !== 'off';
+            localStorage.setItem('readzen-hover-dict', nowOn ? 'off' : 'on');
+            dictToggle.textContent = nowOn ? 'off' : 'on';
         });
     }
 
