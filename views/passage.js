@@ -22,6 +22,7 @@ import * as cache from '../lib/cache.js';
 import { lookupTitle } from '../lib/titles.js';
 import { attachInlineDict } from '../lib/inline-dict.js';
 import { addToList, removeFromList, isInList, setLastRead, resumeLastReadTracking } from '../lib/reading-lists.js';
+import { CITE_STYLES, buildCitation, getPreferredStyle, setPreferredStyle } from '../lib/citation.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const DEFAULT_LIST = 'My Reading List';
@@ -676,28 +677,90 @@ function buildPassageToolbar(route) {
     citeBtn.className = 'btn btn--small';
     citeBtn.textContent = 'Cite';
     citeBtn.addEventListener('click', () => {
-        // Remove existing popup
+        // Toggle: remove existing popup on second click.
         const old = document.querySelector('.cite-popup');
         if (old) { old.remove(); return; }
 
         const title = document.querySelector('#shell-title')?.textContent || route.workId;
         const url = location.origin + location.pathname + '#/' + (route.rawRoute || route.workId);
-        const chicago = '"' + title + '." In ReadZen. ' + url + '.';
 
         const popup = document.createElement('div');
         popup.className = 'cite-popup';
-        popup.innerHTML =
-            '<p class="cite-popup-head">Citation</p>' +
-            '<div class="cite-row"><span class="cite-label">Chicago</span>' +
-            '<code class="cite-text">' + escapeHtml(chicago) + '</code>' +
-            '<button class="btn btn--small cite-copy">Copy</button></div>';
-        popup.querySelector('.cite-copy').addEventListener('click', (ev) => {
-            navigator.clipboard.writeText(chicago).then(() => {
-                ev.target.textContent = 'Copied!';
-                setTimeout(() => { ev.target.textContent = 'Copy'; }, 1500);
-            });
-        });
+
+        // Build popup header.
+        const head = document.createElement('p');
+        head.className = 'cite-popup-head';
+        head.textContent = 'Citation';
+        popup.appendChild(head);
+
+        // Build tab row.
+        const tabRow = document.createElement('div');
+        tabRow.className = 'cite-tabs';
+        popup.appendChild(tabRow);
+
+        // Citation text block.
+        const citeCode = document.createElement('code');
+        citeCode.className = 'cite-text cite-text--block';
+        popup.appendChild(citeCode);
+
+        // Copy button row.
+        const copyRow = document.createElement('div');
+        copyRow.className = 'cite-actions';
+        const citeCopyBtn = document.createElement('button');
+        citeCopyBtn.className = 'btn btn--small cite-copy';
+        citeCopyBtn.textContent = 'Copy';
+        copyRow.appendChild(citeCopyBtn);
+        popup.appendChild(copyRow);
+
+        // Track current active style.
+        let activeStyle = getPreferredStyle();
+
+        function renderStyle(style) {
+            activeStyle = style;
+            setPreferredStyle(style);
+
+            // Update tab states.
+            for (const tab of tabRow.querySelectorAll('.cite-tab')) {
+                tab.classList.toggle('cite-tab--active', tab.dataset.style === style);
+            }
+
+            // Update citation text.
+            const text = buildCitation(style, title, route.workId, url);
+            citeCode.textContent = text;
+
+            // Wire copy button.
+            citeCopyBtn.onclick = () => {
+                navigator.clipboard.writeText(text).then(() => {
+                    citeCopyBtn.textContent = 'Copied!';
+                    setTimeout(() => { citeCopyBtn.textContent = 'Copy'; }, 1500);
+                });
+            };
+        }
+
+        // Create tabs.
+        for (const style of CITE_STYLES) {
+            const tab = document.createElement('button');
+            tab.className = 'cite-tab';
+            tab.dataset.style = style;
+            tab.textContent = style;
+            tab.addEventListener('click', () => renderStyle(style));
+            tabRow.appendChild(tab);
+        }
+
+        // Render initial style.
+        renderStyle(activeStyle);
+
         citeBtn.parentElement.appendChild(popup);
+
+        // Close popup when clicking outside.
+        function onDocClick(ev) {
+            if (!popup.contains(ev.target) && ev.target !== citeBtn) {
+                popup.remove();
+                document.removeEventListener('click', onDocClick, true);
+            }
+        }
+        // Delay registration so the current click doesn't immediately trigger it.
+        setTimeout(() => document.addEventListener('click', onDocClick, true), 0);
     });
     frag.appendChild(citeBtn);
 
