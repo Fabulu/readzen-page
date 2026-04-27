@@ -291,7 +291,7 @@ function forceLayout(nodes, edges, iterations = 150) {
 
 // ── Node shape rendering ──
 
-function drawNodeShape(ctx, node, x, y, r, color, alpha) {
+function drawNodeShape(ctx, node, x, y, r, color, alpha, strokeStyle, lineWidth) {
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
     const type = node.type || 0;
@@ -305,6 +305,7 @@ function drawNodeShape(ctx, node, x, y, r, color, alpha) {
         ctx.lineTo(x - r, y);
         ctx.closePath();
         ctx.fill();
+        if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
     } else if (type === 2) {
         // Master: Hexagon
         ctx.beginPath();
@@ -316,6 +317,7 @@ function drawNodeShape(ctx, node, x, y, r, color, alpha) {
         }
         ctx.closePath();
         ctx.fill();
+        if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
     } else if (type === 3 || type === 4) {
         // Term/Collection: Rounded rect
         const w = r * 2, h = r * 1.4;
@@ -333,11 +335,13 @@ function drawNodeShape(ctx, node, x, y, r, color, alpha) {
         ctx.arcTo(rx, ry, rx + cr, ry, cr);
         ctx.closePath();
         ctx.fill();
+        if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
     } else {
         // Passage: Circle (default, type 0)
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fill();
+        if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
     }
     ctx.globalAlpha = 1;
 }
@@ -362,6 +366,9 @@ function edgeColor(e) {
 
 function initGraph(canvas, nodes, edges, collectionId, user) {
     const ctx = canvas.getContext('2d');
+
+    // Declare easing helper before first use (used in draw())
+    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
 
     // Animated entry: nodes start at scale 0 and grow in
     let entryProgress = 0;
@@ -398,7 +405,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
 
     // ── Resize ──
     function resize() {
-        if (!canvas.isConnected) {
+        if (!document.body.contains(canvas)) {
             window.removeEventListener('resize', resize);
             return;
         }
@@ -499,14 +506,10 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
             const color = nodeColor(n);
             let nodeAlpha = connectedSet && !connectedSet.has(n.id) ? 0.15 : 1.0;
 
-            // Draw shape
-            drawNodeShape(ctx, n, n.x, n.y, r, color, nodeAlpha * entryScale);
-
-            // Stroke
-            ctx.globalAlpha = nodeAlpha * entryScale;
-            ctx.strokeStyle = (n.id === state.hovered || n.id === state.focused) ? '#fff' : 'rgba(0,0,0,0.3)';
-            ctx.lineWidth = (n.id === state.focused) ? 2.5 : 1.2;
-            ctx.stroke();
+            // Draw shape with integrated stroke
+            const strokeColor = (n.id === state.hovered || n.id === state.focused) ? '#fff' : 'rgba(0,0,0,0.3)';
+            const strokeWidth = (n.id === state.focused) ? 2.5 : 1.2;
+            drawNodeShape(ctx, n, n.x, n.y, r, color, nodeAlpha * entryScale, strokeColor, strokeWidth);
 
             // Label below node
             if (state.zoom >= 0.5 && entryScale > 0.3) {
@@ -536,6 +539,8 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         const hit = hitTest(e.offsetX, e.offsetY);
         if (!hit) {
             removeNodeCard();
+            state.focused = null;
+            draw();
             state.dragging = true;
             state.dragStartX = e.clientX;
             state.dragStartY = e.clientY;
@@ -727,7 +732,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         const typeNames = ['Passage', 'Concept', 'Master', 'Term', 'Collection'];
         const typeName = typeNames[node.type || 0];
 
-        let content = `<button class="graph-card-close" onclick="this.closest('.graph-card').remove(); document.querySelector('.graph-card-backdrop')?.remove();">\u2715</button>`;
+        let content = `<button class="graph-card-close">\u2715</button>`;
         content += `<div class="graph-card-type">${typeName}</div>`;
         content += `<div class="graph-card-title">${escapeHtml(node.label)}</div>`;
 
@@ -757,6 +762,13 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         card.innerHTML = content;
         document.body.appendChild(backdrop);
         document.body.appendChild(card);
+
+        const closeBtn = card.querySelector('.graph-card-close');
+        closeBtn.addEventListener('click', () => {
+            state.focused = null;
+            removeNodeCard();
+            draw();
+        });
     }
 
     function removeNodeCard() {
@@ -767,7 +779,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
     // ── Escape key ──
     function onKeyDown(e) {
         if (e.key === 'Escape') {
-        if (!canvas.isConnected) { window.removeEventListener("keydown", onKeyDown); return; }
+        if (!document.body.contains(canvas)) { window.removeEventListener("keydown", onKeyDown); return; }
             removeNodeCard();
             state.focused = null;
             draw();
@@ -777,7 +789,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
 
     // ── Clean up on route change ──
     const popupObserver = new MutationObserver(() => {
-        if (!canvas.isConnected) {
+        if (!document.body.contains(canvas)) {
             removeNodeCard();
             window.removeEventListener('keydown', onKeyDown);
             popupObserver.disconnect();
@@ -810,10 +822,6 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
 
 // ── Helpers ──
 
-function easeOutCubic(t) {
-    return 1 - Math.pow(1 - t, 3);
-}
-
 function graphBounds(nodes) {
     if (nodes.length === 0) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -827,6 +835,7 @@ function graphBounds(nodes) {
 }
 
 function touchDistance(touches) {
+    if (!touches || touches.length < 2) return 0;
     const dx = touches[0].clientX - touches[1].clientX;
     const dy = touches[0].clientY - touches[1].clientY;
     return Math.sqrt(dx * dx + dy * dy);

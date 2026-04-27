@@ -394,10 +394,17 @@ export function mountShell(root, route) {
             researchMenu.hidden = isOpen;
             researchToggle.setAttribute('aria-expanded', !isOpen);
         });
-        document.addEventListener('click', () => {
-            researchMenu.hidden = true;
-            researchToggle.setAttribute('aria-expanded', 'false');
-        });
+        // Store handler reference to prevent duplicates on re-mount
+        if (window._researchMenuCloseHandler) {
+            document.removeEventListener('click', window._researchMenuCloseHandler);
+        }
+        window._researchMenuCloseHandler = () => {
+            if (researchMenu) {
+                researchMenu.hidden = true;
+                researchToggle.setAttribute('aria-expanded', 'false');
+            }
+        };
+        document.addEventListener('click', window._researchMenuCloseHandler);
         researchMenu.querySelectorAll('a').forEach(link => {
             link.addEventListener('click', () => {
                 researchMenu.hidden = true;

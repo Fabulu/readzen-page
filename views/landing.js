@@ -64,9 +64,11 @@ async function loadCommunityCards(mount) {
 
         if (cards.length === 0) { hideCommunitySection(mount); return; }
 
+        if (!scrollEl.isConnected) return; // User navigated away
+
         // Render cards
         scrollEl.innerHTML = cards.map(c => `
-            <a class="community-card" href="#/scholar/${encodeURIComponent(c.id)}//${encodeURIComponent(c.user)}">
+            <div class="community-card" onclick="window.location.hash='#/scholar/${encodeURIComponent(c.id)}//${encodeURIComponent(c.user)}'">
                 <div class="community-card-head">
                     <span class="community-card-avatar">${escapeHtml((c.user[0] || '?').toUpperCase())}</span>
                     <div class="community-card-info">
@@ -77,8 +79,8 @@ async function loadCommunityCards(mount) {
                 <div class="community-card-stats">
                     ${c.passageCount} passages${c.conceptCount ? ' \u00b7 ' + c.conceptCount + ' concepts' : ''}
                 </div>
-                ${c.linkCount > 0 ? `<a class="community-card-graph-link" href="#/scholar/${encodeURIComponent(c.id)}/graph/${encodeURIComponent(c.user)}" onclick="event.stopPropagation()">View Graph \u2192</a>` : ''}
-            </a>
+                ${c.linkCount > 0 ? `<button class="community-card-graph-link" onclick="event.stopPropagation(); window.location.hash='#/scholar/${encodeURIComponent(c.id)}/graph/${encodeURIComponent(c.user)}';">View Graph \u2192</button>` : ''}
+            </div>
         `).join('');
     } catch {
         hideCommunitySection(mount);
