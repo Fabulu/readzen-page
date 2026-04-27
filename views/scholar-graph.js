@@ -872,6 +872,31 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         } else if (node.type === 2) {
             // Master
             if (node.dates) content += `<div class="graph-card-snippet">${escapeHtml(node.dates)}</div>`;
+        } else if (node.type === 3) {
+            // Term node
+            content += `<div class="graph-card-snippet" style="font-size:1.1rem;font-weight:600">${escapeHtml(node.label)}</div>`;
+            content += `<div style="font-size:0.8rem;color:var(--muted);margin-top:0.3rem">Termbase Entry</div>`;
+            if (node.definition) {
+                content += `<div style="font-size:0.85rem;margin-top:0.4rem">${escapeHtml(node.definition)}</div>`;
+            }
+            // Count edges to/from this term
+            const termEdges = edges.filter(e => e.from.id === node.id || e.to.id === node.id);
+            if (termEdges.length > 0) {
+                content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">Used in ${termEdges.length} connection${termEdges.length !== 1 ? 's' : ''}</div>`;
+            }
+        } else if (node.type === 4) {
+            // Collection node
+            content += `<div style="font-size:0.85rem;color:var(--muted)">Collection Reference</div>`;
+            if (node.description) {
+                content += `<div class="graph-card-snippet">${escapeHtml(node.description.slice(0, 100))}</div>`;
+            }
+            if (node.ownerUser) {
+                content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">by ${escapeHtml(node.ownerUser)}</div>`;
+            }
+            const collEdges = edges.filter(e => e.from.id === node.id || e.to.id === node.id);
+            if (collEdges.length > 0) {
+                content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${collEdges.length} connection${collEdges.length !== 1 ? 's' : ''}</div>`;
+            }
         }
 
         // Footer with links
@@ -890,6 +915,16 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         } else if (node.type === 2) {
             const masterName = node.id.startsWith('master:') ? node.id.slice(7) : node.label;
             content += `<a href="#/master/${encodeURIComponent(masterName)}">Master Profile \u2192</a>`;
+        } else if (node.type === 3) {
+            // Term — link to dictionary if we have the source term
+            const term = node.label;
+            content += `<a href="#/dict/${encodeURIComponent(term)}">View in Dictionary \u2192</a>`;
+        } else if (node.type === 4) {
+            // Collection — link to browse it
+            const collId = node.id.startsWith('collection:') ? node.id.slice(11) : node.id;
+            if (node.ownerUser) {
+                content += `<a href="#/scholar/${encodeURIComponent(collId)}//${encodeURIComponent(node.ownerUser)}">Browse Collection \u2192</a>`;
+            }
         }
         content += `</div>`;
 
