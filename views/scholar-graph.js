@@ -146,16 +146,31 @@ export async function render(route, mount, shell) {
     for (const p of passages) {
         const pid = p.id || p.Id || '';
         if (!pid) continue;
-        const label = p.sourceRelPath || p.SourceRelPath || pid;
+        const relPath = p.sourceRelPath || p.SourceRelPath || '';
         const lineage = p.lineage || p.Lineage || '';
+        const label = p.summary || p.Summary
+            || (p.zhText || p.ZhText || '').slice(0, 30)
+            || relPath?.split('/').pop()?.replace(/\.xml$/i, '')
+            || pid;
         nodeMap.set(pid, {
             id: pid,
             type: 0,
             label: label,
             lineage: lineage,
-            sourceRelPath: p.sourceRelPath || p.SourceRelPath || '',
+            sourceRelPath: relPath,
             zhSnippet: p.zhSnippet || p.ZhSnippet || '',
             tags: p.tags || p.Tags || [],
+            zhText: p.zhText || p.ZhText || '',
+            enText: p.enText || p.EnText || '',
+            summary: p.summary || p.Summary || '',
+            notes: p.notes || p.Notes || '',
+            masterNames: p.masterNames || p.MasterNames || [],
+            readingStatus: (p.readingStatus || p.ReadingStatus || '').toLowerCase(),
+            importance: parseInt(p.importance || p.Importance || '0', 10),
+            doctrinalTopic: p.doctrinalTopic || p.DoctrinalTopic || '',
+            literaryForm: p.literaryForm || p.LiteraryForm || '',
+            fromLb: p.fromLb || p.FromLb || '',
+            toLb: p.toLb || p.ToLb || '',
             x: 0, y: 0,
             vx: 0, vy: 0,
             degree: 0,
@@ -173,6 +188,7 @@ export async function render(route, mount, shell) {
             color: c.colorHex || c.ColorHex || '#FF8A65',
             description: c.description || c.Description || '',
             status: c.status || c.Status || 0,
+            tags: c.tags || c.Tags || [],
             x: 0, y: 0,
             vx: 0, vy: 0,
             degree: 0,
@@ -789,12 +805,39 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
 
         // Type-specific content
         if (node.type === 0) {
-            // Passage
-            if (node.zhSnippet) content += `<div class="graph-card-snippet">${escapeHtml(node.zhSnippet)}</div>`;
-            if (node.tags && node.tags.length) content += `<div class="graph-card-tags">${node.tags.slice(0, 4).map(t => `<span class="graph-card-tag">${escapeHtml(t)}</span>`).join('')}</div>`;
+            // Passage: summary highlight
+            if (node.summary) {
+                content += `<div class="graph-card-snippet" style="border-left:2px solid var(--accent);padding-left:0.6rem">${escapeHtml(node.summary)}</div>`;
+            }
+            // Chinese text
+            if (node.zhText) {
+                content += `<div style="font-size:0.82rem;color:var(--text-soft);margin-bottom:0.4rem">${escapeHtml(node.zhText.slice(0, 120))}${node.zhText.length > 120 ? '\u2026' : ''}</div>`;
+            }
+            // English text
+            if (node.enText) {
+                content += `<div style="font-size:0.8rem;opacity:0.8;margin-bottom:0.4rem">${escapeHtml(node.enText.slice(0, 120))}${node.enText.length > 120 ? '\u2026' : ''}</div>`;
+            }
+            // Tags
+            if (node.tags && node.tags.length) {
+                content += `<div class="graph-card-tags">${node.tags.slice(0, 4).map(t => `<span class="graph-card-tag">${escapeHtml(t)}</span>`).join('')}</div>`;
+            }
+            // Masters
+            if (node.masterNames && node.masterNames.length) {
+                content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">Masters: ${escapeHtml(node.masterNames.join(', '))}</div>`;
+            }
+            // Reading status + importance
+            if (node.readingStatus || node.importance > 0) {
+                let meta = '';
+                if (node.readingStatus) meta += node.readingStatus;
+                if (node.importance > 0) meta += (meta ? ' \u00b7 ' : '') + '\u2605'.repeat(node.importance);
+                content += `<div style="font-size:0.75rem;color:var(--muted);margin-top:0.2rem">${escapeHtml(meta)}</div>`;
+            }
         } else if (node.type === 1) {
             // Concept
-            if (node.description) content += `<div class="graph-card-snippet">${escapeHtml(node.description.slice(0, 100))}</div>`;
+            if (node.description) content += `<div class="graph-card-snippet">${escapeHtml(node.description.slice(0, 150))}</div>`;
+            if (node.tags && node.tags.length) {
+                content += `<div class="graph-card-tags">${node.tags.slice(0, 4).map(t => `<span class="graph-card-tag">${escapeHtml(t)}</span>`).join('')}</div>`;
+            }
         } else if (node.type === 2) {
             // Master
             if (node.dates) content += `<div class="graph-card-snippet">${escapeHtml(node.dates)}</div>`;
@@ -803,7 +846,14 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         // Footer with links
         content += `<div class="graph-card-footer">`;
         if (node.type === 0) {
-            content += `<a href="#/scholar/${encodeURIComponent(collectionId)}/${encodeURIComponent(node.id)}/${encodeURIComponent(user)}">View Passage \u2192</a>`;
+            const workId = (node.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';
+            if (workId && node.fromLb) {
+                const range = node.toLb && node.toLb !== node.fromLb
+                    ? `${node.fromLb}-${node.toLb}`
+                    : node.fromLb;
+                content += `<a href="#/${encodeURIComponent(workId)}/${encodeURIComponent(range)}">Open in Reader \u2192</a>`;
+            }
+            content += `<a href="#/scholar/${encodeURIComponent(collectionId)}/${encodeURIComponent(node.id)}/${encodeURIComponent(user)}">View in Collection \u2192</a>`;
         } else if (node.type === 1) {
             content += `<a href="#/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">View Collection \u2192</a>`;
         } else if (node.type === 2) {
