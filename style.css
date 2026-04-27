@@ -3665,13 +3665,13 @@ a.master-appearance-title:hover {
 .graph-card-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 99;
+    z-index: 100;
     background: rgba(0, 0, 0, 0.5);
     animation: fadeIn 0.15s ease-out;
 }
 .graph-card {
     position: fixed;
-    z-index: 100;
+    z-index: 101;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -3801,6 +3801,10 @@ a.master-appearance-title:hover {
     border-color: var(--accent);
     transform: translateY(-2px);
 }
+.community-card:active {
+    transform: translateY(0);
+    opacity: 0.9;
+}
 .community-card--skeleton {
     height: 140px;
     background: linear-gradient(90deg, var(--paper-strong) 0%, var(--paper) 50%, var(--paper-strong) 100%);
@@ -3881,6 +3885,8 @@ a.master-appearance-title:hover {
 .graph-loading { display: flex; align-items: center; justify-content: center; height: 300px; }
 .graph-spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.header-nav-label { display: inline; }
 
 /* ━━ Responsive ━━ */
 @media (max-width: 640px) {

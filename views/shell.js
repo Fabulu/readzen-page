@@ -119,7 +119,7 @@ export function mountShell(root, route) {
                     <kbd class="header-search-kbd">Ctrl K</kbd>
                 </form>
                 <div class="header-nav-dropdown" id="research-dropdown">
-                    <button class="header-nav-trigger" aria-expanded="false">
+                    <button class="header-nav-trigger" aria-expanded="false" aria-label="Research tools menu">
                         <span class="header-nav-label">Research</span>
                         <span class="header-nav-icon">&#9662;</span>
                     </button>

@@ -19,15 +19,27 @@ const NODE_COLORS = ['#6EAFF8', '#FF8A65', '#64B5F6', '#81C784', '#AB47BC'];
 // ── Edge colors by relation type ──
 
 const EDGE_COLORS = {
-    'quotes':        '#d4ab58',
-    'alludes-to':    '#8ca06a',
-    'comments-on':   '#6a8cbc',
-    'contradicts':   '#bc6a6a',
-    'parallels':     '#9a7cbc',
-    'responds-to':   '#bc9a6a',
-    'is-variant-of': '#6abcb0',
-    'translates':    '#7a9abc',
-    'summarizes':    '#bca86a',
+    'quotes':        '#59B3FF',
+    'alludes-to':    '#C854D9',
+    'comments-on':   '#51D996',
+    'contradicts':   '#FF6B6B',
+    'parallels':     '#C854D9',
+    'responds-to':   '#51D996',
+    'is-variant-of': '#59B3FF',
+    'translates':    '#59B3FF',
+    'summarizes':    '#51D996',
+    'evidences':     '#FF8A65',
+    'refutes':       '#FF6B6B',
+    'attributed-to': '#64B5F6',
+    'uses-term':     '#81C784',
+    'subsumes':      '#FF8A65',
+    'opposes':       '#FF6B6B',
+    'related-to':    '#FFB347',
+    'taught-by':     '#64B5F6',
+    'defined-by':    '#81C784',
+    'teacher-of':    '#64B5F6',
+    'same-school':   '#64B5F6',
+    'cross-ref':     '#AB47BC',
 };
 const DEFAULT_EDGE_COLOR = '#888';
 
@@ -160,6 +172,7 @@ export async function render(route, mount, shell) {
             label: c.name || c.Name || '?',
             color: c.colorHex || c.ColorHex || '#FF8A65',
             description: c.description || c.Description || '',
+            status: c.status || c.Status || 0,
             x: 0, y: 0,
             vx: 0, vy: 0,
             degree: 0,
@@ -355,6 +368,7 @@ function nodeRadius(n) {
 }
 
 function nodeColor(n) {
+    if (n.type === 1 && n.status === 1) return '#666'; // deprecated = dim gray
     if (n.type === 1 && n.color) return n.color; // Concept uses custom color
     return NODE_COLORS[n.type || 0];
 }
@@ -473,7 +487,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
             // Ego highlight: only edges directly connected to the ego node
             const egoNodeId = state.focused || state.egoHover;
             const edgeRelevant = egoNodeId && (e.from.id === egoNodeId || e.to.id === egoNodeId);
-            let alpha = egoNodeId ? (edgeRelevant ? 0.8 : 0.15) : 0.6;
+            let alpha = egoNodeId ? (edgeRelevant ? 0.8 : 0.30) : 0.6;
 
             const color = edgeColor(e);
             ctx.globalAlpha = alpha * entryScale;
@@ -510,7 +524,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         for (const n of nodes) {
             const r = nodeRadius(n) * entryScale;
             const color = nodeColor(n);
-            let nodeAlpha = connectedSet && !connectedSet.has(n.id) ? 0.15 : 1.0;
+            let nodeAlpha = connectedSet && !connectedSet.has(n.id) ? 0.30 : 1.0;
 
             // Draw shape with integrated stroke
             const strokeColor = (n.id === state.hovered || n.id === state.focused) ? '#fff' : 'rgba(0,0,0,0.3)';
@@ -759,6 +773,8 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         content += `<div class="graph-card-footer">`;
         if (node.type === 0) {
             content += `<a href="#/scholar/${encodeURIComponent(collectionId)}/${encodeURIComponent(node.id)}/${encodeURIComponent(user)}">View Passage \u2192</a>`;
+        } else if (node.type === 1) {
+            content += `<a href="#/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">View Collection \u2192</a>`;
         } else if (node.type === 2) {
             const masterName = node.id.startsWith('master:') ? node.id.slice(7) : node.label;
             content += `<a href="#/master/${encodeURIComponent(masterName)}">Master Profile \u2192</a>`;
