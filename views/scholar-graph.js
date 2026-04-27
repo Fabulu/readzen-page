@@ -82,7 +82,7 @@ export async function render(route, mount, shell) {
     }
 
     mount.innerHTML = `
-        <div class="lineage-container">
+        <div class="lineage-container lineage-container--scholar">
             <canvas class="lineage-canvas" id="scholar-graph-canvas"></canvas>
             <div class="lineage-controls">
                 <div class="lineage-zoom-btns">
@@ -767,6 +767,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
     // ── Escape key ──
     function onKeyDown(e) {
         if (e.key === 'Escape') {
+        if (!canvas.isConnected) { window.removeEventListener("keydown", onKeyDown); return; }
             removeNodeCard();
             state.focused = null;
             draw();
