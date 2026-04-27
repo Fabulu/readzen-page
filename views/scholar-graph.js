@@ -324,7 +324,7 @@ function drawNodeShape(ctx, node, x, y, r, color, alpha, strokeStyle, lineWidth)
         // Master: Hexagon
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
-            const angle = Math.PI / 3 * i - Math.PI / 6;
+            const angle = Math.PI / 3 * i;
             const px = x + r * Math.cos(angle);
             const py = y + r * Math.sin(angle);
             if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
@@ -456,6 +456,10 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         const h = state.height;
         ctx.clearRect(0, 0, w, h);
 
+        // Dark background to match desktop
+        ctx.fillStyle = '#1E1E23';
+        ctx.fillRect(0, 0, w, h);
+
         // Compute entry animation scale
         const elapsed = performance.now() - entryStart;
         entryProgress = Math.min(elapsed / ENTRY_DURATION, 1.0);
@@ -487,7 +491,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
             // Ego highlight: only edges directly connected to the ego node
             const egoNodeId = state.focused || state.egoHover;
             const edgeRelevant = egoNodeId && (e.from.id === egoNodeId || e.to.id === egoNodeId);
-            let alpha = egoNodeId ? (edgeRelevant ? 0.8 : 0.30) : 0.6;
+            let alpha = egoNodeId ? (edgeRelevant ? 0.8 : 0.35) : 0.6;
 
             const color = edgeColor(e);
             ctx.globalAlpha = alpha * entryScale;
@@ -517,6 +521,18 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
             ctx.fillStyle = color;
             ctx.fill();
 
+            // Edge type labels for ego-relevant edges
+            if (egoNodeId && edgeRelevant && state.zoom >= 0.7) {
+                const midX = (e.from.x + e.to.x) / 2;
+                const midY = (e.from.y + e.to.y) / 2;
+                ctx.font = '9px sans-serif';
+                ctx.fillStyle = color;
+                ctx.globalAlpha = 0.8;
+                ctx.textAlign = 'center';
+                ctx.fillText(e.relationType, midX, midY - 4);
+                ctx.textAlign = 'start';
+            }
+
             ctx.globalAlpha = 1.0;
         }
 
@@ -524,23 +540,31 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         for (const n of nodes) {
             const r = nodeRadius(n) * entryScale;
             const color = nodeColor(n);
-            let nodeAlpha = connectedSet && !connectedSet.has(n.id) ? 0.30 : 1.0;
+            let nodeAlpha = connectedSet && !connectedSet.has(n.id) ? 0.35 : 1.0;
 
             // Draw shape with integrated stroke
-            const strokeColor = (n.id === state.hovered || n.id === state.focused) ? '#fff' : 'rgba(0,0,0,0.3)';
+            const strokeColor = (n.id === state.hovered || n.id === state.focused) ? '#FFD700' : 'rgba(255,255,255,0.6)';
             const strokeWidth = (n.id === state.focused) ? 2.5 : 1.2;
             drawNodeShape(ctx, n, n.x, n.y, r, color, nodeAlpha * entryScale, strokeColor, strokeWidth);
 
             // Label below node
             if (state.zoom >= 0.5 && entryScale > 0.3) {
-                const fontSize = Math.round(11 * Math.min(Math.max(state.zoom, 0.7), 1.5));
+                const fontSize = Math.max(10, Math.round(13 * state.zoom));
                 ctx.font = fontSize + 'px "Segoe UI", Arial, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
-                ctx.fillStyle = '#ddd8d0';
                 ctx.globalAlpha = nodeAlpha * entryScale;
                 const label = n.label.length > 20 ? n.label.substring(0, 19) + '\u2026' : n.label;
-                ctx.fillText(label, n.x, n.y + r + 4);
+                const labelOffset = [4, 6, 5, 8, 8][n.type || 0];
+
+                // Text shadow for readability
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.lineWidth = 3;
+                ctx.lineJoin = 'round';
+                ctx.strokeText(label, n.x, n.y + r + labelOffset);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(label, n.x, n.y + r + labelOffset);
             }
 
             ctx.globalAlpha = 1.0;
@@ -570,6 +594,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         }
     });
 
+    let hoverThrottleTimer = null;
     canvas.addEventListener('mousemove', e => {
         if (state.dragging) {
             state.panX = state.dragPanX + (e.clientX - state.dragStartX);
@@ -577,6 +602,11 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
             draw();
             return;
         }
+
+        // Throttle hover detection
+        if (hoverThrottleTimer) return;
+        hoverThrottleTimer = setTimeout(() => { hoverThrottleTimer = null; }, 16);
+
         const hit = hitTest(e.offsetX, e.offsetY);
         const prev = state.hovered;
         state.hovered = hit ? hit.id : null;
@@ -744,6 +774,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         removeNodeCard();
         const backdrop = document.createElement('div');
         backdrop.className = 'graph-card-backdrop';
+        backdrop.style.background = 'rgba(0, 0, 0, 0.3)';
         backdrop.onclick = removeNodeCard;
 
         const card = document.createElement('div');
@@ -782,6 +813,27 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         content += `</div>`;
 
         card.innerHTML = content;
+
+        // Position near clicked node, not viewport center
+        const rect = canvas.getBoundingClientRect();
+        const sx = node.x * state.zoom + state.panX + rect.left;
+        const sy = node.y * state.zoom + state.panY + rect.top;
+
+        let cardX = sx + 30;
+        let cardY = sy - 50;
+
+        const cardW = 380;
+        const cardH = 350;
+        if (cardX + cardW > window.innerWidth) cardX = sx - cardW - 30;
+        if (cardY < 10) cardY = 10;
+        if (cardY + cardH > window.innerHeight) cardY = window.innerHeight - cardH - 10;
+        cardX = Math.max(10, cardX);
+
+        card.style.position = 'fixed';
+        card.style.left = cardX + 'px';
+        card.style.top = cardY + 'px';
+        card.style.transform = 'none';
+
         document.body.appendChild(backdrop);
         document.body.appendChild(card);
 
