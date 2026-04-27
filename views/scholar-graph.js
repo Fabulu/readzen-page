@@ -324,7 +324,7 @@ function drawNodeShape(ctx, node, x, y, r, color, alpha, strokeStyle, lineWidth)
         // Master: Hexagon
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
-            const angle = Math.PI / 3 * i;
+            const angle = Math.PI / 3 * i - Math.PI / 2; // pointy-top
             const px = x + r * Math.cos(angle);
             const py = y + r * Math.sin(angle);
             if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
