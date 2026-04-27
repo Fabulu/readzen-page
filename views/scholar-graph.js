@@ -4,22 +4,17 @@
 //
 // Route: #/scholar/{collectionId}/graph/{user}
 //
-// Reuses the canvas infrastructure (pan/zoom/touch/hit-test/popup) from
-// lineage-graph.js, adapted for circular nodes and typed edges.
+// Supports SchemaVersion 2 data (concepts, typed edges) with 5 node shapes,
+// ego-on-hover highlighting, popup cards, and animated entry.
 
 import { escapeHtml } from '../lib/format.js';
 import { DATA_REPO_BASE } from '../lib/github.js';
 import { streamJsonl } from '../lib/jsonl.js';
 import * as cache from '../lib/cache.js';
 
-// ── Lineage palette for nodes ──
+// ── Node colors by type ──
 
-const LINEAGE_COLORS = {
-    'Linji':    '#d4ab58',
-    'Caodong':  '#6a8cbc',
-    'Fayan':    '#8ca06a',
-};
-const DEFAULT_NODE_COLOR = '#8b7b69';
+const NODE_COLORS = ['#6EAFF8', '#FF8A65', '#64B5F6', '#81C784', '#AB47BC'];
 
 // ── Edge colors by relation type ──
 
@@ -122,13 +117,20 @@ export async function render(route, mount, shell) {
     const links = collection.links || collection.Links || [];
     const graphLayout = collection.graphLayout || collection.GraphLayout || null;
 
-    if (passages.length === 0) {
+    // Schema v2 support
+    const schemaVersion = collection.schemaVersion || collection.SchemaVersion || 1;
+    const concepts = collection.concepts || collection.Concepts || [];
+    const newEdges = collection.edges || collection.Edges || [];
+
+    if (passages.length === 0 && concepts.length === 0) {
         mount.innerHTML = `<article class="panel lookup-card"><p>This collection has no passages to graph.</p></article>`;
         return;
     }
 
     // Build node map
     const nodeMap = new Map();
+
+    // Passages → type 0
     for (const p of passages) {
         const pid = p.id || p.Id || '';
         if (!pid) continue;
@@ -136,9 +138,28 @@ export async function render(route, mount, shell) {
         const lineage = p.lineage || p.Lineage || '';
         nodeMap.set(pid, {
             id: pid,
+            type: 0,
             label: label,
             lineage: lineage,
             sourceRelPath: p.sourceRelPath || p.SourceRelPath || '',
+            zhSnippet: p.zhSnippet || p.ZhSnippet || '',
+            tags: p.tags || p.Tags || [],
+            x: 0, y: 0,
+            vx: 0, vy: 0,
+            degree: 0,
+        });
+    }
+
+    // Concepts → type 1
+    for (const c of concepts) {
+        const cid = c.id || c.Id || '';
+        if (!cid) continue;
+        nodeMap.set(cid, {
+            id: cid,
+            type: 1,
+            label: c.name || c.Name || '?',
+            color: c.colorHex || c.ColorHex || '#FF8A65',
+            description: c.description || c.Description || '',
             x: 0, y: 0,
             vx: 0, vy: 0,
             degree: 0,
@@ -147,16 +168,34 @@ export async function render(route, mount, shell) {
 
     // Build edges
     const edges = [];
-    for (const link of links) {
-        const fromId = link.fromPassageId || link.FromPassageId || '';
-        const toId = link.toPassageId || link.ToPassageId || '';
-        const relType = link.relationType || link.RelationType || '';
-        const fromNode = nodeMap.get(fromId);
-        const toNode = nodeMap.get(toId);
-        if (fromNode && toNode) {
-            fromNode.degree++;
-            toNode.degree++;
-            edges.push({ from: fromNode, to: toNode, relationType: relType });
+
+    if (schemaVersion >= 2 && newEdges.length > 0) {
+        // Schema v2: use typed edges with fromNodeId/toNodeId
+        for (const edge of newEdges) {
+            const fromId = edge.fromNodeId || edge.FromNodeId || '';
+            const toId = edge.toNodeId || edge.ToNodeId || '';
+            const relType = edge.relationType || edge.RelationType || '';
+            const fromNode = nodeMap.get(fromId);
+            const toNode = nodeMap.get(toId);
+            if (fromNode && toNode) {
+                fromNode.degree++;
+                toNode.degree++;
+                edges.push({ from: fromNode, to: toNode, relationType: relType });
+            }
+        }
+    } else {
+        // Schema v1 fallback: use links (old format)
+        for (const link of links) {
+            const fromId = link.fromPassageId || link.FromPassageId || '';
+            const toId = link.toPassageId || link.ToPassageId || '';
+            const relType = link.relationType || link.RelationType || '';
+            const fromNode = nodeMap.get(fromId);
+            const toNode = nodeMap.get(toId);
+            if (fromNode && toNode) {
+                fromNode.degree++;
+                toNode.degree++;
+                edges.push({ from: fromNode, to: toNode, relationType: relType });
+            }
         }
     }
 
@@ -200,6 +239,8 @@ function forceLayout(nodes, edges, iterations = 150) {
     let temp = R / 5;
 
     for (let iter = 0; iter < iterations; iter++) {
+        let maxDisp = 0;
+
         // Repulsion (all pairs)
         for (let i = 0; i < nodes.length; i++) {
             nodes[i].vx = 0;
@@ -239,9 +280,82 @@ function forceLayout(nodes, edges, iterations = 150) {
             let scale = Math.min(disp, temp) / disp;
             n.x += n.vx * scale;
             n.y += n.vy * scale;
+            if (disp * scale > maxDisp) maxDisp = disp * scale;
         }
         temp *= 0.95;
+
+        // Early exit if layout has converged
+        if (maxDisp < 0.5) break;
     }
+}
+
+// ── Node shape rendering ──
+
+function drawNodeShape(ctx, node, x, y, r, color, alpha) {
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    const type = node.type || 0;
+
+    if (type === 1) {
+        // Concept: Diamond
+        ctx.beginPath();
+        ctx.moveTo(x, y - r);
+        ctx.lineTo(x + r, y);
+        ctx.lineTo(x, y + r);
+        ctx.lineTo(x - r, y);
+        ctx.closePath();
+        ctx.fill();
+    } else if (type === 2) {
+        // Master: Hexagon
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = Math.PI / 3 * i - Math.PI / 6;
+            const px = x + r * Math.cos(angle);
+            const py = y + r * Math.sin(angle);
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+    } else if (type === 3 || type === 4) {
+        // Term/Collection: Rounded rect
+        const w = r * 2, h = r * 1.4;
+        const rx = x - r, ry = y - h / 2;
+        const cr = r * 0.2;
+        ctx.beginPath();
+        ctx.moveTo(rx + cr, ry);
+        ctx.lineTo(rx + w - cr, ry);
+        ctx.arcTo(rx + w, ry, rx + w, ry + cr, cr);
+        ctx.lineTo(rx + w, ry + h - cr);
+        ctx.arcTo(rx + w, ry + h, rx + w - cr, ry + h, cr);
+        ctx.lineTo(rx + cr, ry + h);
+        ctx.arcTo(rx, ry + h, rx, ry + h - cr, cr);
+        ctx.lineTo(rx, ry + cr);
+        ctx.arcTo(rx, ry, rx + cr, ry, cr);
+        ctx.closePath();
+        ctx.fill();
+    } else {
+        // Passage: Circle (default, type 0)
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+}
+
+function nodeRadius(n) {
+    const base = [10, 12, 14, 12, 14][n.type || 0];
+    const scale = [2, 2, 1.5, 1.5, 2][n.type || 0];
+    const cap = [12, 14, 10, 10, 12][n.type || 0];
+    return base + Math.min(n.degree * scale, cap);
+}
+
+function nodeColor(n) {
+    if (n.type === 1 && n.color) return n.color; // Concept uses custom color
+    return NODE_COLORS[n.type || 0];
+}
+
+function edgeColor(e) {
+    return EDGE_COLORS[e.relationType] || DEFAULT_EDGE_COLOR;
 }
 
 // ── Graph engine ──
@@ -249,12 +363,18 @@ function forceLayout(nodes, edges, iterations = 150) {
 function initGraph(canvas, nodes, edges, collectionId, user) {
     const ctx = canvas.getContext('2d');
 
+    // Animated entry: nodes start at scale 0 and grow in
+    let entryProgress = 0;
+    const ENTRY_DURATION = 400; // ms
+    let entryStart = performance.now();
+
     // State
     let state = {
         panX: 0, panY: 0,
         zoom: 1.0,
         focused: null,       // node id or null
         hovered: null,       // node id or null
+        egoHover: null,      // node id for ego highlight on hover
         dragging: false,
         wasDragging: false,
         dragStartX: 0, dragStartY: 0,
@@ -308,23 +428,27 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         return null;
     }
 
-    function nodeRadius(n) {
-        return 16 + Math.min(n.degree * 3, 12);
-    }
-
-    function nodeColor(n) {
-        return LINEAGE_COLORS[n.lineage] || DEFAULT_NODE_COLOR;
-    }
-
-    function edgeColor(e) {
-        return EDGE_COLORS[e.relationType] || DEFAULT_EDGE_COLOR;
-    }
-
     // ── Drawing ──
     function draw() {
         const w = state.width;
         const h = state.height;
         ctx.clearRect(0, 0, w, h);
+
+        // Compute entry animation scale
+        const elapsed = performance.now() - entryStart;
+        entryProgress = Math.min(elapsed / ENTRY_DURATION, 1.0);
+        const entryScale = easeOutCubic(entryProgress);
+
+        // Compute ego set (from focus or hover)
+        const egoId = state.focused || state.egoHover;
+        let connectedSet = null;
+        if (egoId) {
+            connectedSet = new Set([egoId]);
+            for (const e of edges) {
+                if (e.from.id === egoId) connectedSet.add(e.to.id);
+                if (e.to.id === egoId) connectedSet.add(e.from.id);
+            }
+        }
 
         ctx.save();
         ctx.translate(state.panX, state.panY);
@@ -333,13 +457,13 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         // Draw edges
         for (const e of edges) {
             let alpha = 0.6;
-            if (state.focused) {
-                const relevant = isConnected(e.from.id, state.focused) || isConnected(e.to.id, state.focused);
+            if (connectedSet) {
+                const relevant = connectedSet.has(e.from.id) || connectedSet.has(e.to.id);
                 alpha = relevant ? 0.8 : 0.15;
             }
 
             const color = edgeColor(e);
-            ctx.globalAlpha = alpha;
+            ctx.globalAlpha = alpha * entryScale;
             ctx.beginPath();
             ctx.moveTo(e.from.x, e.from.y);
             ctx.lineTo(e.to.x, e.to.y);
@@ -371,31 +495,27 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
 
         // Draw nodes
         for (const n of nodes) {
-            const r = nodeRadius(n);
+            const r = nodeRadius(n) * entryScale;
             const color = nodeColor(n);
-            let nodeAlpha = 1.0;
-            if (state.focused && !isConnected(n.id, state.focused)) {
-                nodeAlpha = 0.15;
-            }
+            let nodeAlpha = connectedSet && !connectedSet.has(n.id) ? 0.15 : 1.0;
 
-            ctx.globalAlpha = nodeAlpha;
+            // Draw shape
+            drawNodeShape(ctx, n, n.x, n.y, r, color, nodeAlpha * entryScale);
 
-            // Circle
-            ctx.beginPath();
-            ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
-            ctx.fillStyle = color;
-            ctx.fill();
+            // Stroke
+            ctx.globalAlpha = nodeAlpha * entryScale;
             ctx.strokeStyle = (n.id === state.hovered || n.id === state.focused) ? '#fff' : 'rgba(0,0,0,0.3)';
             ctx.lineWidth = (n.id === state.focused) ? 2.5 : 1.2;
             ctx.stroke();
 
             // Label below node
-            if (state.zoom >= 0.5) {
+            if (state.zoom >= 0.5 && entryScale > 0.3) {
                 const fontSize = Math.round(11 * Math.min(Math.max(state.zoom, 0.7), 1.5));
                 ctx.font = fontSize + 'px "Segoe UI", Arial, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.fillStyle = '#ddd8d0';
+                ctx.globalAlpha = nodeAlpha * entryScale;
                 const label = n.label.length > 20 ? n.label.substring(0, 19) + '\u2026' : n.label;
                 ctx.fillText(label, n.x, n.y + r + 4);
             }
@@ -404,13 +524,18 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         }
 
         ctx.restore();
+
+        // Continue animation if not done
+        if (entryProgress < 1.0) {
+            requestAnimationFrame(draw);
+        }
     }
 
     // ── Interaction: mouse ──
     canvas.addEventListener('mousedown', e => {
         const hit = hitTest(e.offsetX, e.offsetY);
         if (!hit) {
-            removeNodePopup();
+            removeNodeCard();
             state.dragging = true;
             state.dragStartX = e.clientX;
             state.dragStartY = e.clientY;
@@ -430,6 +555,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         const hit = hitTest(e.offsetX, e.offsetY);
         const prev = state.hovered;
         state.hovered = hit ? hit.id : null;
+        state.egoHover = hit ? hit.id : null;
         canvas.style.cursor = hit ? 'pointer' : 'grab';
         if (prev !== state.hovered) draw();
     });
@@ -448,13 +574,14 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
 
     canvas.addEventListener('mouseleave', () => {
         state.dragging = false;
-        if (state.hovered) {
+        if (state.hovered || state.egoHover) {
             state.hovered = null;
+            state.egoHover = null;
             draw();
         }
     });
 
-    // ── Click: focus / popup ──
+    // ── Click: focus / popup card ──
     canvas.addEventListener('click', e => {
         if (state.dragging) return;
         if (state.wasDragging) { state.wasDragging = false; return; }
@@ -462,10 +589,10 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         if (hit) {
             state.focused = hit.id;
             draw();
-            showNodePopup(hit);
+            showNodeCard(hit);
         } else {
             state.focused = null;
-            removeNodePopup();
+            removeNodeCard();
             draw();
         }
     });
@@ -473,7 +600,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
     // ── Wheel zoom ──
     canvas.addEventListener('wheel', e => {
         e.preventDefault();
-        removeNodePopup();
+        removeNodeCard();
         const factor = e.deltaY < 0 ? 1.1 : 0.9;
         const newZoom = Math.min(5.0, Math.max(0.1, state.zoom * factor));
         const mx = e.offsetX;
@@ -490,10 +617,9 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
     let touchPanning = false;
     let touchStartTime = 0;
     let touchStartPos = { x: 0, y: 0 };
-    let lastTapTime = 0;
 
     canvas.addEventListener('touchstart', e => {
-        removeNodePopup();
+        removeNodeCard();
         if (e.touches.length === 1) {
             touchPanning = true;
             state.dragStartX = e.touches[0].clientX;
@@ -557,10 +683,10 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
                 if (hit) {
                     state.focused = hit.id;
                     draw();
-                    showNodePopup(hit);
+                    showNodeCard(hit);
                 } else {
                     state.focused = null;
-                    removeNodePopup();
+                    removeNodeCard();
                     draw();
                 }
             }
@@ -572,7 +698,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
     const zoomBtns = canvas.parentElement.querySelectorAll('.lineage-zoom-btn');
     for (const btn of zoomBtns) {
         btn.addEventListener('click', () => {
-            removeNodePopup();
+            removeNodeCard();
             const dir = btn.dataset.dir;
             if (dir === 'reset') {
                 state.zoom = 1.0;
@@ -588,39 +714,60 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         });
     }
 
-    // ── Popup ──
-    function showNodePopup(node) {
-        removeNodePopup();
-        const rect = canvas.getBoundingClientRect();
-        const sx = node.x * state.zoom + state.panX + rect.left;
-        const sy = node.y * state.zoom + state.panY + rect.top;
+    // ── Popup Card ──
+    function showNodeCard(node) {
+        removeNodeCard();
+        const backdrop = document.createElement('div');
+        backdrop.className = 'graph-card-backdrop';
+        backdrop.onclick = removeNodeCard;
 
-        const meta = [node.sourceRelPath, node.lineage].filter(Boolean).join(' \u00b7 ');
-        const cid = collectionId;
-        const pid = node.id;
+        const card = document.createElement('div');
+        card.className = 'graph-card';
 
-        const popup = document.createElement('div');
-        popup.className = 'lineage-popup';
-        popup.style.left = sx + 'px';
-        popup.style.top = (sy - 10) + 'px';
-        popup.innerHTML =
-            '<strong>' + escapeHtml(node.label || '') + '</strong>' +
-            (meta ? '<br><span class="lineage-popup-meta">' + escapeHtml(meta) + '</span>' : '') +
-            '<div class="lineage-popup-actions">' +
-            '<a href="#/scholar/' + encodeURIComponent(cid) + '/' + encodeURIComponent(pid) + '/' + encodeURIComponent(user) + '">View Passage</a>' +
-            '</div>';
-        popup.querySelectorAll('a').forEach(a => a.addEventListener('click', () => removeNodePopup()));
-        document.body.appendChild(popup);
+        const typeNames = ['Passage', 'Concept', 'Master', 'Term', 'Collection'];
+        const typeName = typeNames[node.type || 0];
+
+        let content = `<button class="graph-card-close" onclick="this.closest('.graph-card').remove(); document.querySelector('.graph-card-backdrop')?.remove();">\u2715</button>`;
+        content += `<div class="graph-card-type">${typeName}</div>`;
+        content += `<div class="graph-card-title">${escapeHtml(node.label)}</div>`;
+
+        // Type-specific content
+        if (node.type === 0) {
+            // Passage
+            if (node.zhSnippet) content += `<div class="graph-card-snippet">${escapeHtml(node.zhSnippet)}</div>`;
+            if (node.tags && node.tags.length) content += `<div class="graph-card-tags">${node.tags.slice(0, 4).map(t => `<span class="graph-card-tag">${escapeHtml(t)}</span>`).join('')}</div>`;
+        } else if (node.type === 1) {
+            // Concept
+            if (node.description) content += `<div class="graph-card-snippet">${escapeHtml(node.description.slice(0, 100))}</div>`;
+        } else if (node.type === 2) {
+            // Master
+            if (node.dates) content += `<div class="graph-card-snippet">${escapeHtml(node.dates)}</div>`;
+        }
+
+        // Footer with links
+        content += `<div class="graph-card-footer">`;
+        if (node.type === 0) {
+            content += `<a href="#/scholar/${encodeURIComponent(collectionId)}/${encodeURIComponent(node.id)}/${encodeURIComponent(user)}">View Passage \u2192</a>`;
+        } else if (node.type === 2) {
+            const masterName = node.id.startsWith('master:') ? node.id.slice(7) : node.label;
+            content += `<a href="#/master/${encodeURIComponent(masterName)}">Master Profile \u2192</a>`;
+        }
+        content += `</div>`;
+
+        card.innerHTML = content;
+        document.body.appendChild(backdrop);
+        document.body.appendChild(card);
     }
 
-    function removeNodePopup() {
-        document.querySelectorAll('.lineage-popup').forEach(el => el.remove());
+    function removeNodeCard() {
+        document.querySelector('.graph-card-backdrop')?.remove();
+        document.querySelector('.graph-card')?.remove();
     }
 
     // ── Escape key ──
     function onKeyDown(e) {
         if (e.key === 'Escape') {
-            removeNodePopup();
+            removeNodeCard();
             state.focused = null;
             draw();
         }
@@ -630,7 +777,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
     // ── Clean up on route change ──
     const popupObserver = new MutationObserver(() => {
         if (!canvas.isConnected) {
-            removeNodePopup();
+            removeNodeCard();
             window.removeEventListener('keydown', onKeyDown);
             popupObserver.disconnect();
         }
@@ -661,6 +808,10 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
 }
 
 // ── Helpers ──
+
+function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+}
 
 function graphBounds(nodes) {
     if (nodes.length === 0) return null;

@@ -8,6 +8,7 @@ import { loadMasters } from './master.js';
 import { initGraph } from './lineage-graph.js';
 import { escapeHtml } from '../lib/format.js';
 import { initTypeahead } from '../lib/typeahead.js';
+import { DATA_REPO_BASE } from '../lib/github.js';
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 const SOURCE_URL = 'https://github.com/Fabulu/ReadZen';
@@ -22,6 +23,72 @@ const START_HERE = [
     { id: 'J24nB137', zh: '\u8D99\u5DDE\u548C\u5C1A\u8A9E\u9304', en: 'Recorded Sayings of Zhaozhou' },
     { id: 'T47n1987B', zh: '\u64AB\u5DDE\u66F9\u5C71\u672C\u5BC2\u79AA\u5E2B\u8A9E\u9304', en: 'Record of Caoshan Benji' }
 ];
+
+async function loadCommunityCards(mount) {
+    const scrollEl = mount.querySelector('#community-research-scroll');
+    if (!scrollEl) return;
+
+    try {
+        // Fetch INDEX.json
+        const indexResp = await fetch(DATA_REPO_BASE + 'community/INDEX.json');
+        if (!indexResp.ok) { hideCommunitySection(mount); return; }
+        const indexData = await indexResp.json();
+        const users = (indexData.users || []).filter(u => u.collections > 0).slice(0, 5);
+        if (users.length === 0) { hideCommunitySection(mount); return; }
+
+        // Load first collection per user for card data
+        const cards = [];
+        for (const u of users.slice(0, 4)) {
+            try {
+                const url = `${DATA_REPO_BASE}community/collections/${encodeURIComponent(u.name)}.jsonl`;
+                const resp = await fetch(url);
+                if (!resp.ok) continue;
+                const text = await resp.text();
+                const firstLine = text.split('\n').find(l => l.trim());
+                if (!firstLine) continue;
+                const coll = JSON.parse(firstLine);
+                const passages = coll.passages || coll.Passages || [];
+                const concepts = coll.concepts || coll.Concepts || [];
+                const links = coll.links || coll.Links || [];
+                cards.push({
+                    user: u.name,
+                    name: coll.name || coll.Name || 'Untitled',
+                    id: coll.id || coll.Id || '',
+                    passageCount: passages.length,
+                    conceptCount: concepts.length,
+                    linkCount: links.length,
+                });
+            } catch { /* skip failed user */ }
+            if (cards.length >= 4) break;
+        }
+
+        if (cards.length === 0) { hideCommunitySection(mount); return; }
+
+        // Render cards
+        scrollEl.innerHTML = cards.map(c => `
+            <a class="community-card" href="#/scholar/${encodeURIComponent(c.id)}//${encodeURIComponent(c.user)}">
+                <div class="community-card-head">
+                    <span class="community-card-avatar">${escapeHtml((c.user[0] || '?').toUpperCase())}</span>
+                    <div class="community-card-info">
+                        <span class="community-card-title">${escapeHtml(c.name)}</span>
+                        <span class="community-card-user">by ${escapeHtml(c.user)}</span>
+                    </div>
+                </div>
+                <div class="community-card-stats">
+                    ${c.passageCount} passages${c.conceptCount ? ' \u00b7 ' + c.conceptCount + ' concepts' : ''}
+                </div>
+                ${c.linkCount > 0 ? `<a class="community-card-graph-link" href="#/scholar/${encodeURIComponent(c.id)}/graph/${encodeURIComponent(c.user)}" onclick="event.stopPropagation()">View Graph \u2192</a>` : ''}
+            </a>
+        `).join('');
+    } catch {
+        hideCommunitySection(mount);
+    }
+}
+
+function hideCommunitySection(mount) {
+    const section = mount.querySelector('#community-research');
+    if (section) section.style.display = 'none';
+}
 
 /** Returns `true` when there is no route (or an empty one). */
 export function match(route) {
@@ -107,6 +174,19 @@ export function render(_route, mount, shell) {
                     <a class="btn btn--outline btn--small" href="#/lineage">Open Full Screen</a>
                     <a class="btn btn--outline btn--small" href="#/masters">Browse All Masters</a>
                     <button class="btn btn--outline btn--small" id="random-master-btn">\uD83C\uDFB2 Random Master</button>
+                </div>
+            </div>
+
+            <div class="community-research" id="community-research">
+                <h3 class="community-research-heading">Community Research</h3>
+                <p class="community-research-desc">Browse knowledge graphs and passage collections shared by scholars.</p>
+                <div class="community-research-scroll" id="community-research-scroll">
+                    <div class="community-card community-card--skeleton"></div>
+                    <div class="community-card community-card--skeleton"></div>
+                    <div class="community-card community-card--skeleton"></div>
+                </div>
+                <div class="community-research-cta">
+                    <a class="text-link" href="#/scholar">Browse All Collections \u2192</a>
                 </div>
             </div>
 
@@ -417,4 +497,7 @@ export function render(_route, mount, shell) {
             if (wrap) wrap.innerHTML = '<p style="text-align:center;opacity:0.5;padding:2rem;">Could not load lineage data.</p>';
         });
     }
+
+    // ── Community research cards (async, non-blocking) ──
+    loadCommunityCards(mount);
 }

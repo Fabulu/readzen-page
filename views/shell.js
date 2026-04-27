@@ -118,6 +118,17 @@ export function mountShell(root, route) {
                            type="text" placeholder="Search texts..." />
                     <kbd class="header-search-kbd">Ctrl K</kbd>
                 </form>
+                <div class="header-nav-dropdown" id="research-dropdown">
+                    <button class="header-nav-trigger" aria-expanded="false">
+                        <span class="header-nav-label">Research</span>
+                        <span class="header-nav-icon">&#9662;</span>
+                    </button>
+                    <div class="header-nav-menu" id="research-menu" hidden>
+                        <a class="header-nav-item" href="#/scholar">Browse Collections</a>
+                        <a class="header-nav-item" href="#/lineage">Lineage Graph</a>
+                        <a class="header-nav-item" href="#/masters">Zen Masters</a>
+                    </div>
+                </div>
                 <div class="shell-route" id="shell-route-box">
                     <span class="route-chip" id="route-chip" hidden></span>
                     <span class="route-chip route-chip--corpus" id="corpus-chip" hidden></span>
@@ -370,6 +381,28 @@ export function mountShell(root, route) {
         });
         headerSearchInput.addEventListener('blur', () => {
             setTimeout(() => headerSearchForm.classList.remove('header-search--expanded'), 200);
+        });
+    }
+
+    // Research dropdown toggle
+    const researchToggle = root.querySelector('#research-dropdown .header-nav-trigger');
+    const researchMenu = root.querySelector('#research-menu');
+    if (researchToggle && researchMenu) {
+        researchToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = !researchMenu.hidden;
+            researchMenu.hidden = isOpen;
+            researchToggle.setAttribute('aria-expanded', !isOpen);
+        });
+        document.addEventListener('click', () => {
+            researchMenu.hidden = true;
+            researchToggle.setAttribute('aria-expanded', 'false');
+        });
+        researchMenu.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', () => {
+                researchMenu.hidden = true;
+                researchToggle.setAttribute('aria-expanded', 'false');
+            });
         });
     }
 
