@@ -13,7 +13,56 @@ import { DATA_REPO_BASE } from '../lib/github.js';
 import { streamJsonl } from '../lib/jsonl.js';
 import * as cache from '../lib/cache.js';
 
+function formatDate(iso) {
+    if (!iso) return '';
+    try {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch { return ''; }
+}
+
+function extractWorkId(relPath) {
+    if (!relPath) return '';
+    const base = relPath.split('/').pop().replace(/\.xml$/i, '');
+    return base;
+}
+
 const COLLECTION_CACHE_TTL_MS = 10 * 60 * 1000;
+
+async function loadScholarIndex() {
+    const key = 'scholar:index';
+    const cached = cache.get(key);
+    if (cached) return cached;
+
+    // Try INDEX.json first
+    try {
+        const url = DATA_REPO_BASE + 'community/INDEX.json';
+        const resp = await fetch(url);
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data.users && Array.isArray(data.users)) {
+                cache.set(key, data.users, 10 * 60 * 1000);
+                return data.users;
+            }
+        }
+    } catch {}
+
+    // Fallback: GitHub API directory listing
+    try {
+        const resp = await fetch('https://api.github.com/repos/Fabulu/CbetaZenTranslations/contents/community/collections');
+        if (resp.ok) {
+            const entries = await resp.json();
+            const users = entries
+                .filter(e => e.type === 'file' && e.name.endsWith('.jsonl'))
+                .map(e => ({ name: e.name.replace(/\.jsonl$/, ''), collections: 0 }));
+            cache.set(key, users, 10 * 60 * 1000);
+            return users;
+        }
+    } catch {}
+
+    return [];
+}
 
 export function match(route) {
     return route && route.kind === 'scholar';
@@ -42,6 +91,43 @@ export async function render(route, mount, shell) {
         'source, and share collection links like this one with your community.'
     );
 
+    if (!user && !collectionId) {
+        // Show user selector
+        shell.setTitle('Scholar Collections');
+        shell.setContext('Community');
+
+        const users = await loadScholarIndex();
+        shell.hideStatus();
+
+        if (users.length === 0) {
+            mount.innerHTML = `<section class="list-wrap"><div class="list-empty"><p>No scholar collections have been published yet.</p></div></section>`;
+            return;
+        }
+
+        const cards = users.map(u => {
+            const name = u.name || u;
+            const initial = (typeof name === 'string' ? name[0] : '?').toUpperCase();
+            const count = u.collections || '';
+            const countLabel = count ? `${count} collection${count !== 1 ? 's' : ''}` : 'View collections';
+            return `<a class="scholar-user-card" href="#/scholar///${encodeURIComponent(name)}">
+                <span class="scholar-user-avatar">${escapeHtml(initial)}</span>
+                <span class="scholar-user-info">
+                    <span class="scholar-user-name">${escapeHtml(name)}</span>
+                    <span class="scholar-user-stats">${escapeHtml(countLabel)}</span>
+                </span>
+            </a>`;
+        }).join('');
+
+        mount.innerHTML = `<section class="list-wrap">
+            <header class="list-head">
+                <h2 class="list-title">Scholar Collections</h2>
+                <p class="list-sub">Browse published research collections from the community</p>
+            </header>
+            <div class="scholar-user-grid">${cards}</div>
+        </section>`;
+        return;
+    }
+
     if (!user) {
         shell.showError(
             'Missing user',
@@ -68,6 +154,39 @@ export async function render(route, mount, shell) {
 
     try {
         const collections = await loadCollections(user, url);
+
+        if (user && !collectionId) {
+            // Show this user's collection list
+            shell.setTitle(`${user}'s Collections`);
+            shell.hideStatus();
+
+            if (!collections || collections.length === 0) {
+                mount.innerHTML = `<section class="list-wrap"><div class="list-empty"><p>No collections found for ${escapeHtml(user)}.</p></div></section>`;
+                return;
+            }
+
+            const cards = collections.map(c => {
+                const cName = c.name || c.Name || c.id || c.Id || 'Untitled';
+                const cId = c.id || c.Id || '';
+                const passages = c.passages || c.Passages || [];
+                const cTags = c.tags || c.Tags || [];
+                const desc = c.description || c.Description || '';
+                return `<a class="scholar-collection-card" href="#/scholar/${encodeURIComponent(cId)}//${encodeURIComponent(user)}">
+                    <span class="scholar-collection-card-title">${escapeHtml(cName)}</span>
+                    <span class="scholar-collection-card-meta">${passages.length} passage${passages.length !== 1 ? 's' : ''}${desc ? ' · ' + escapeHtml(desc.slice(0, 60)) : ''}</span>
+                    ${cTags.length ? `<span class="scholar-row-tags">${cTags.slice(0, 3).map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('')}</span>` : ''}
+                </a>`;
+            }).join('');
+
+            mount.innerHTML = `<section class="list-wrap">
+                <header class="list-head">
+                    <h2 class="list-title">${escapeHtml(user)}'s Collections</h2>
+                    <p class="list-sub">${collections.length} collection${collections.length !== 1 ? 's' : ''}</p>
+                </header>
+                <div class="scholar-user-grid">${cards}</div>
+            </section>`;
+            return;
+        }
 
         // Locate target collection.
         let collection = null;
@@ -143,6 +262,21 @@ function renderCollectionMode(collection, user, shell) {
     titleEl.textContent = name;
     subEl.textContent = `${passages.length} passage${passages.length === 1 ? '' : 's'} · by ${user}`;
 
+    // Graph button (only shown if the collection has inter-passage links)
+    const links = collection.links || collection.Links || [];
+    if (links.length > 0) {
+        const cid = collection.id || collection.Id || '';
+        const graphHref = '#/scholar/' + encodeURIComponent(cid) + '/graph/' + encodeURIComponent(user);
+        const headEl = document.querySelector('#scholar-head');
+        if (headEl) {
+            const graphLink = document.createElement('a');
+            graphLink.className = 'btn btn--small';
+            graphLink.href = graphHref;
+            graphLink.textContent = 'View Graph';
+            headEl.appendChild(graphLink);
+        }
+    }
+
     const tagsChips = tags && tags.length
         ? `<div class="scholar-tags">${tags.map((t) => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('')}</div>`
         : '';
@@ -161,35 +295,35 @@ function renderCollectionMode(collection, user, shell) {
         const relPath = p.sourceRelPath || p.SourceRelPath || '';
         const zh = p.zhText || p.ZhText || '';
         const en = p.enText || p.EnText || '';
-        const notes = p.notes || p.Notes || '';
         const fromLb = p.fromLb || p.FromLb || '';
         const toLb = p.toLb || p.ToLb || '';
         const rangeLabel = fromLb
             ? (toLb && toLb !== fromLb ? `${fromLb} – ${toLb}` : fromLb)
             : '';
 
+        const summary = p.summary || p.Summary || '';
+        const readingStatus = (p.readingStatus || p.ReadingStatus || '').toLowerCase();
+        const importance = Math.min(5, Math.max(0, parseInt(p.importance || p.Importance || '0', 10)));
+        const pTags = p.tags || p.Tags || [];
+        const masters = p.masterNames || p.MasterNames || [];
+
+        const displayTitle = summary || (zh.length > 60 ? zh.slice(0, 60) + '\u2026' : zh) || (en.length > 60 ? en.slice(0, 60) + '\u2026' : en) || '(untitled)';
+
         const href = '#/scholar/' + encodeURIComponent(cid) + '/' + encodeURIComponent(pid) + '/' + encodeURIComponent(user);
-        const snippet = (zh || en).trim().replace(/\s+/g, ' ').substring(0, 80);
-        const snippetHtml = snippet
-            ? `<span class="scholar-row-snippet">${escapeHtml(snippet)}${(zh || en).length > 80 ? '…' : ''}</span>`
-            : '<span class="scholar-row-snippet scholar-row-snippet--missing">[no text]</span>';
 
-        const notesLine = notes
-            ? `<span class="scholar-row-notes">${escapeHtml(notes.substring(0, 120))}${notes.length > 120 ? '…' : ''}</span>`
-            : '';
-
-        return `
-            <a class="scholar-row" href="${escapeHtml(href)}">
-                <span class="scholar-row-meta">
-                    <span class="scholar-row-path">${escapeHtml(relPath || '—')}</span>
-                    ${rangeLabel ? `<span class="scholar-row-range">${escapeHtml(rangeLabel)}</span>` : ''}
-                </span>
-                <span class="scholar-row-text">
-                    ${snippetHtml}
-                    ${notesLine}
-                </span>
-            </a>
-        `;
+        return `<a class="scholar-row" href="${escapeHtml(href)}">
+    ${readingStatus ? `<span class="scholar-row-status"><span class="status-dot status-dot--${escapeHtml(readingStatus)}"></span></span>` : ''}
+    <span class="scholar-row-body">
+        <span class="scholar-row-summary">${escapeHtml(displayTitle)}</span>
+        <span class="scholar-row-meta-line">
+            <span class="scholar-row-path">${escapeHtml(relPath || '\u2014')}</span>
+            ${rangeLabel ? `<span class="scholar-row-range">${escapeHtml(rangeLabel)}</span>` : ''}
+            ${masters.length ? `<span class="scholar-row-masters">${escapeHtml(masters.slice(0, 2).join(', '))}${masters.length > 2 ? ' +' + (masters.length - 2) : ''}</span>` : ''}
+        </span>
+        ${pTags.length ? `<span class="scholar-row-tags">${pTags.slice(0, 3).map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('')}${pTags.length > 3 ? `<span class="tag-chip">+${pTags.length - 3}</span>` : ''}</span>` : ''}
+    </span>
+    ${importance > 0 ? `<span class="scholar-row-importance">${'\u2605'.repeat(importance)}${'\u2606'.repeat(5 - importance)}</span>` : ''}
+</a>`;
     }).join('');
 
     body.innerHTML = `
@@ -240,6 +374,14 @@ function renderPassageMode(collection, passageId, user, _shell) {
     const literaryForm = p.literaryForm || p.LiteraryForm || '';
     const lineage = p.lineage || p.Lineage || '';
     const rhetoricalFunction = p.rhetoricalFunction || p.RhetoricalFunction || '';
+    const summary = p.summary || p.Summary || '';
+    const readingStatus = (p.readingStatus || p.ReadingStatus || '').toLowerCase();
+    const importance = Math.min(5, Math.max(0, parseInt(p.importance || p.Importance || '0', 10)));
+    const annotationType = (p.annotationType || p.AnnotationType || '').toLowerCase();
+    const linkedTexts = p.linkedTexts || p.LinkedTexts || [];
+    const createdBy = p.createdBy || p.CreatedBy || '';
+    const addedUtc = p.addedUtc || p.AddedUtc || '';
+    const modifiedUtc = p.modifiedUtc || p.ModifiedUtc || '';
 
     const prev = passages[idx - 1];
     const next = passages[idx + 1];
@@ -259,10 +401,15 @@ function renderPassageMode(collection, passageId, user, _shell) {
         const range = toLb && toLb !== fromLb ? `${fromLb} – ${toLb}` : (fromLb || toLb);
         metaLines.push(`<dt>Range</dt><dd>${escapeHtml(range)}</dd>`);
     }
+    if (readingStatus) metaLines.push(`<dt>Status</dt><dd><span class="status-dot status-dot--${escapeHtml(readingStatus)}"></span> ${escapeHtml(readingStatus)}</dd>`);
+    if (importance > 0) metaLines.push(`<dt>Importance</dt><dd class="scholar-stars">${'\u2605'.repeat(importance)}${'\u2606'.repeat(5 - importance)}</dd>`);
     if (doctrinalTopic) metaLines.push(`<dt>Doctrine</dt><dd>${escapeHtml(doctrinalTopic)}</dd>`);
     if (literaryForm)   metaLines.push(`<dt>Form</dt><dd>${escapeHtml(literaryForm)}</dd>`);
     if (lineage)        metaLines.push(`<dt>Lineage</dt><dd>${escapeHtml(lineage)}</dd>`);
     if (rhetoricalFunction) metaLines.push(`<dt>Function</dt><dd>${escapeHtml(rhetoricalFunction)}</dd>`);
+    if (createdBy) metaLines.push(`<dt>Added by</dt><dd>${escapeHtml(createdBy)}</dd>`);
+    if (addedUtc) metaLines.push(`<dt>Added</dt><dd>${formatDate(addedUtc)}</dd>`);
+    if (modifiedUtc && modifiedUtc !== addedUtc) metaLines.push(`<dt>Modified</dt><dd>${formatDate(modifiedUtc)}</dd>`);
 
     const tagsHtml = tags && tags.length
         ? `<div class="scholar-tags">${tags.map((t) => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('')}</div>`
@@ -271,11 +418,24 @@ function renderPassageMode(collection, passageId, user, _shell) {
         ? `<div class="scholar-masters"><strong>Masters:</strong> ${escapeHtml(masters.join(', '))}</div>`
         : '';
 
+    const annotationHtml = annotationType ? `<span class="scholar-annotation-label">[${escapeHtml(annotationType.toUpperCase())}]</span> ` : '';
+
+    const linkedTextsHtml = linkedTexts.length ? `<details class="scholar-linked-texts">
+    <summary>Appears in ${linkedTexts.length} text${linkedTexts.length !== 1 ? 's' : ''}</summary>
+    <ul>${linkedTexts.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>
+</details>` : '';
+
+    const workId = extractWorkId(relPath);
+    const readerHref = workId && fromLb ? `#/${encodeURIComponent(workId)}/${encodeURIComponent(fromLb)}${toLb && toLb !== fromLb ? '-' + encodeURIComponent(toLb) : ''}` : '';
+    const openReaderHtml = readerHref ? `<a class="btn btn--small scholar-open-reader" href="${readerHref}">Open in Reader \u2197</a>` : '';
+
     body.innerHTML = `
         <nav class="scholar-nav">
             ${prevHref ? `<a class="text-link" href="${escapeHtml(prevHref)}">← Previous</a>` : '<span class="text-link" aria-disabled="true">← Previous</span>'}
             ${nextHref ? `<a class="text-link" href="${escapeHtml(nextHref)}">Next →</a>`     : '<span class="text-link" aria-disabled="true">Next →</span>'}
         </nav>
+
+        ${summary ? `<div class="scholar-summary-box">${escapeHtml(summary)}</div>` : ''}
 
         <div class="preview-grid scholar-passage-grid">
             <article class="panel">
@@ -295,7 +455,9 @@ function renderPassageMode(collection, passageId, user, _shell) {
         ${tagsHtml}
         ${mastersHtml}
         ${metaLines.length ? `<dl class="scholar-meta">${metaLines.join('')}</dl>` : ''}
-        ${notes ? `<div class="scholar-notes"><strong>Notes.</strong> ${escapeHtml(notes)}</div>` : ''}
+        ${linkedTextsHtml}
+        ${notes ? `<div class="scholar-notes">${annotationHtml}<strong>Notes.</strong> ${escapeHtml(notes)}</div>` : ''}
+        ${openReaderHtml}
     `;
 }
 

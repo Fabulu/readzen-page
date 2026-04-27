@@ -17,6 +17,7 @@ import * as mastersBrowse from './views/masters-browse.js';
 import * as lineageGraph from './views/lineage-graph.js';
 import * as tags from './views/tags.js';
 import * as scholar from './views/scholar.js';
+import * as scholarGraph from './views/scholar-graph.js';
 import * as search from './views/search.js';
 import * as compare from './views/compare.js';
 import { dismissInlineDict } from './lib/inline-dict.js';
@@ -24,7 +25,7 @@ import { initKeyboard, dismissAllPopups } from './lib/keyboard.js';
 
 // Lookup views share a common contract: instant render, no app-first race.
 // They're dispatched before the placeholder path in `init` below.
-const LOOKUP_VIEWS = [dictionary, termbase, master, mastersBrowse, lineageGraph, tags, scholar, search];
+const LOOKUP_VIEWS = [dictionary, termbase, master, mastersBrowse, lineageGraph, tags, scholarGraph, scholar, search];
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 
