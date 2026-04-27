@@ -195,6 +195,21 @@ export async function render(route, mount, shell) {
         });
     }
 
+    // Auto-create Master nodes from passage MasterNames
+    for (const p of passages) {
+        const masters = p.masterNames || p.MasterNames || [];
+        for (const masterName of masters) {
+            const masterId = 'master:' + masterName;
+            if (nodeMap.has(masterId)) continue;
+            nodeMap.set(masterId, {
+                id: masterId,
+                type: 2,
+                label: masterName,
+                x: 0, y: 0, vx: 0, vy: 0, degree: 0,
+            });
+        }
+    }
+
     // Build edges
     const edges = [];
 
@@ -470,11 +485,13 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
     function draw() {
         const w = state.width;
         const h = state.height;
-        ctx.clearRect(0, 0, w, h);
 
-        // Dark background to match desktop
+        // Save transform, reset to identity for clearing (high-DPI safe)
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.fillStyle = '#1E1E23';
-        ctx.fillRect(0, 0, w, h);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
 
         // Compute entry animation scale
         const elapsed = performance.now() - entryStart;
@@ -570,7 +587,21 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.globalAlpha = nodeAlpha * entryScale;
-                const label = n.label.length > 20 ? n.label.substring(0, 19) + '\u2026' : n.label;
+                // Measure and truncate by pixel width (handles CJK vs Latin correctly)
+                const maxLabelWidth = Math.max(40, nodeRadius(n) * 4);
+                let label = n.label || '';
+                if (ctx.measureText(label).width > maxLabelWidth) {
+                    let lo = 0, hi = label.length;
+                    while (lo < hi) {
+                        const mid = (lo + hi + 1) >> 1;
+                        if (ctx.measureText(label.slice(0, mid) + '\u2026').width <= maxLabelWidth) {
+                            lo = mid;
+                        } else {
+                            hi = mid - 1;
+                        }
+                    }
+                    label = label.slice(0, lo) + '\u2026';
+                }
                 const labelOffset = [4, 6, 5, 8, 8][n.type || 0];
 
                 // Text shadow for readability
