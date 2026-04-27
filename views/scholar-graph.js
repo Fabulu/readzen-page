@@ -222,6 +222,7 @@ export async function render(route, mount, shell) {
     }
 
     const canvas = mount.querySelector('#scholar-graph-canvas');
+    canvas.style.touchAction = 'none';
     initGraph(canvas, nodes, edges, collectionId, user);
 }
 
@@ -463,11 +464,16 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
 
         // Draw edges
         for (const e of edges) {
-            let alpha = 0.6;
-            if (connectedSet) {
-                const relevant = connectedSet.has(e.from.id) || connectedSet.has(e.to.id);
-                alpha = relevant ? 0.8 : 0.15;
-            }
+            // Skip degenerate edges (endpoints at same position)
+            const edx = e.to.x - e.from.x;
+            const edy = e.to.y - e.from.y;
+            const elen = Math.sqrt(edx * edx + edy * edy);
+            if (elen < 0.5) continue;
+
+            // Ego highlight: only edges directly connected to the ego node
+            const egoNodeId = state.focused || state.egoHover;
+            const edgeRelevant = egoNodeId && (e.from.id === egoNodeId || e.to.id === egoNodeId);
+            let alpha = egoNodeId ? (edgeRelevant ? 0.8 : 0.15) : 0.6;
 
             const color = edgeColor(e);
             ctx.globalAlpha = alpha * entryScale;
