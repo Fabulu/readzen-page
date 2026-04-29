@@ -114,6 +114,14 @@ export async function render(route, mount, shell) {
                     <input type="checkbox" id="scholar-physics-toggle" checked />
                     Physics
                 </label>
+                <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:#B8B8C8;cursor:pointer">
+                    <input type="checkbox" id="scholar-minimap-toggle" checked />
+                    Minimap
+                </label>
+                <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:#B8B8C8;cursor:pointer">
+                    <input type="checkbox" id="scholar-clusters-toggle" />
+                    Clusters
+                </label>
             </div>
             <a class="lineage-browse-link" href="#/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">&larr; Back to Collection</a>
         </div>
@@ -533,6 +541,8 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         highlightedIds: new Set(),
         physicsEnabled: true,
         physicsRAF: null,
+        showMinimap: true,
+        showClusters: false,
     };
 
     // Precompute connected sets for ego network
@@ -617,6 +627,29 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         ctx.save();
         ctx.translate(state.panX, state.panY);
         ctx.scale(state.zoom, state.zoom);
+
+        // Type clustering backgrounds
+        if (state.showClusters) {
+            const groups = {};
+            for (const n of nodes) {
+                if (!groups[n.type]) groups[n.type] = [];
+                groups[n.type].push(n);
+            }
+            for (const [type, gnodes] of Object.entries(groups)) {
+                if (gnodes.length < 2) continue;
+                let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+                for (const n of gnodes) {
+                    minX=Math.min(minX,n.x); minY=Math.min(minY,n.y);
+                    maxX=Math.max(maxX,n.x); maxY=Math.max(maxY,n.y);
+                }
+                const pad = 30, w = maxX-minX+pad*2, h = maxY-minY+pad*2;
+                const color = NODE_COLORS[parseInt(type)] || '#888';
+                const r = parseInt(color.slice(1,3),16), g = parseInt(color.slice(3,5),16), b = parseInt(color.slice(5,7),16);
+                ctx.fillStyle = `rgba(${r},${g},${b},0.08)`;
+                const cr = Math.min(w,h)*0.3;
+                ctx.beginPath(); ctx.roundRect(minX-pad, minY-pad, w, h, cr); ctx.fill();
+            }
+        }
 
         // Draw edges
         for (const e of edges) {
@@ -743,6 +776,48 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         }
 
         ctx.restore();
+
+        // Minimap
+        if (state.showMinimap !== false) {
+            const mmW = 120, mmH = 80, mmM = 10;
+            const mmX = state.width - mmW - mmM, mmY = state.height - mmH - mmM;
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(mmX, mmY, mmW, mmH);
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.strokeRect(mmX, mmY, mmW, mmH);
+
+            const bounds = graphBounds(nodes);
+            if (bounds) {
+                const gw = bounds.maxX - bounds.minX || 1, gh = bounds.maxY - bounds.minY || 1;
+                const sc = Math.min((mmW-10)/gw, (mmH-10)/gh);
+                const ox = mmX + 5 + ((mmW-10) - gw*sc)/2;
+                const oy = mmY + 5 + ((mmH-10) - gh*sc)/2;
+
+                // Edges
+                ctx.strokeStyle = 'rgba(128,128,128,0.4)'; ctx.lineWidth = 0.5;
+                for (const e of edges) {
+                    if (!e.from || !e.to) continue;
+                    ctx.beginPath();
+                    ctx.moveTo(ox+(e.from.x-bounds.minX)*sc, oy+(e.from.y-bounds.minY)*sc);
+                    ctx.lineTo(ox+(e.to.x-bounds.minX)*sc, oy+(e.to.y-bounds.minY)*sc);
+                    ctx.stroke();
+                }
+                // Nodes
+                for (const n of nodes) {
+                    ctx.fillStyle = NODE_COLORS[n.type] || '#888';
+                    ctx.beginPath();
+                    ctx.arc(ox+(n.x-bounds.minX)*sc, oy+(n.y-bounds.minY)*sc, 1.5, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                // Viewport rect
+                const vl = (-state.panX/state.zoom - bounds.minX)*sc;
+                const vt = (-state.panY/state.zoom - bounds.minY)*sc;
+                const vw = (state.width/state.zoom)*sc;
+                const vh = (state.height/state.zoom)*sc;
+                ctx.strokeStyle = '#00E5FF'; ctx.lineWidth = 1;
+                ctx.strokeRect(ox+vl, oy+vt, vw, vh);
+            }
+        }
 
         // Continue animation or physics
         if (entryProgress < 1.0 || state.physicsEnabled) {
@@ -968,6 +1043,24 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
             if (state.physicsEnabled && !state.physicsRAF) {
                 state.physicsRAF = requestAnimationFrame(draw);
             }
+        });
+    }
+
+    // ── Minimap toggle ──
+    const minimapToggle = canvas.parentElement.querySelector('#scholar-minimap-toggle');
+    if (minimapToggle) {
+        minimapToggle.addEventListener('change', () => {
+            state.showMinimap = minimapToggle.checked;
+            draw();
+        });
+    }
+
+    // ── Clusters toggle ──
+    const clustersToggle = canvas.parentElement.querySelector('#scholar-clusters-toggle');
+    if (clustersToggle) {
+        clustersToggle.addEventListener('change', () => {
+            state.showClusters = clustersToggle.checked;
+            draw();
         });
     }
 
