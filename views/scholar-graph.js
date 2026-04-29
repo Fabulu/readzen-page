@@ -43,6 +43,10 @@ const EDGE_COLORS = {
 };
 const DEFAULT_EDGE_COLOR = '#888';
 
+const NON_DIRECTIONAL_TYPES = new Set([
+    'parallels', 'is-variant-of', 'opposes', 'related-to', 'same-school', 'cross-ref',
+]);
+
 // ── Data loading ──
 
 const COLLECTION_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -101,6 +105,10 @@ export async function render(route, mount, shell) {
                     <button class="lineage-zoom-btn" data-dir="in" title="Zoom in">+</button>
                     <button class="lineage-zoom-btn" data-dir="out" title="Zoom out">&minus;</button>
                     <button class="lineage-zoom-btn" data-dir="reset" title="Reset view">&#8634;</button>
+                </div>
+                <div class="lineage-search" style="margin-top:8px">
+                    <input type="text" class="lineage-search-input" placeholder="Search nodes..." id="scholar-graph-search"
+                           style="width:100%;padding:4px 8px;font-size:11px;background:#2A2A32;border:1px solid #3A3A42;color:#fff;border-radius:4px" />
                 </div>
             </div>
             <a class="lineage-browse-link" href="#/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">&larr; Back to Collection</a>
@@ -433,6 +441,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         dragStartX: 0, dragStartY: 0,
         dragPanX: 0, dragPanY: 0,
         width: 0, height: 0,
+        highlightedIds: new Set(),
     };
 
     // Precompute connected sets for ego network
@@ -527,32 +536,41 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
             let alpha = egoNodeId ? (edgeRelevant ? 0.8 : 0.35) : 0.6;
 
             const color = edgeColor(e);
+            const isNonDirectional = NON_DIRECTIONAL_TYPES.has(e.relationType);
             ctx.globalAlpha = alpha * entryScale;
             ctx.beginPath();
+            if (isNonDirectional) {
+                ctx.setLineDash([6, 4]);
+            }
             ctx.moveTo(e.from.x, e.from.y);
             ctx.lineTo(e.to.x, e.to.y);
             ctx.strokeStyle = color;
             ctx.lineWidth = 1.5;
             ctx.stroke();
+            if (isNonDirectional) {
+                ctx.setLineDash([]);
+            }
 
-            // Arrowhead
-            const toR = nodeRadius(e.to);
-            const dx = e.to.x - e.from.x;
-            const dy = e.to.y - e.from.y;
-            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-            const ux = dx / dist;
-            const uy = dy / dist;
-            const tipX = e.to.x - ux * toR;
-            const tipY = e.to.y - uy * toR;
-            const arrowLen = 8;
-            const arrowW = 4;
-            ctx.beginPath();
-            ctx.moveTo(tipX, tipY);
-            ctx.lineTo(tipX - ux * arrowLen + uy * arrowW, tipY - uy * arrowLen - ux * arrowW);
-            ctx.lineTo(tipX - ux * arrowLen - uy * arrowW, tipY - uy * arrowLen + ux * arrowW);
-            ctx.closePath();
-            ctx.fillStyle = color;
-            ctx.fill();
+            // Arrowhead (only for directional edges)
+            if (!isNonDirectional) {
+                const toR = nodeRadius(e.to);
+                const dx = e.to.x - e.from.x;
+                const dy = e.to.y - e.from.y;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                const ux = dx / dist;
+                const uy = dy / dist;
+                const tipX = e.to.x - ux * toR;
+                const tipY = e.to.y - uy * toR;
+                const arrowLen = 8;
+                const arrowW = 4;
+                ctx.beginPath();
+                ctx.moveTo(tipX, tipY);
+                ctx.lineTo(tipX - ux * arrowLen + uy * arrowW, tipY - uy * arrowLen - ux * arrowW);
+                ctx.lineTo(tipX - ux * arrowLen - uy * arrowW, tipY - uy * arrowLen + ux * arrowW);
+                ctx.closePath();
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
 
             // Edge type labels for ego-relevant edges
             if (egoNodeId && edgeRelevant && state.zoom >= 0.7) {
@@ -575,9 +593,20 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
             const color = nodeColor(n);
             let nodeAlpha = connectedSet && !connectedSet.has(n.id) ? 0.35 : 1.0;
 
+            // Drop shadow (skip for dimmed nodes; skip on very small radii)
+            if (nodeAlpha > 0.5 && r > 3) {
+                drawNodeShape(ctx, n, n.x + 2.5, n.y + 2.5, r + 1, 'rgba(0,0,0,0.15)', nodeAlpha * entryScale, null, 0);
+                drawNodeShape(ctx, n, n.x + 1.5, n.y + 1.5, r + 0.5, 'rgba(0,0,0,0.25)', nodeAlpha * entryScale, null, 0);
+            }
+
             // Draw shape with integrated stroke
-            const strokeColor = (n.id === state.hovered || n.id === state.focused) ? '#FFD700' : 'rgba(255,255,255,0.6)';
-            const strokeWidth = (n.id === state.focused) ? 2.5 : 1.2;
+            const isHighlighted = state.highlightedIds && state.highlightedIds.has(n.id);
+            const strokeColor = (n.id === state.hovered || n.id === state.focused)
+                ? '#FFD700'
+                : isHighlighted
+                    ? '#00E5FF'
+                    : 'rgba(255,255,255,0.6)';
+            const strokeWidth = (n.id === state.focused) ? 2.5 : isHighlighted ? 2.5 : 1.2;
             drawNodeShape(ctx, n, n.x, n.y, r, color, nodeAlpha * entryScale, strokeColor, strokeWidth);
 
             // Label below node
@@ -816,6 +845,23 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         });
     }
 
+    // ── Search highlighting ──
+    const searchInput = canvas.parentElement.querySelector('#scholar-graph-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.trim().toLowerCase();
+            state.highlightedIds.clear();
+            if (query.length >= 2) {
+                for (const n of nodes) {
+                    if ((n.label || '').toLowerCase().includes(query)) {
+                        state.highlightedIds.add(n.id);
+                    }
+                }
+            }
+            draw();
+        });
+    }
+
     // ── Popup Card ──
     function showNodeCard(node) {
         removeNodeCard();
@@ -897,6 +943,23 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
             if (collEdges.length > 0) {
                 content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${collEdges.length} connection${collEdges.length !== 1 ? 's' : ''}</div>`;
             }
+        }
+
+        // Connected edges summary
+        const nodeEdges = edges.filter(e => e.from.id === node.id || e.to.id === node.id);
+        if (nodeEdges.length > 0) {
+            content += `<div style="font-size:0.78rem;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.4rem;margin-top:0.4rem">`;
+            content += `<div style="color:var(--muted);margin-bottom:0.2rem">${nodeEdges.length} connection${nodeEdges.length !== 1 ? 's' : ''}</div>`;
+            const shown = nodeEdges.slice(0, 5);
+            for (const e of shown) {
+                const other = e.from.id === node.id ? e.to : e.from;
+                const dir = e.from.id === node.id ? '\u2192' : '\u2190';
+                content += `<div style="font-size:0.75rem;color:var(--text-soft)">${dir} ${escapeHtml(other.label)} <span style="color:${edgeColor(e)}">(${escapeHtml(e.relationType)})</span></div>`;
+            }
+            if (nodeEdges.length > 5) {
+                content += `<div style="font-size:0.72rem;color:var(--muted)">+${nodeEdges.length - 5} more</div>`;
+            }
+            content += `</div>`;
         }
 
         // Footer with links
