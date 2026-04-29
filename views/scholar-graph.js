@@ -111,7 +111,7 @@ export async function render(route, mount, shell) {
                            style="width:100%;padding:4px 8px;font-size:11px;background:#2A2A32;border:1px solid #3A3A42;color:#fff;border-radius:4px" />
                 </div>
                 <label style="display:flex;align-items:center;gap:4px;margin-top:8px;font-size:11px;color:#B8B8C8;cursor:pointer">
-                    <input type="checkbox" id="scholar-physics-toggle" checked />
+                    <input type="checkbox" id="scholar-physics-toggle" />
                     Physics
                 </label>
                 <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:#B8B8C8;cursor:pointer">
@@ -362,14 +362,13 @@ function runPhysicsTick(nodes, edges) {
 
     const R = Math.sqrt(N) * 80;
     const k = Math.sqrt((R * R * 4) / N);
-    const alpha = 0.015;   // halved vs desktop 0.03 to compensate for ~60fps
+    const alpha = 0.01;   // halved vs desktop 0.02 to compensate for ~60fps
 
-    // Center of mass
-    let cx = 0, cy = 0;
-    for (const n of nodes) { cx += n.x; cy += n.y; }
-    cx /= N; cy /= N;
+    // Gravity pulls toward FIXED canvas center (not center of mass which drifts)
+    const cx = (state.width / 2 - state.panX) / state.zoom;
+    const cy = (state.height / 2 - state.panY) / state.zoom;
 
-    // Reset velocities
+    // Dampen existing velocities
     for (const n of nodes) { n.vx *= 0.92; n.vy *= 0.92; }
 
     // Repulsion (all pairs)
@@ -386,11 +385,11 @@ function runPhysicsTick(nodes, edges) {
         }
     }
 
-    // Gravity toward center of mass
+    // Gravity toward fixed viewport center
     for (const n of nodes) {
         if (n.pinned) continue;
-        n.vx -= (n.x - cx) * 0.008;
-        n.vy -= (n.y - cy) * 0.008;
+        n.vx -= (n.x - cx) * 0.01;
+        n.vy -= (n.y - cy) * 0.01;
     }
 
     // Edge attraction (keeps connected nodes loosely together)
@@ -461,22 +460,22 @@ function drawNodeShape(ctx, node, x, y, r, color, alpha, strokeStyle, lineWidth)
         ctx.closePath();
         ctx.fill();
         if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
-    } else if (type === 3 || type === 4) {
-        // Term/Collection: Rounded rect
-        const w = r * 2, h = r * 1.4;
-        const rx = x - r, ry = y - h / 2;
-        const cr = r * 0.2;
+    } else if (type === 3) {
+        // Term: Wide pill shape (distinct from Collection)
+        const w = r * 2.4, h = r * 1.0;
+        const rx = x - w / 2, ry = y - h / 2;
+        const cr = r * 0.4;
         ctx.beginPath();
-        ctx.moveTo(rx + cr, ry);
-        ctx.lineTo(rx + w - cr, ry);
-        ctx.arcTo(rx + w, ry, rx + w, ry + cr, cr);
-        ctx.lineTo(rx + w, ry + h - cr);
-        ctx.arcTo(rx + w, ry + h, rx + w - cr, ry + h, cr);
-        ctx.lineTo(rx + cr, ry + h);
-        ctx.arcTo(rx, ry + h, rx, ry + h - cr, cr);
-        ctx.lineTo(rx, ry + cr);
-        ctx.arcTo(rx, ry, rx + cr, ry, cr);
-        ctx.closePath();
+        ctx.roundRect(rx, ry, w, h, cr);
+        ctx.fill();
+        if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
+    } else if (type === 4) {
+        // Collection: Square with minimal rounding
+        const s = r * 1.6;
+        const rx = x - s / 2, ry = y - s / 2;
+        const cr = r * 0.1;
+        ctx.beginPath();
+        ctx.roundRect(rx, ry, s, s, cr);
         ctx.fill();
         if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
     } else {
@@ -535,11 +534,12 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         egoHover: null,      // node id for ego highlight on hover
         dragging: false,
         wasDragging: false,
+        dragNode: null,
         dragStartX: 0, dragStartY: 0,
         dragPanX: 0, dragPanY: 0,
         width: 0, height: 0,
         highlightedIds: new Set(),
-        physicsEnabled: true,
+        physicsEnabled: false,
         physicsRAF: null,
         showMinimap: true,
         showClusters: false,
@@ -672,7 +672,22 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
                 ctx.setLineDash([6, 4]);
             }
             ctx.moveTo(e.from.x, e.from.y);
-            ctx.lineTo(e.to.x, e.to.y);
+            // Use quadratic Bezier curve for edges > 50px, straight line for short edges
+            const edgeDx = e.to.x - e.from.x;
+            const edgeDy = e.to.y - e.from.y;
+            const edgeLen = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy) || 1;
+            const useCurve = edgeLen >= 50;
+            let cpx, cpy; // control point for Bezier
+            if (useCurve) {
+                const perpX = -edgeDy / edgeLen;
+                const perpY = edgeDx / edgeLen;
+                const curveOffset = Math.min(20, edgeLen * 0.12);
+                cpx = (e.from.x + e.to.x) / 2 + perpX * curveOffset;
+                cpy = (e.from.y + e.to.y) / 2 + perpY * curveOffset;
+                ctx.quadraticCurveTo(cpx, cpy, e.to.x, e.to.y);
+            } else {
+                ctx.lineTo(e.to.x, e.to.y);
+            }
             ctx.strokeStyle = color;
             ctx.lineWidth = 1.5;
             ctx.stroke();
@@ -683,11 +698,22 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
             // Arrowhead (only for directional edges)
             if (!isNonDirectional) {
                 const toR = nodeRadius(e.to);
-                const dx = e.to.x - e.from.x;
-                const dy = e.to.y - e.from.y;
-                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-                const ux = dx / dist;
-                const uy = dy / dist;
+                // Arrow tangent follows curve at endpoint
+                let ux, uy;
+                if (useCurve) {
+                    // Tangent at t=1 of quadratic Bezier: B'(1) = 2*(to - control)
+                    const tdx = e.to.x - cpx;
+                    const tdy = e.to.y - cpy;
+                    const tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
+                    ux = tdx / tlen;
+                    uy = tdy / tlen;
+                } else {
+                    const dx = e.to.x - e.from.x;
+                    const dy = e.to.y - e.from.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                    ux = dx / dist;
+                    uy = dy / dist;
+                }
                 const tipX = e.to.x - ux * toR;
                 const tipY = e.to.y - uy * toR;
                 const arrowLen = 8;
@@ -703,8 +729,13 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
 
             // Edge type labels for ego-relevant edges
             if (egoNodeId && edgeRelevant && state.zoom >= 0.7) {
-                const midX = (e.from.x + e.to.x) / 2;
-                const midY = (e.from.y + e.to.y) / 2;
+                // For curved edges, use the quadratic Bezier midpoint at t=0.5
+                const midX = useCurve
+                    ? 0.25 * e.from.x + 0.5 * cpx + 0.25 * e.to.x
+                    : (e.from.x + e.to.x) / 2;
+                const midY = useCurve
+                    ? 0.25 * e.from.y + 0.5 * cpy + 0.25 * e.to.y
+                    : (e.from.y + e.to.y) / 2;
                 ctx.font = '9px sans-serif';
                 ctx.fillStyle = color;
                 ctx.globalAlpha = 0.8;
@@ -830,7 +861,11 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
     // ── Interaction: mouse ──
     canvas.addEventListener('mousedown', e => {
         const hit = hitTest(e.offsetX, e.offsetY);
-        if (!hit) {
+        if (hit) {
+            // Start dragging this individual node
+            state.dragNode = hit;
+            canvas.style.cursor = 'grabbing';
+        } else {
             removeNodeCard();
             state.focused = null;
             draw();
@@ -845,6 +880,14 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
 
     let hoverThrottleTimer = null;
     canvas.addEventListener('mousemove', e => {
+        if (state.dragNode) {
+            // Convert screen coords to graph coords and update node position
+            state.dragNode.x = (e.offsetX - state.panX) / state.zoom;
+            state.dragNode.y = (e.offsetY - state.panY) / state.zoom;
+            state.dragNode.pinned = true;
+            draw();
+            return;
+        }
         if (state.dragging) {
             state.panX = state.dragPanX + (e.clientX - state.dragStartX);
             state.panY = state.dragPanY + (e.clientY - state.dragStartY);
@@ -865,6 +908,12 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
     });
 
     canvas.addEventListener('mouseup', e => {
+        if (state.dragNode) {
+            state.wasDragging = true;
+            state.dragNode = null;
+            canvas.style.cursor = 'grab';
+            return;
+        }
         if (state.dragging) {
             const dx = e.clientX - state.dragStartX;
             const dy = e.clientY - state.dragStartY;
@@ -878,6 +927,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
 
     canvas.addEventListener('mouseleave', () => {
         state.dragging = false;
+        state.dragNode = null;
         if (state.hovered || state.egoHover) {
             state.hovered = null;
             state.egoHover = null;
