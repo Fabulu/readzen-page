@@ -279,7 +279,7 @@ export async function render(route, mount, shell) {
 
     const canvas = mount.querySelector('#scholar-graph-canvas');
     canvas.style.touchAction = 'none';
-    initGraph(canvas, nodes, edges, collectionId, user);
+    initGraph(canvas, nodes, edges, collectionId, user, graphLayout);
 }
 
 // ── Force-directed layout ──
@@ -500,7 +500,7 @@ function edgeColor(e) {
 
 // ── Graph engine ──
 
-function initGraph(canvas, nodes, edges, collectionId, user) {
+function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
     const ctx = canvas.getContext('2d');
 
     // Declare easing helper before first use (used in draw())
@@ -512,9 +512,16 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
     let entryStart = performance.now();
 
     // State
+    // Restore saved viewport if available
+    const savedZoom = savedLayout ? (savedLayout.Zoom || savedLayout.zoom || 0) : 0;
+    const savedPanX = savedLayout ? (savedLayout.OffsetX || savedLayout.offsetX || 0) : 0;
+    const savedPanY = savedLayout ? (savedLayout.OffsetY || savedLayout.offsetY || 0) : 0;
+    const hasSavedViewport = savedZoom > 0.01;
+
     let state = {
-        panX: 0, panY: 0,
-        zoom: 1.0,
+        panX: hasSavedViewport ? savedPanX : 0,
+        panY: hasSavedViewport ? savedPanY : 0,
+        zoom: hasSavedViewport ? savedZoom : 1.0,
         focused: null,       // node id or null
         hovered: null,       // node id or null
         egoHover: null,      // node id for ego highlight on hover
@@ -1171,7 +1178,7 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
     // ── Init ──
     window.addEventListener('resize', resize);
     resize();
-    autoFit();
+    if (!hasSavedViewport) autoFit();  // Only auto-fit if no saved zoom/pan
     draw();
 }
 
