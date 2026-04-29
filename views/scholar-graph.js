@@ -110,6 +110,10 @@ export async function render(route, mount, shell) {
                     <input type="text" class="lineage-search-input" placeholder="Search nodes..." id="scholar-graph-search"
                            style="width:100%;padding:4px 8px;font-size:11px;background:#2A2A32;border:1px solid #3A3A42;color:#fff;border-radius:4px" />
                 </div>
+                <label style="display:flex;align-items:center;gap:4px;margin-top:8px;font-size:11px;color:#B8B8C8;cursor:pointer">
+                    <input type="checkbox" id="scholar-physics-toggle" checked />
+                    Physics
+                </label>
             </div>
             <a class="lineage-browse-link" href="#/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">&larr; Back to Collection</a>
         </div>
@@ -342,6 +346,84 @@ function forceLayout(nodes, edges, iterations = 150) {
     }
 }
 
+// ── Continuous subtle physics tick ──
+
+function runPhysicsTick(nodes, edges) {
+    const N = nodes.length;
+    if (N <= 1 || N > 300) return false;
+
+    const R = Math.sqrt(N) * 80;
+    const k = Math.sqrt((R * R * 4) / N);
+    const alpha = 0.015;   // halved vs desktop 0.03 to compensate for ~60fps
+
+    // Center of mass
+    let cx = 0, cy = 0;
+    for (const n of nodes) { cx += n.x; cy += n.y; }
+    cx /= N; cy /= N;
+
+    // Reset velocities
+    for (const n of nodes) { n.vx *= 0.92; n.vy *= 0.92; }
+
+    // Repulsion (all pairs)
+    for (let i = 0; i < N; i++) {
+        if (nodes[i].pinned) continue;
+        for (let j = 0; j < N; j++) {
+            if (i === j) continue;
+            let dx = nodes[i].x - nodes[j].x;
+            let dy = nodes[i].y - nodes[j].y;
+            let dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+            let force = (k * k) / dist * alpha;
+            nodes[i].vx += (dx / dist) * force;
+            nodes[i].vy += (dy / dist) * force;
+        }
+    }
+
+    // Gravity toward center of mass
+    for (const n of nodes) {
+        if (n.pinned) continue;
+        n.vx -= (n.x - cx) * 0.008;
+        n.vy -= (n.y - cy) * 0.008;
+    }
+
+    // Edge attraction (keeps connected nodes loosely together)
+    for (const e of edges) {
+        if (!e.from || !e.to) continue;
+        if (e.from.pinned && e.to.pinned) continue;
+        let dx = e.to.x - e.from.x;
+        let dy = e.to.y - e.from.y;
+        let dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+        let attract = dist * 0.002;
+        if (!e.from.pinned) {
+            e.from.vx += (dx / dist) * attract;
+            e.from.vy += (dy / dist) * attract;
+        }
+        if (!e.to.pinned) {
+            e.to.vx -= (dx / dist) * attract;
+            e.to.vy -= (dy / dist) * attract;
+        }
+    }
+
+    // Apply with damping and max displacement clamp
+    let moved = false;
+    for (const n of nodes) {
+        if (n.pinned) continue;
+        // (damping already applied at top of tick)
+        let disp = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
+        if (disp > 0.8) {
+            n.vx = n.vx / disp * 0.8;
+            n.vy = n.vy / disp * 0.8;
+        }
+        if (disp > 0.01) {
+            n.x += n.vx;
+            n.y += n.vy;
+            n.x = Math.max(-2000, Math.min(2000, n.x));
+            n.y = Math.max(-2000, Math.min(2000, n.y));
+            moved = true;
+        }
+    }
+    return moved;
+}
+
 // ── Node shape rendering ──
 
 function drawNodeShape(ctx, node, x, y, r, color, alpha, strokeStyle, lineWidth) {
@@ -442,6 +524,8 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         dragPanX: 0, dragPanY: 0,
         width: 0, height: 0,
         highlightedIds: new Set(),
+        physicsEnabled: true,
+        physicsRAF: null,
     };
 
     // Precompute connected sets for ego network
@@ -506,6 +590,11 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
         const elapsed = performance.now() - entryStart;
         entryProgress = Math.min(elapsed / ENTRY_DURATION, 1.0);
         const entryScale = easeOutCubic(entryProgress);
+
+        // Subtle physics (only after entry animation finishes)
+        if (entryProgress >= 1.0 && state.physicsEnabled && !state.dragging) {
+            runPhysicsTick(nodes, edges);
+        }
 
         // Compute ego set (from focus or hover)
         const egoId = state.focused || state.egoHover;
@@ -648,9 +737,11 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
 
         ctx.restore();
 
-        // Continue animation if not done
-        if (entryProgress < 1.0) {
-            requestAnimationFrame(draw);
+        // Continue animation or physics
+        if (entryProgress < 1.0 || state.physicsEnabled) {
+            state.physicsRAF = requestAnimationFrame(draw);
+        } else {
+            state.physicsRAF = null;
         }
     }
 
@@ -859,6 +950,17 @@ function initGraph(canvas, nodes, edges, collectionId, user) {
                 }
             }
             draw();
+        });
+    }
+
+    // ── Physics toggle ──
+    const physicsToggle = canvas.parentElement.querySelector('#scholar-physics-toggle');
+    if (physicsToggle) {
+        physicsToggle.addEventListener('change', () => {
+            state.physicsEnabled = physicsToggle.checked;
+            if (state.physicsEnabled && !state.physicsRAF) {
+                state.physicsRAF = requestAnimationFrame(draw);
+            }
         });
     }
 
