@@ -364,7 +364,7 @@ function runPhysicsTick(nodes, edges) {
 
     const R = Math.sqrt(N) * 80;
     const k = Math.sqrt((R * R * 4) / N);
-    const alpha = 0.01;   // halved vs desktop 0.02 to compensate for ~60fps
+    const alpha = 0.0025;   // halved vs desktop 0.005 to compensate for ~60fps
 
     // Gravity pulls toward FIXED canvas center (not center of mass which drifts)
     const cx = (state.width / 2 - state.panX) / state.zoom;
@@ -390,8 +390,8 @@ function runPhysicsTick(nodes, edges) {
     // Gravity toward fixed viewport center
     for (const n of nodes) {
         if (n.pinned) continue;
-        n.vx -= (n.x - cx) * 0.01;
-        n.vy -= (n.y - cy) * 0.01;
+        n.vx -= (n.x - cx) * 0.003;
+        n.vy -= (n.y - cy) * 0.003;
     }
 
     // Edge attraction (keeps connected nodes loosely together)
@@ -418,9 +418,9 @@ function runPhysicsTick(nodes, edges) {
         if (n.pinned) continue;
         // (damping already applied at top of tick)
         let disp = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
-        if (disp > 0.8) {
-            n.vx = n.vx / disp * 0.8;
-            n.vy = n.vy / disp * 0.8;
+        if (disp > 0.3) {
+            n.vx = n.vx / disp * 0.3;
+            n.vy = n.vy / disp * 0.3;
         }
         if (disp > 0.01) {
             n.x += n.vx;
