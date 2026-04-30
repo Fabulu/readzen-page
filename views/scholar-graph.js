@@ -41,7 +41,7 @@ const EDGE_COLORS = {
     'same-school':   '#64B5F6',
     'cross-ref':     '#AB47BC',
 };
-const DEFAULT_EDGE_COLOR = '#888';
+const DEFAULT_EDGE_COLOR = '#9E9E9E';
 
 const NON_DIRECTIONAL_TYPES = new Set([
     'parallels', 'is-variant-of', 'opposes', 'related-to', 'same-school', 'cross-ref',
@@ -244,7 +244,8 @@ export async function render(route, mount, shell) {
             if (fromNode && toNode) {
                 fromNode.degree++;
                 toNode.degree++;
-                edges.push({ from: fromNode, to: toNode, relationType: relType });
+                const weight = parseFloat(edge.weight || edge.Weight || '1') || 1.0;
+                edges.push({ from: fromNode, to: toNode, relationType: relType, weight });
             }
         }
     } else {
@@ -258,7 +259,8 @@ export async function render(route, mount, shell) {
             if (fromNode && toNode) {
                 fromNode.degree++;
                 toNode.degree++;
-                edges.push({ from: fromNode, to: toNode, relationType: relType });
+                const weight = parseFloat(link.weight || link.Weight || '1') || 1.0;
+                edges.push({ from: fromNode, to: toNode, relationType: relType, weight });
             }
         }
     }
@@ -543,6 +545,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         physicsRAF: null,
         showMinimap: true,
         showClusters: false,
+        hoveredEdge: null,
     };
 
     // Precompute connected sets for ego network
@@ -591,8 +594,19 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         return null;
     }
 
+    // ── Point-to-segment distance for edge hit-testing ──
+    function pointToSegmentDist(px, py, ax, ay, bx, by) {
+        const dx = bx - ax, dy = by - ay;
+        const len2 = dx * dx + dy * dy;
+        if (len2 === 0) return Math.hypot(px - ax, py - ay);
+        let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    }
+
     // ── Drawing ──
     function draw() {
+        state.physicsRAF = null; // clear so re-entry doesn't create parallel chains
         const w = state.width;
         const h = state.height;
 
@@ -688,8 +702,22 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
             } else {
                 ctx.lineTo(e.to.x, e.to.y);
             }
+            // Glow layer for hovered edge
+            if (e === state.hoveredEdge) {
+                ctx.save();
+                ctx.globalAlpha = 0.25 * entryScale;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 8;
+                ctx.stroke();
+                ctx.restore();
+                ctx.beginPath();
+                ctx.moveTo(e.from.x, e.from.y);
+                if (useCurve) ctx.quadraticCurveTo(cpx, cpy, e.to.x, e.to.y);
+                else ctx.lineTo(e.to.x, e.to.y);
+            }
             ctx.strokeStyle = color;
-            ctx.lineWidth = 1.5;
+            const baseWidth = (e === state.hoveredEdge) ? 3.0 : 1.5;
+            ctx.lineWidth = baseWidth * Math.max(0.5, Math.min(4.0, e.weight || 1));
             ctx.stroke();
             if (isNonDirectional) {
                 ctx.setLineDash([]);
@@ -766,7 +794,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
                 : isHighlighted
                     ? '#00E5FF'
                     : 'rgba(255,255,255,0.6)';
-            const strokeWidth = (n.id === state.focused) ? 2.5 : isHighlighted ? 2.5 : 1.2;
+            const strokeWidth = (n.id === state.focused) ? 3 : isHighlighted ? 3 : 1.2;
             drawNodeShape(ctx, n, n.x, n.y, r, color, nodeAlpha * entryScale, strokeColor, strokeWidth);
 
             // Label below node
@@ -860,6 +888,28 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
 
     // ── Interaction: mouse ──
     canvas.addEventListener('mousedown', e => {
+        // Minimap click-to-pan
+        if (state.showMinimap) {
+            const mmW = 120, mmH = 80, mmM = 10;
+            const mmX = state.width - mmW - mmM, mmY = state.height - mmH - mmM;
+            if (e.offsetX >= mmX && e.offsetX <= mmX + mmW &&
+                e.offsetY >= mmY && e.offsetY <= mmY + mmH) {
+                const bounds = graphBounds(nodes);
+                if (bounds) {
+                    const gw = bounds.maxX - bounds.minX || 1;
+                    const gh = bounds.maxY - bounds.minY || 1;
+                    const sc = Math.min((mmW - 10) / gw, (mmH - 10) / gh);
+                    const ox = mmX + 5 + ((mmW - 10) - gw * sc) / 2;
+                    const oy = mmY + 5 + ((mmH - 10) - gh * sc) / 2;
+                    const graphX = (e.offsetX - ox) / sc + bounds.minX;
+                    const graphY = (e.offsetY - oy) / sc + bounds.minY;
+                    state.panX = -graphX * state.zoom + state.width / 2;
+                    state.panY = -graphY * state.zoom + state.height / 2;
+                    draw();
+                }
+                return;
+            }
+        }
         const hit = hitTest(e.offsetX, e.offsetY);
         if (hit) {
             // Start dragging this individual node
@@ -904,6 +954,28 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         state.hovered = hit ? hit.id : null;
         state.egoHover = hit ? hit.id : null;
         canvas.style.cursor = hit ? 'pointer' : 'grab';
+
+        // Edge hover detection (only when no node is hovered)
+        if (!hit) {
+            let bestEdge = null, bestDist = 8;
+            for (const ed of edges) {
+                if (!ed.from || !ed.to) continue;
+                const ex1 = ed.from.x * state.zoom + state.panX;
+                const ey1 = ed.from.y * state.zoom + state.panY;
+                const ex2 = ed.to.x * state.zoom + state.panX;
+                const ey2 = ed.to.y * state.zoom + state.panY;
+                const d = pointToSegmentDist(e.offsetX, e.offsetY, ex1, ey1, ex2, ey2);
+                if (d < bestDist) { bestDist = d; bestEdge = ed; }
+            }
+            if (state.hoveredEdge !== bestEdge) {
+                state.hoveredEdge = bestEdge;
+                draw();
+            }
+        } else if (state.hoveredEdge) {
+            state.hoveredEdge = null;
+            draw();
+        }
+
         if (prev !== state.hovered) draw();
     });
 
@@ -1092,6 +1164,10 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
             state.physicsEnabled = physicsToggle.checked;
             if (state.physicsEnabled && !state.physicsRAF) {
                 state.physicsRAF = requestAnimationFrame(draw);
+            } else if (!state.physicsEnabled && state.physicsRAF) {
+                cancelAnimationFrame(state.physicsRAF);
+                state.physicsRAF = null;
+                draw(); // one final frame to show settled state
             }
         });
     }
