@@ -165,18 +165,60 @@ export async function render(route, mount, shell) {
                 return;
             }
 
-            const cards = collections.map(c => {
+            // Group collections: roots (no ParentCollectionId) first,
+            // then children indented under their parent.
+            const childrenByParent = new Map(); // parentId -> [collection]
+            const roots = [];
+            for (const c of collections) {
+                const parentId = c.parentCollectionId || c.ParentCollectionId || '';
+                if (parentId) {
+                    if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+                    childrenByParent.get(parentId).push(c);
+                } else {
+                    roots.push(c);
+                }
+            }
+
+            // Orphaned sub-collections (parent not in this list) render as roots
+            for (const [parentId, children] of childrenByParent) {
+                const parentExists = collections.some(c => (c.id || c.Id) === parentId);
+                if (!parentExists) roots.push(...children);
+            }
+
+            function renderCard(c, isChild) {
                 const cName = c.name || c.Name || c.id || c.Id || 'Untitled';
                 const cId = c.id || c.Id || '';
                 const passages = c.passages || c.Passages || [];
                 const cTags = c.tags || c.Tags || [];
                 const desc = c.description || c.Description || '';
-                return `<a class="scholar-collection-card" href="#/scholar/${encodeURIComponent(cId)}//${encodeURIComponent(user)}">
+                const indentClass = isChild ? ' scholar-collection-card--child' : '';
+                return `<a class="scholar-collection-card${indentClass}" href="#/scholar/${encodeURIComponent(cId)}//${encodeURIComponent(user)}">
                     <span class="scholar-collection-card-title">${escapeHtml(cName)}</span>
                     <span class="scholar-collection-card-meta">${passages.length} passage${passages.length !== 1 ? 's' : ''}${desc ? ' · ' + escapeHtml(desc.slice(0, 60)) : ''}</span>
                     ${cTags.length ? `<span class="scholar-row-tags">${cTags.slice(0, 3).map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('')}</span>` : ''}
                 </a>`;
-            }).join('');
+            }
+
+            // Build cards: root, then its children (expandable if it has any)
+            let cards = '';
+            for (const root of roots) {
+                const rootId = root.id || root.Id || '';
+                const children = childrenByParent.get(rootId) || [];
+                cards += renderCard(root, false);
+                if (children.length > 0) {
+                    const groupId = 'sub-' + escapeHtml(rootId);
+                    cards += `<div class="scholar-subcollection-toggle" data-target="${groupId}">
+                        <button class="scholar-toggle-btn" aria-expanded="true" onclick="this.setAttribute('aria-expanded', this.getAttribute('aria-expanded')==='true'?'false':'true'); document.getElementById('${groupId}').hidden = this.getAttribute('aria-expanded')==='false';">
+                            <span class="scholar-toggle-arrow">&#9662;</span> ${children.length} sub-collection${children.length !== 1 ? 's' : ''}
+                        </button>
+                    </div>`;
+                    cards += `<div class="scholar-subcollection-group" id="${groupId}">`;
+                    for (const child of children) {
+                        cards += renderCard(child, true);
+                    }
+                    cards += `</div>`;
+                }
+            }
 
             mount.innerHTML = `<section class="list-wrap">
                 <header class="list-head">

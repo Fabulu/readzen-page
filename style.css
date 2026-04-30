@@ -3604,6 +3604,39 @@ a.master-appearance-title:hover {
     color: var(--muted);
 }
 
+/* Sub-collection nesting */
+.scholar-collection-card--child {
+    margin-left: 1.5rem;
+    border-left: 3px solid var(--accent-soft, #e0e0e0);
+}
+.scholar-subcollection-toggle {
+    grid-column: 1 / -1;
+    padding: 0.2rem 0 0.2rem 0.5rem;
+}
+.scholar-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--muted);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+.scholar-toggle-btn:hover {
+    color: var(--fg);
+    background: var(--accent-soft, #f0f0f0);
+}
+.scholar-toggle-btn[aria-expanded="false"] .scholar-toggle-arrow {
+    display: inline-block;
+    transform: rotate(-90deg);
+}
+.scholar-subcollection-group {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
 @media (max-width: 640px) {
     .scholar-user-grid {
         grid-template-columns: 1fr;
