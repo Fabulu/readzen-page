@@ -476,5 +476,5 @@ async function loadCollections(user, url) {
 }
 
 function normalizeName(s) {
-    return String(s || '').trim().toLowerCase();
+    return String(s || '').trim().toLowerCase().replace(/[_-]/g, ' ');
 }

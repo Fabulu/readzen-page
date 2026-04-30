@@ -1430,5 +1430,5 @@ function touchMidpoint(touches) {
 }
 
 function normalizeName(s) {
-    return String(s || '').trim().toLowerCase();
+    return String(s || '').trim().toLowerCase().replace(/[_-]/g, ' ');
 }
