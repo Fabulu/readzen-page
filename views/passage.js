@@ -216,7 +216,7 @@ export async function render(route, mount, shell) {
         attachInlineDict(document.querySelector('#source-body'));
         const srcBody = document.querySelector('#source-body');
         insertApparatusMarkers(srcBody, sourceWork.apparatus);
-        attachApparatusPopup(srcBody, sourceWork.apparatus);
+        attachApparatusPopup(srcBody, sourceWork.apparatus, sourceWork.witnessMap);
 
         // "View in Full Text" button for ranged views
         if (route.hasExplicitRange) {
@@ -316,7 +316,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
         document.querySelector('#translation-body').innerHTML = trnHtml;
         attachInlineDict(srcBody);
         insertApparatusMarkers(srcBody, sourceWork.apparatus);
-        attachApparatusPopup(srcBody, sourceWork.apparatus);
+        attachApparatusPopup(srcBody, sourceWork.apparatus, sourceWork.witnessMap);
         window.requestAnimationFrame(syncRowHeights);
         updatePaginationUI();
         if (scrollLineId && page === findPageForLineId(allSourceLines, scrollLineId, PAGE)) {
@@ -401,7 +401,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
     window.requestAnimationFrame(syncRowHeights);
     attachInlineDict(document.querySelector('#source-body'));
     insertApparatusMarkers(document.querySelector('#source-body'), sourceWork.apparatus);
-    attachApparatusPopup(document.querySelector('#source-body'), sourceWork.apparatus);
+    attachApparatusPopup(document.querySelector('#source-body'), sourceWork.apparatus, sourceWork.witnessMap);
 
     if (scrollLineId) {
         scrollToLineId(document.querySelector('#source-body'), scrollLineId);
@@ -453,7 +453,7 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
         body.innerHTML = html;
         attachInlineDict(body);
         insertApparatusMarkers(body, sourceWork.apparatus);
-        attachApparatusPopup(body, sourceWork.apparatus);
+        attachApparatusPopup(body, sourceWork.apparatus, sourceWork.witnessMap);
         updateNav();
         if (scrollLineId2 && page === findPageForLineId(allLines, scrollLineId2, PAGE)) {
             scrollToLineId(body, scrollLineId2);
@@ -511,7 +511,7 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
     `;
     attachInlineDict(document.querySelector('#firstn-source-body'));
     insertApparatusMarkers(document.querySelector('#firstn-source-body'), sourceWork.apparatus);
-    attachApparatusPopup(document.querySelector('#firstn-source-body'), sourceWork.apparatus);
+    attachApparatusPopup(document.querySelector('#firstn-source-body'), sourceWork.apparatus, sourceWork.witnessMap);
     if (!showAll) wireNav(wrap.querySelector('#page-nav'));
 
     if (scrollLineId2) {
@@ -568,7 +568,7 @@ let activeApparatusPopup = null;
  * @param {HTMLElement} container  Source body element.
  * @param {Array} apparatus       Apparatus array from parseTei.
  */
-function attachApparatusPopup(container, apparatus) {
+function attachApparatusPopup(container, apparatus, witnessMap) {
     if (!apparatus || !apparatus.length) return;
     if (container._apparatusAttached) return;
     container._apparatusAttached = true;
@@ -582,11 +582,22 @@ function attachApparatusPopup(container, apparatus) {
         const idx = parseInt(marker.dataset.idx, 10);
         const entry = apparatus[idx];
         if (!entry) return;
-        showApparatusPopup(entry, evt.clientX, evt.clientY);
+        showApparatusPopup(entry, evt.clientX, evt.clientY, witnessMap);
     });
 }
 
-function showApparatusPopup(entry, clickX, clickY) {
+function resolveWitLabel(witAttr, witnessMap) {
+    if (!witAttr) return '';
+    const ids = witAttr.split(/\s+/).filter(Boolean);
+    const labels = ids.map(id => {
+        const clean = id.replace(/^#/, '');
+        if (witnessMap && witnessMap.has(clean)) return witnessMap.get(clean);
+        return id;
+    });
+    return labels.join(', ');
+}
+
+function showApparatusPopup(entry, clickX, clickY, witnessMap) {
     dismissApparatusPopup();
     const popup = document.createElement('div');
     popup.className = 'apparatus-popup';
@@ -596,7 +607,8 @@ function showApparatusPopup(entry, clickX, clickY) {
         html += `<p class="apparatus-lem"><b>Base text:</b> ${escapeHtml(entry.lem)}</p>`;
     }
     for (const rdg of entry.readings) {
-        const wit = rdg.wit ? ` <span class="apparatus-wit">[${escapeHtml(rdg.wit)}]</span>` : '';
+        const label = resolveWitLabel(rdg.wit, witnessMap);
+        const wit = label ? ` <span class="apparatus-wit">[${escapeHtml(label)}]</span>` : '';
         html += `<p class="apparatus-rdg"><b>Variant:</b> ${escapeHtml(rdg.text || '\u2014')}${wit}</p>`;
     }
     popup.innerHTML = html;

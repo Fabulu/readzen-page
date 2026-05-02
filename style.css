@@ -3972,3 +3972,9 @@ a.master-appearance-title:hover {
     .lineage-container--scholar { height: 450px; }
 }
 
+.spacer-row {
+    height: 0.6em;
+    border: none !important;
+    padding: 0;
+    pointer-events: none;
+}
