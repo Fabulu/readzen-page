@@ -54,6 +54,7 @@ jobs:
         run: node build/build-dict-shards.js
 
       - name: Build Pagefind search index
+        if: ${{ !contains(github.event.head_commit.message, '[skip-pagefind]') }}
         run: |
           # Set paths for CI environment
           export CBETA_XML_DIR=corpus/CbetaZenTexts/xml-p5
