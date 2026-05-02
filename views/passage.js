@@ -196,6 +196,9 @@ export async function render(route, mount, shell) {
         if (rangeSearchTerm) sourceHtml = highlightTextInHtml(sourceHtml, rangeSearchTerm);
         document.querySelector('#source-body').innerHTML = sourceHtml;
         attachInlineDict(document.querySelector('#source-body'));
+        const srcBody = document.querySelector('#source-body');
+        insertApparatusMarkers(srcBody, sourceWork.apparatus);
+        attachApparatusPopup(srcBody, sourceWork.apparatus);
 
         // "View in Full Text" button for ranged views
         if (route.hasExplicitRange) {
@@ -294,6 +297,8 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
         srcBody.innerHTML = srcHtml;
         document.querySelector('#translation-body').innerHTML = trnHtml;
         attachInlineDict(srcBody);
+        insertApparatusMarkers(srcBody, sourceWork.apparatus);
+        attachApparatusPopup(srcBody, sourceWork.apparatus);
         window.requestAnimationFrame(syncRowHeights);
         updatePaginationUI();
         if (scrollLineId && page === findPageForLineId(allSourceLines, scrollLineId, PAGE)) {
@@ -377,6 +382,8 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
 
     window.requestAnimationFrame(syncRowHeights);
     attachInlineDict(document.querySelector('#source-body'));
+    insertApparatusMarkers(document.querySelector('#source-body'), sourceWork.apparatus);
+    attachApparatusPopup(document.querySelector('#source-body'), sourceWork.apparatus);
 
     if (scrollLineId) {
         scrollToLineId(document.querySelector('#source-body'), scrollLineId);
@@ -427,6 +434,8 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
         const body = document.querySelector('#firstn-source-body');
         body.innerHTML = html;
         attachInlineDict(body);
+        insertApparatusMarkers(body, sourceWork.apparatus);
+        attachApparatusPopup(body, sourceWork.apparatus);
         updateNav();
         if (scrollLineId2 && page === findPageForLineId(allLines, scrollLineId2, PAGE)) {
             scrollToLineId(body, scrollLineId2);
@@ -483,6 +492,8 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
         ${buildPassageFooter()}
     `;
     attachInlineDict(document.querySelector('#firstn-source-body'));
+    insertApparatusMarkers(document.querySelector('#firstn-source-body'), sourceWork.apparatus);
+    attachApparatusPopup(document.querySelector('#firstn-source-body'), sourceWork.apparatus);
     if (!showAll) wireNav(wrap.querySelector('#page-nav'));
 
     if (scrollLineId2) {
@@ -505,6 +516,114 @@ async function loadXml(url) {
         cache.set('xml-text:' + url, text, XML_CACHE_TTL_MS);
     }
     return parseTei(text);
+}
+
+/**
+ * Insert apparatus markers (◆) into the rendered source HTML.
+ * Each marker is a <sup> with data-idx pointing into the apparatus array.
+ * Only call this on the Chinese source panel, not the translation panel.
+ */
+function insertApparatusMarkers(container, apparatus) {
+    if (!apparatus || !apparatus.length) return;
+    for (let i = 0; i < apparatus.length; i += 1) {
+        const entry = apparatus[i];
+        if (!entry.lineId) continue;
+        const row = container.querySelector(`.line-row[data-line-id="${CSS.escape(entry.lineId)}"]`);
+        if (!row) continue;
+        const textSpan = row.querySelector('.line-text');
+        if (!textSpan) continue;
+        // Insert a marker sup at the end of the line text.
+        const marker = document.createElement('sup');
+        marker.className = 'apparatus-marker';
+        marker.dataset.idx = String(i);
+        marker.textContent = '\u25C6'; // ◆
+        textSpan.appendChild(marker);
+    }
+}
+
+/** Currently visible apparatus popup, if any. */
+let activeApparatusPopup = null;
+
+/**
+ * Attach click handler for apparatus markers on the given container.
+ * Guards against duplicate listeners on the same element.
+ * @param {HTMLElement} container  Source body element.
+ * @param {Array} apparatus       Apparatus array from parseTei.
+ */
+function attachApparatusPopup(container, apparatus) {
+    if (!apparatus || !apparatus.length) return;
+    if (container._apparatusAttached) return;
+    container._apparatusAttached = true;
+    // Store apparatus on the element so the handler can read it after
+    // pagination re-renders (the array never changes for a given work).
+    container._apparatusData = apparatus;
+    container.addEventListener('click', (evt) => {
+        const marker = evt.target.closest('.apparatus-marker');
+        if (!marker) return;
+        evt.stopPropagation();
+        const idx = parseInt(marker.dataset.idx, 10);
+        const entry = apparatus[idx];
+        if (!entry) return;
+        showApparatusPopup(entry, evt.clientX, evt.clientY);
+    });
+}
+
+function showApparatusPopup(entry, clickX, clickY) {
+    dismissApparatusPopup();
+    const popup = document.createElement('div');
+    popup.className = 'apparatus-popup';
+
+    let html = '';
+    if (entry.lem) {
+        html += `<p class="apparatus-lem"><b>Base text:</b> ${escapeHtml(entry.lem)}</p>`;
+    }
+    for (const rdg of entry.readings) {
+        const wit = rdg.wit ? ` <span class="apparatus-wit">[${escapeHtml(rdg.wit)}]</span>` : '';
+        html += `<p class="apparatus-rdg"><b>Variant:</b> ${escapeHtml(rdg.text || '\u2014')}${wit}</p>`;
+    }
+    popup.innerHTML = html;
+    document.body.appendChild(popup);
+    activeApparatusPopup = popup;
+
+    // Position near click, clamped to viewport (same logic as dict popup).
+    popup.style.left = '0px';
+    popup.style.top = '0px';
+    popup.style.visibility = 'hidden';
+    const rect = popup.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const margin = 8;
+    let left = clickX + 4;
+    let top = clickY + 16;
+    if (left + rect.width > vw - margin) left = vw - rect.width - margin;
+    if (left < margin) left = margin;
+    if (top + rect.height > vh - margin) top = clickY - rect.height - 8;
+    if (top < margin) top = margin;
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+    popup.style.visibility = '';
+
+    // Dismiss on outside click.
+    requestAnimationFrame(() => {
+        document.addEventListener('click', onApparatusOutsideClick, { once: true, capture: true });
+    });
+}
+
+function dismissApparatusPopup() {
+    if (activeApparatusPopup) {
+        activeApparatusPopup.remove();
+        activeApparatusPopup = null;
+    }
+}
+
+function onApparatusOutsideClick(evt) {
+    if (activeApparatusPopup && !activeApparatusPopup.contains(evt.target)) {
+        dismissApparatusPopup();
+    } else if (activeApparatusPopup) {
+        requestAnimationFrame(() => {
+            document.addEventListener('click', onApparatusOutsideClick, { once: true, capture: true });
+        });
+    }
 }
 
 /** Render the translation panel (or a not-available notice). */

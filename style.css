@@ -3636,6 +3636,17 @@ a.master-appearance-title:hover {
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 1rem;
 }
+.scholar-subcollections {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.scholar-subcollections > div:first-child {
+    grid-column: 1 / -1;
+}
 
 @media (max-width: 640px) {
     .scholar-user-grid {
@@ -3920,6 +3931,36 @@ a.master-appearance-title:hover {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .header-nav-label { display: inline; }
+
+/* ━━ Apparatus markers & popup ━━ */
+.apparatus-marker {
+  color: #c44;
+  cursor: pointer;
+  font-size: 0.65em;
+  vertical-align: super;
+  margin-left: 1px;
+  user-select: none;
+}
+.apparatus-marker:hover {
+  color: #e66;
+}
+.apparatus-popup {
+  position: fixed;
+  z-index: 9999;
+  max-width: 320px;
+  background: var(--bg, #0b0907);
+  border: 1px solid var(--border-soft, #333);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,.45);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text, #ede3d1);
+}
+.apparatus-popup p { margin: 0.15rem 0; }
+.apparatus-lem b,
+.apparatus-rdg b { color: var(--accent, #d4ab58); }
+.apparatus-wit { color: var(--muted, #8b7b69); font-size: 0.8em; }
 
 /* ━━ Responsive ━━ */
 @media (max-width: 640px) {

@@ -259,7 +259,7 @@ export async function render(route, mount, shell) {
         if (passageId) {
             renderPassageMode(collection, passageId, user, shell);
         } else {
-            renderCollectionMode(collection, user, shell);
+            renderCollectionMode(collection, user, shell, collections);
         }
         shell.hideStatus();
     } catch (error) {
@@ -289,8 +289,8 @@ export async function render(route, mount, shell) {
     }
 }
 
-/** Render the collection in list mode: title + passage rows. */
-function renderCollectionMode(collection, user, shell) {
+/** Render the collection in list mode: title + passage rows + sub-collections. */
+function renderCollectionMode(collection, user, shell, allCollections) {
     const titleEl = document.querySelector('#scholar-title');
     const subEl = document.querySelector('#scholar-sub');
     const body = document.querySelector('#scholar-body');
@@ -302,7 +302,20 @@ function renderCollectionMode(collection, user, shell) {
     const studyNotes = collection.studyNotes || collection.StudyNotes || '';
 
     titleEl.textContent = name;
-    subEl.textContent = `${passages.length} passage${passages.length === 1 ? '' : 's'} · by ${user}`;
+
+    // Breadcrumb: if this is a sub-collection, show link back to parent
+    const parentId = collection.parentCollectionId || collection.ParentCollectionId || '';
+    if (parentId && allCollections) {
+        const parent = allCollections.find(c => (c.id || c.Id) === parentId);
+        if (parent) {
+            const parentName = parent.name || parent.Name || 'Parent';
+            subEl.innerHTML = `<a href="#/scholar/${encodeURIComponent(parentId)}//${encodeURIComponent(user)}" style="color:var(--accent,#6EAFF8);text-decoration:none">\u2190 ${escapeHtml(parentName)}</a> · ${passages.length} passage${passages.length === 1 ? '' : 's'} · by ${escapeHtml(user)}`;
+        } else {
+            subEl.textContent = `${passages.length} passage${passages.length === 1 ? '' : 's'} · by ${user}`;
+        }
+    } else {
+        subEl.textContent = `${passages.length} passage${passages.length === 1 ? '' : 's'} · by ${user}`;
+    }
 
     // Graph button (only shown if the collection has inter-passage links)
     const links = collection.links || collection.Links || [];
@@ -332,6 +345,28 @@ function renderCollectionMode(collection, user, shell) {
         : '';
 
     const cid = collection.id || collection.Id || '';
+
+    // Sub-collections within this collection
+    const subCollections = (allCollections || []).filter(c => {
+        const parentId = c.parentCollectionId || c.ParentCollectionId || '';
+        return parentId === cid;
+    });
+    const subCollectionHtml = subCollections.length > 0
+        ? `<div class="scholar-subcollections">
+            <div style="font-size:0.82rem;color:var(--muted,#888);margin-bottom:0.4rem">${subCollections.length} sub-collection${subCollections.length !== 1 ? 's' : ''}</div>
+            ${subCollections.map(sc => {
+                const scId = sc.id || sc.Id || '';
+                const scName = sc.name || sc.Name || 'Untitled';
+                const scPassages = sc.passages || sc.Passages || [];
+                const scDesc = sc.description || sc.Description || '';
+                return `<a class="scholar-collection-card scholar-collection-card--child" href="#/scholar/${encodeURIComponent(scId)}//${encodeURIComponent(user)}">
+                    <span class="scholar-collection-card-title">${escapeHtml(scName)}</span>
+                    <span class="scholar-collection-card-meta">${scPassages.length} passage${scPassages.length !== 1 ? 's' : ''}${scDesc ? ' \u00b7 ' + escapeHtml(scDesc.slice(0, 60)) : ''}</span>
+                </a>`;
+            }).join('')}
+        </div>`
+        : '';
+
     const passageRows = passages.map((p) => {
         const pid = p.id || p.Id || '';
         const relPath = p.sourceRelPath || p.SourceRelPath || '';
@@ -372,9 +407,12 @@ function renderCollectionMode(collection, user, shell) {
         ${descHtml}
         ${tagsChips}
         ${notesHtml}
-        ${passages.length === 0
+        ${subCollectionHtml}
+        ${passages.length === 0 && subCollections.length === 0
             ? '<p class="list-empty-hint">This collection has no passages yet.</p>'
-            : `<div class="scholar-list">${passageRows}</div>`}
+            : passages.length === 0
+                ? ''
+                : `<div class="scholar-list">${passageRows}</div>`}
     `;
 }
 
@@ -421,6 +459,7 @@ function renderPassageMode(collection, passageId, user, _shell) {
     const importance = Math.min(5, Math.max(0, parseInt(p.importance || p.Importance || '0', 10)));
     const annotationType = (p.annotationType || p.AnnotationType || '').toLowerCase();
     const linkedTexts = p.linkedTexts || p.LinkedTexts || [];
+    const apparatus = p.apparatus || p.Apparatus || [];
     const createdBy = p.createdBy || p.CreatedBy || '';
     const addedUtc = p.addedUtc || p.AddedUtc || '';
     const modifiedUtc = p.modifiedUtc || p.ModifiedUtc || '';
@@ -499,6 +538,15 @@ function renderPassageMode(collection, passageId, user, _shell) {
         ${metaLines.length ? `<dl class="scholar-meta">${metaLines.join('')}</dl>` : ''}
         ${linkedTextsHtml}
         ${notes ? `<div class="scholar-notes">${annotationHtml}<strong>Notes.</strong> ${escapeHtml(notes)}</div>` : ''}
+        ${apparatus.length ? `<div class="scholar-apparatus"><strong>Textual Variants</strong><ul>${apparatus.map(e => {
+            const lem = e.lemma || e.Lemma || '';
+            const readings = e.readings || e.Readings || [];
+            return readings.map(r => {
+                const rdg = r.reading || r.Reading || '';
+                const wit = r.witnessId || r.WitnessId || r.witness_id || '';
+                return `<li>Lem: ${escapeHtml(lem)} / Variant: ${escapeHtml(rdg)}${wit ? ` [${escapeHtml(wit)}]` : ''}</li>`;
+            }).join('');
+        }).join('')}</ul></div>` : ''}
         ${openReaderHtml}
     `;
 }
