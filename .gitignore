@@ -2,3 +2,4 @@
 # Regenerate with: node build/build-dict-shards.js
 pagefind/
 dict-bundled/
+node_modules/
