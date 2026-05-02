@@ -8,7 +8,6 @@
 // tab, this view simply never finishes loading — which is fine.
 
 import { escapeHtml, sliceLines, sliceFirstN, renderLinesHtml } from '../lib/format.js';
-import { navigate } from '../lib/navigate.js';
 import { highlightTextInHtml, scrollToFirstHighlight, scrollToLineId, findPageForTerm, findPageForLineId } from '../lib/highlight.js';
 import { parseTei } from '../lib/tei.js';
 import {
@@ -227,7 +226,7 @@ export async function render(route, mount, shell) {
             fullBtn.textContent = 'View in Full Text';
             const scrollParam = route.startLine ? '?scroll=' + encodeURIComponent(route.startLine) : '';
             const qParam = rangeSearchTerm ? (scrollParam ? '&' : '?') + 'q=' + encodeURIComponent(rangeSearchTerm) : '';
-            fullBtn.href = '/' + route.workId + scrollParam + qParam;
+            fullBtn.href = '#/' + route.workId + scrollParam + qParam;
             const grid = document.querySelector('#preview-grid');
             if (grid) grid.parentNode.insertBefore(fullBtn, grid);
         }
@@ -801,7 +800,7 @@ function buildPassageToolbar(route) {
             ? sel.toString().trim()
             : (document.querySelector('#source-body') || document.querySelector('#view-mount')).innerText.trim();
         const title = document.querySelector('#shell-title')?.textContent || route.workId;
-        const url = location.origin + '/' + (route.rawRoute || route.workId);
+        const url = location.origin + location.pathname + '#/' + (route.rawRoute || route.workId);
         const citation = text + '\n\n\u2014 ' + title + ', ' + route.workId + '. ' + url;
         navigator.clipboard.writeText(citation).then(() => {
             copyBtn.textContent = 'Copied!';
@@ -820,7 +819,7 @@ function buildPassageToolbar(route) {
         if (old) { old.remove(); return; }
 
         const title = document.querySelector('#shell-title')?.textContent || route.workId;
-        const url = location.origin + '/' + (route.rawRoute || route.workId);
+        const url = location.origin + location.pathname + '#/' + (route.rawRoute || route.workId);
 
         const popup = document.createElement('div');
         popup.className = 'cite-popup';
@@ -1071,13 +1070,13 @@ function wireTranslatorSwitcher(container, route) {
 
     select.addEventListener('change', () => {
         const user = select.value;
-        const base = '/' + route.workId;
+        const base = '#/' + route.workId;
         const rangePart = route.startLine
             ? '/' + route.startLine + (route.endLine && route.endLine !== route.startLine ? '-' + route.endLine : '')
             : '';
         const modePart = '/en';
         const translatorPart = user ? '/' + encodeURIComponent(user) : '';
-        navigate(base + rangePart + modePart + translatorPart);
+        location.hash = base + rangePart + modePart + translatorPart;
     });
 }
 

@@ -4,7 +4,6 @@
 
 import { loadMasters } from './master.js';
 import { escapeHtml } from '../lib/format.js';
-import { navigate } from '../lib/navigate.js';
 
 const SCHOOL_COLORS = {
     'Linji':      { bg: 'rgba(180, 60, 50, 0.22)', border: 'rgba(180, 60, 50, 0.55)', text: '#f0c0b8' },
@@ -73,7 +72,7 @@ function renderBrowse(mount, masters, schools, activeSchool, activeQ) {
             <header class="masters-browse-header">
                 <div class="masters-browse-title-row">
                     <h2 class="masters-browse-title">Zen Masters</h2>
-                    <a href="/lineage" class="masters-browse-link">View Lineage Web &rarr;</a>
+                    <a href="#/lineage" class="masters-browse-link">View Lineage Web &rarr;</a>
                 </div>
                 <div class="masters-browse-controls">
                     <select class="masters-filter-select" aria-label="Filter by school">
@@ -116,7 +115,7 @@ function renderBrowse(mount, masters, schools, activeSchool, activeQ) {
         if (linkEl) {
             e.preventDefault();
             e.stopPropagation();
-            navigate(linkEl.dataset.href);
+            location.hash = linkEl.dataset.href;
         }
     });
 
@@ -139,8 +138,8 @@ function renderCard(m) {
         : death ? `d. ${death}` : '';
 
     const slug = primary.replace(/ /g, '_');
-    const profileHref = '/master/' + encodeURIComponent(slug);
-    const lineageHref = '/lineage?focus=' + encodeURIComponent(slug);
+    const profileHref = '#/master/' + encodeURIComponent(slug);
+    const lineageHref = '#/lineage?focus=' + encodeURIComponent(slug);
 
     const badge = m.school
         ? `<span class="master-card-school" style="${schoolStyle(m.school)}">${escapeHtml(m.school)}</span>`

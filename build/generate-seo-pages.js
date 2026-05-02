@@ -27,7 +27,7 @@ function esc(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function makePage(route, title, description, noscriptHtml, jsonLd) {
+function makePage(route, title, description, noscriptHtml) {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44,12 +44,13 @@ function makePage(route, title, description, noscriptHtml, jsonLd) {
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
 <link rel="canonical" href="${BASE}/${route}">
-<style>body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #333; } a { color: #1a73e8; } h1 { font-size: 1.5em; }</style>${jsonLd ? `\n<script type="application/ld+json">${jsonLd}</script>` : ''}
+<script>!function(){var p=window.location.pathname,s=window.location.search||"",h=window.location.hash||"";window.location.replace("/#"+p+s+h)}();</script>
 </head>
 <body>
+<noscript>
 ${noscriptHtml}
 <p><a href="${BASE}">Read Zen Home</a></p>
-<p style="margin-top:2em"><a href="${BASE}/${route}">View interactive profile &rarr;</a></p>
+</noscript>
 </body>
 </html>`;
 }
@@ -168,16 +169,10 @@ async function main() {
 
             const noscript = buildMasterNoscript(m);
             const route = `master/${slug}`;
-            const jsonLd = JSON.stringify({
-                "@context": "https://schema.org",
-                "@type": "Person",
-                "name": canonical,
-                "description": desc
-            });
 
             const dir = resolve(ROOT, 'master', slug);
             mkdirSync(dir, { recursive: true });
-            writeFileSync(resolve(dir, 'index.html'), makePage(route, title, desc, noscript, jsonLd), 'utf8');
+            writeFileSync(resolve(dir, 'index.html'), makePage(route, title, desc, noscript), 'utf8');
             allRoutes.push(route);
             masterIndex.push({ canonical, zh, school, slug, death: m.death, floruit: m.floruit });
             masterCount++;
@@ -214,9 +209,10 @@ async function main() {
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="301 Zen Master Profiles - Read Zen">
 <link rel="canonical" href="${BASE}/masters">
-<style>body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #333; } a { color: #1a73e8; } h1 { font-size: 1.5em; }</style>
+<script>window.location.replace('/#/masters');</script>
 </head>
 <body>
+<noscript>
 <h1>301 Zen Master Profiles</h1>
 <p>Browse Zen master profiles with biographical details, lineage connections, school affiliations, and corpus text appearances.</p>
 <table>
@@ -226,7 +222,7 @@ async function main() {
         const dates = m.floruit && m.death ? `${m.floruit}-${m.death}` : m.death ? `d. ${m.death}` : '';
         masterListHtml += `<tr><td><a href="${BASE}/master/${m.slug}">${esc(m.canonical)}</a></td><td>${esc(m.zh)}</td><td>${esc(m.school)}</td><td>${dates}</td></tr>\n`;
     }
-    masterListHtml += `</table>\n<p><a href="${BASE}">Read Zen Home</a></p>\n<p style="margin-top:2em"><a href="${BASE}/masters">View interactive profiles &rarr;</a></p>\n</body>\n</html>`;
+    masterListHtml += `</table>\n<p><a href="${BASE}">Read Zen Home</a></p>\n</noscript>\n</body>\n</html>`;
 
     mkdirSync(resolve(ROOT, 'masters'), { recursive: true });
     writeFileSync(resolve(ROOT, 'masters', 'index.html'), masterListHtml, 'utf8');

@@ -12,7 +12,6 @@
 // on the landing page, which has its own download CTA front and center.
 
 import { escapeHtml } from '../lib/format.js';
-import { navigate } from '../lib/navigate.js';
 import { buildZenUri, describeRoute } from '../lib/route.js';
 import { copyShareableLink } from '../lib/share.js';
 
@@ -125,9 +124,9 @@ export function mountShell(root, route) {
                         <span class="header-nav-icon">&#9662;</span>
                     </button>
                     <div class="header-nav-menu" id="research-menu" hidden>
-                        <a class="header-nav-item" href="/scholar">Browse Collections</a>
-                        <a class="header-nav-item" href="/lineage">Lineage Graph</a>
-                        <a class="header-nav-item" href="/masters">Zen Masters</a>
+                        <a class="header-nav-item" href="#/scholar">Browse Collections</a>
+                        <a class="header-nav-item" href="#/lineage">Lineage Graph</a>
+                        <a class="header-nav-item" href="#/masters">Zen Masters</a>
                     </div>
                 </div>
                 <div class="shell-route" id="shell-route-box">
@@ -356,7 +355,7 @@ export function mountShell(root, route) {
         headerSearchForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const q = headerSearchInput.value.trim();
-            navigate(q ? '/search?q=' + encodeURIComponent(q) : '/search');
+            window.location.hash = q ? '#/search?q=' + encodeURIComponent(q) : '#/search';
             headerSearchInput.blur();
         });
     }
