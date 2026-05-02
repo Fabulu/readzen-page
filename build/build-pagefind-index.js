@@ -30,18 +30,30 @@ function extractTextFromXml(xml) {
     let result = '';
     let inTag = false;
     let prevSpace = true;
+    let tagBuf = '';
+    let rdgSkipDepth = 0;
 
     for (let i = iStart + 1; i < iEnd; i++) {
         const ch = xml[i];
         if (inTag) {
-            if (ch === '>') inTag = false;
+            if (ch === '>') {
+                const tag = tagBuf.toLowerCase();
+                if (/^rdg[\s>\/]/.test(tag + '>')) rdgSkipDepth++;
+                else if (tag.startsWith('/rdg')) rdgSkipDepth--;
+                tagBuf = '';
+                inTag = false;
+            } else {
+                tagBuf += ch;
+            }
             continue;
         }
         if (ch === '<') {
             inTag = true;
+            tagBuf = '';
             if (!prevSpace) { result += ' '; prevSpace = true; }
             continue;
         }
+        if (rdgSkipDepth > 0) continue;
         if (ch === '\r') continue;
         if (ch === '\n' || ch === '\t' || ch === ' ' || ch === '\f' || ch === '\v') {
             if (!prevSpace) { result += ' '; prevSpace = true; }
@@ -195,7 +207,7 @@ async function main() {
         const titleEntry = cbetaTitles.get(relPath) || {};
 
         await index.addCustomRecord({
-            url: '/' + fileId,
+            url: '/' + fileId + '?side=en',
             content: text,
             language: 'en',
             meta: {
@@ -227,7 +239,7 @@ async function main() {
         const titleEntry = openzenTitles.get(relPath) || {};
 
         await index.addCustomRecord({
-            url: '/' + fileId,
+            url: '/' + fileId + '?side=en',
             content: text,
             language: 'en',
             meta: {
@@ -268,7 +280,7 @@ async function main() {
                 const titleEntry = cbetaTitles.get(relPath) || {};
 
                 await index.addCustomRecord({
-                    url: '/' + fileId,
+                    url: '/' + fileId + '?side=community&translator=' + user,
                     content: text,
                     language: 'en',
                     meta: {

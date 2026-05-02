@@ -52,11 +52,66 @@ const EDGE_COLORS = {
     'commentary-on-book': '#51D996',
     'book-in-collection': '#AB47BC',
     'master-authored-book': '#D4A574',
+    'spoken-by':           '#FF8A65',
+    'passage-references-master': '#59B3FF',
+    'influenced-by':       '#FF8A65',
+    'belongs-to':          '#AB47BC',
+    'passage-references-collection': '#59B3FF',
+    'excerpted-from':      '#AB47BC',
+    'formulated-by':       '#FF8A65',
+    'concept-associated-with-master': '#59B3FF',
+    'rejected-by':         '#FF6B6B',
+    'featured-in-concept-collection': '#AB47BC',
+    'central-to':          '#AB47BC',
+    'concept-references-collection': '#59B3FF',
+    'authored':            '#FF8A65',
+    'master-commented-on': '#51D996',
+    'endorsed':            '#51D996',
+    'taught':              '#FF8A65',
+    'developed':           '#51D996',
+    'opposed':             '#FF6B6B',
+    'coined':              '#FF8A65',
+    'master-defined':      '#51D996',
+    'popularized':         '#FF8A65',
+    'subject-of':          '#AB47BC',
+    'master-featured-in':  '#AB47BC',
+    'preserved-in':        '#AB47BC',
+    'used-in':             '#59B3FF',
+    'defined-in-passage':  '#51D996',
+    'exemplified-in':      '#59B3FF',
+    'expresses':           '#59B3FF',
+    'exemplifies':         '#59B3FF',
+    'term-defines-concept':'#51D996',
+    'coined-by':           '#FF8A65',
+    'term-associated-with':'#59B3FF',
+    'term-defined-by':     '#51D996',
+    'synonym-of':          '#59B3FF',
+    'antonym-of':          '#FF6B6B',
+    'term-related-to':     '#FFB347',
+    'variant-of':          '#59B3FF',
+    'term-featured-in':    '#AB47BC',
+    'defined-in-collection':'#51D996',
+    'contains':            '#AB47BC',
+    'collection-references-passage': '#59B3FF',
+    'complements-passage': '#51D996',
+    'explores':            '#59B3FF',
+    'develops':            '#51D996',
+    'collection-features-concept': '#AB47BC',
+    'collection-features-master': '#AB47BC',
+    'about':               '#59B3FF',
+    'preserves':           '#AB47BC',
+    'collection-defines':  '#51D996',
+    'collection-features-term': '#AB47BC',
+    'introduces':          '#51D996',
+    'builds-on':           '#51D996',
+    'complements-collection': '#59B3FF',
+    'contrasts-with':      '#FF6B6B',
 };
 const DEFAULT_EDGE_COLOR = '#9E9E9E';
 
 const NON_DIRECTIONAL_TYPES = new Set([
     'parallels', 'is-variant-of', 'opposes', 'related-to', 'same-school', 'cross-ref', 'related-book',
+    'synonym-of', 'antonym-of', 'term-related-to', 'variant-of', 'complements-collection', 'contrasts-with',
 ]);
 
 // ── Data loading ──
@@ -193,7 +248,7 @@ export async function render(route, mount, shell) {
             || pid;
         nodeMap.set(pid, {
             id: pid,
-            type: 0,
+            type: (p.annotationType || p.AnnotationType || '').toLowerCase() === 'book' ? 5 : 0,
             label: label,
             lineage: lineage,
             sourceRelPath: relPath,
@@ -282,7 +337,7 @@ export async function render(route, mount, shell) {
                 fromNode.degree++;
                 toNode.degree++;
                 const weight = parseFloat(edge.weight || edge.Weight || '1') || 1.0;
-                edges.push({ from: fromNode, to: toNode, relationType: relType, weight });
+                edges.push({ from: fromNode, to: toNode, relationType: relType, weight, colorHex: edge.colorHex || edge.ColorHex || '' });
             }
         }
     } else {
@@ -297,7 +352,7 @@ export async function render(route, mount, shell) {
                 fromNode.degree++;
                 toNode.degree++;
                 const weight = parseFloat(link.weight || link.Weight || '1') || 1.0;
-                edges.push({ from: fromNode, to: toNode, relationType: relType, weight });
+                edges.push({ from: fromNode, to: toNode, relationType: relType, weight, colorHex: link.colorHex || link.ColorHex || '' });
             }
         }
     }
@@ -550,7 +605,7 @@ function nodeColor(n) {
 }
 
 function edgeColor(e) {
-    return EDGE_COLORS[e.relationType] || DEFAULT_EDGE_COLOR;
+    return e.colorHex || e.ColorHex || EDGE_COLORS[e.relationType] || DEFAULT_EDGE_COLOR;
 }
 
 // ── Graph engine ──
