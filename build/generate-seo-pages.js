@@ -44,12 +44,25 @@ function makePage(route, title, description, noscriptHtml, jsonLd) {
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
 <link rel="canonical" href="${BASE}/${route}">
-<style>body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #333; } a { color: #1a73e8; } h1 { font-size: 1.5em; }</style>${jsonLd ? `\n<script type="application/ld+json">${jsonLd}</script>` : ''}
+<style>
+body { font-family: 'Segoe UI', system-ui, sans-serif; max-width: 720px; margin: 0 auto; padding: 2em 1.5em; line-height: 1.7; color: #e0e0e0; background: #1a1a2e; }
+a { color: #6EAFF8; text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1 { font-size: 1.6em; color: #fff; margin-bottom: 0.3em; border-bottom: 1px solid #2a2a42; padding-bottom: 0.4em; }
+p { margin: 0.8em 0; }
+.meta { font-size: 0.9em; color: #B8B8C8; margin-bottom: 1.2em; }
+.bio { color: #ccc; }
+.refs { font-size: 0.85em; color: #999; margin-top: 1.5em; padding-top: 1em; border-top: 1px solid #2a2a42; }
+.refs a { color: #81C784; }
+.home-link { margin-top: 2em; font-size: 0.9em; }
+.cta { display: inline-block; margin-top: 1.5em; padding: 0.6em 1.2em; background: #2a2a42; border: 1px solid #3a3a52; border-radius: 6px; color: #6EAFF8; font-size: 0.95em; }
+.cta:hover { background: #3a3a52; text-decoration: none; }
+</style>${jsonLd ? `\n<script type="application/ld+json">${jsonLd}</script>` : ''}
 </head>
 <body>
 ${noscriptHtml}
-<p><a href="${BASE}">Read Zen Home</a></p>
-<p style="margin-top:2em"><a href="${BASE}/#/${route}">View interactive profile &rarr;</a></p>
+<p class="home-link"><a href="${BASE}">← Read Zen Home</a></p>
+<a class="cta" href="${BASE}/#/${route}">View interactive profile &rarr;</a>
 </body>
 </html>`;
 }
@@ -90,14 +103,14 @@ function buildMasterNoscript(m) {
     else if (death) facts.push(`d. ${death}`);
     if (teacher) facts.push(`Teacher: ${esc(teacher)}`);
     if (students.length) facts.push(`Students: ${esc(students.join(', '))}`);
-    if (facts.length) html += `<p>${facts.join(' | ')}</p>\n`;
+    if (facts.length) html += `<p class="meta">${facts.join(' | ')}</p>\n`;
 
     // Bio
-    if (notes) html += `<p>${esc(notes)}</p>\n`;
+    if (notes) html += `<p class="bio">${esc(notes)}</p>\n`;
 
     // Links
     if (links.length) {
-        html += '<p>References: ';
+        html += '<p class="refs">References: ';
         html += links.map(l => `<a href="${esc(l.url)}">${esc(l.label)}</a>`).join(' | ');
         html += '</p>\n';
     }
@@ -214,7 +227,20 @@ async function main() {
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="301 Zen Master Profiles - Read Zen">
 <link rel="canonical" href="${BASE}/masters">
-<style>body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #333; } a { color: #1a73e8; } h1 { font-size: 1.5em; }</style>
+<style>
+body { font-family: 'Segoe UI', system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 2em 1.5em; line-height: 1.7; color: #e0e0e0; background: #1a1a2e; }
+a { color: #6EAFF8; text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1 { font-size: 1.6em; color: #fff; border-bottom: 1px solid #2a2a42; padding-bottom: 0.4em; }
+p { color: #B8B8C8; }
+table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+th { text-align: left; color: #D4AF37; font-size: 0.85em; letter-spacing: 0.5px; border-bottom: 1px solid #2a2a42; padding: 0.5em 0.3em; }
+td { padding: 0.4em 0.3em; border-bottom: 1px solid #1e1e30; font-size: 0.9em; }
+td a { color: #6EAFF8; }
+.home-link { margin-top: 2em; font-size: 0.9em; }
+.cta { display: inline-block; margin-top: 1em; padding: 0.5em 1em; background: #2a2a42; border: 1px solid #3a3a52; border-radius: 6px; color: #6EAFF8; font-size: 0.9em; }
+.cta:hover { background: #3a3a52; text-decoration: none; }
+</style>
 </head>
 <body>
 <h1>301 Zen Master Profiles</h1>
@@ -226,7 +252,7 @@ async function main() {
         const dates = m.floruit && m.death ? `${m.floruit}-${m.death}` : m.death ? `d. ${m.death}` : '';
         masterListHtml += `<tr><td><a href="${BASE}/master/${m.slug}">${esc(m.canonical)}</a></td><td>${esc(m.zh)}</td><td>${esc(m.school)}</td><td>${dates}</td></tr>\n`;
     }
-    masterListHtml += `</table>\n<p><a href="${BASE}">Read Zen Home</a></p>\n<p style="margin-top:2em"><a href="${BASE}/#/masters">View interactive profiles &rarr;</a></p>\n</body>\n</html>`;
+    masterListHtml += `</table>\n<p class="home-link"><a href="${BASE}">&larr; Read Zen Home</a></p>\n<a class="cta" href="${BASE}/#/masters">View interactive profiles &rarr;</a>\n</body>\n</html>`;
 
     mkdirSync(resolve(ROOT, 'masters'), { recursive: true });
     writeFileSync(resolve(ROOT, 'masters', 'index.html'), masterListHtml, 'utf8');

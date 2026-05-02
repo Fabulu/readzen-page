@@ -1,7 +1,3 @@
 User-agent: *
 Allow: /
-
-Sitemap: https://readzen.pages.dev/sitemap.xml?google=please
-Sitemap: https://readzen.pages.dev/sitemap-test.xml
-Sitemap: https://readzen.pages.dev/sitemap.txt
 Sitemap: https://readzen.pages.dev/sitemap.xml
