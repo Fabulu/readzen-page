@@ -1130,7 +1130,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         if (hit && hit.type === 4) {
             const scId = hit.id.startsWith('collection:') ? hit.id.slice(11) : hit.id;
             const owner = hit.ownerUser || user;
-            window.location.hash = '#/scholar/' + encodeURIComponent(scId) + '/graph/' + encodeURIComponent(owner));
+            window.location.hash = '#/scholar/' + encodeURIComponent(scId) + '/graph/' + encodeURIComponent(owner);
         } else if (hit && hit.type === 5) {
             const workId = (hit.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';
             if (workId) window.location.hash = '#/' + encodeURIComponent(workId);
