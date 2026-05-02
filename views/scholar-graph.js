@@ -8,7 +8,7 @@
 // ego-on-hover highlighting, popup cards, and animated entry.
 
 import { escapeHtml } from '../lib/format.js';
-import { navigate } from '../lib/navigate.js';
+
 import { DATA_REPO_BASE } from '../lib/github.js';
 import { streamJsonl } from '../lib/jsonl.js';
 import * as cache from '../lib/cache.js';
@@ -1130,10 +1130,10 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         if (hit && hit.type === 4) {
             const scId = hit.id.startsWith('collection:') ? hit.id.slice(11) : hit.id;
             const owner = hit.ownerUser || user;
-            navigate('/scholar/' + encodeURIComponent(scId) + '/graph/' + encodeURIComponent(owner));
+            window.location.hash = '#/scholar/' + encodeURIComponent(scId) + '/graph/' + encodeURIComponent(owner));
         } else if (hit && hit.type === 5) {
             const workId = (hit.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';
-            if (workId) navigate('/' + encodeURIComponent(workId));
+            if (workId) window.location.hash = '#/' + encodeURIComponent(workId);
         }
     });
 
