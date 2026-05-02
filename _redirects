@@ -12,3 +12,6 @@
 /T47n1987B/* /_meta-T47n1987B?rz_target=/T47n1987B/:splat 200
 /pd.wumenguan-1632/* /_meta-pd.wumenguan-1632?rz_target=/pd.wumenguan-1632/:splat 200
 /ws.gateless-barrier/* /_meta-ws.gateless-barrier?rz_target=/ws.gateless-barrier/:splat 200
+
+# History-mode SPA catch-all (must be LAST)
+/* /index.html 200

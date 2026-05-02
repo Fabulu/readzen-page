@@ -228,7 +228,7 @@ export async function render(route, mount, shell) {
             var enShort = (t.enShort || t.EnShort || '').toString();
             var path = (t.path || t.Path || '').toString();
             var workId = getWorkId(t);
-            var href = workId ? '#/' + workId : '#';
+            var href = workId ? '/' + workId : '#';
             var enLine = en || enShort;
             var translated = translatedIds.has(workId);
             var isOpenZen = t.corpus === 'openzen';
@@ -279,7 +279,7 @@ export async function render(route, mount, shell) {
             var masterName = route.master.replace(/_/g, ' ');
             html += '<div class="search-filter-chip">' +
                 'Filtered by: ' + escapeHtml(masterName) +
-                ' <a href="#/search?q=' + encodeURIComponent(query) + '">\u00d7</a>' +
+                ' <a href="/search?q=' + encodeURIComponent(query) + '">\u00d7</a>' +
                 '</div>';
         }
 
@@ -293,7 +293,7 @@ export async function render(route, mount, shell) {
                 var slug = name.replace(/ /g, '_');
                 var zh = (m.names && m.names[1]) || '';
                 var dates = m.death ? 'd. ' + m.death : (m.floruit ? 'fl. ' + m.floruit : '');
-                html += '<a class="search-master-card" href="#/master/' + encodeURIComponent(slug) + '">';
+                html += '<a class="search-master-card" href="/master/' + encodeURIComponent(slug) + '">';
                 html += '<span class="search-master-name">' + escapeHtml(name) + '</span>';
                 if (zh) html += ' <span class="search-master-zh">' + escapeHtml(zh) + '</span>';
                 html += '<span class="search-master-meta">' + escapeHtml([m.school, dates].filter(Boolean).join(' \u00b7 ')) + '</span>';
@@ -314,7 +314,7 @@ export async function render(route, mount, shell) {
             for (var j = 0; j < pageItems.length; j++) {
                 var t = pageItems[j];
                 var fileId = getWorkId(t);
-                var href = fileId ? '#/' + fileId + (query ? '?q=' + encodeURIComponent(query) : '') : '#';
+                var href = fileId ? '/' + fileId + (query ? '?q=' + encodeURIComponent(query) : '') : '#';
                 var tZh = (t.zh || t.Zh || '').toString();
                 var tEn = (t.en || t.En || t.enShort || t.EnShort || '').toString();
                 var tPath = (t.path || t.Path || '').toString();
@@ -398,7 +398,7 @@ export async function render(route, mount, shell) {
                 var r = ftSlice[k];
                 var meta = r.meta || {};
                 var fFileId = meta.file_id || '';
-                var fHref = fFileId ? '#/' + fFileId + (query ? '?q=' + encodeURIComponent(query) : '') : '#';
+                var fHref = fFileId ? '/' + fFileId + (query ? '?q=' + encodeURIComponent(query) : '') : '#';
                 var fTitle = meta.title || fFileId || '';
                 var fTitleEn = meta.title_en || '';
                 ftHtml += '<a class="search-row search-row--fulltext" href="' + escapeHtml(fHref) + '">';
@@ -517,9 +517,9 @@ export async function render(route, mount, shell) {
         e.preventDefault();
         var q = input.value;
         var corpusParam = cf ? '&corpus=' + encodeURIComponent(cf) : '';
-        var newHash = '#/search' + (q ? '?q=' + encodeURIComponent(q) + corpusParam : '');
-        if (window.location.hash !== newHash) {
-            window.history.replaceState(null, '', newHash);
+        var newPath = '/search' + (q ? '?q=' + encodeURIComponent(q) + corpusParam : '');
+        if ((window.location.pathname + window.location.search) !== newPath) {
+            history.replaceState(null, '', newPath);
         }
         doSearch(q, 1);
     });

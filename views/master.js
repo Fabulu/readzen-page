@@ -213,8 +213,8 @@ function renderMasterProfile(m, appearances) {
     // Action buttons
     const slug = primary.replace(/ /g, '_');
     html += '<div class="master-actions">';
-    html += '<a class="btn btn--small" href="#/search?master=' + encodeURIComponent(slug) + '">Search Texts</a>';
-    html += ' <a class="btn btn--small btn--outline" href="#/lineage?focus=' + encodeURIComponent(slug) + '">View in Lineage</a>';
+    html += '<a class="btn btn--small" href="/search?master=' + encodeURIComponent(slug) + '">Search Texts</a>';
+    html += ' <a class="btn btn--small btn--outline" href="/lineage?focus=' + encodeURIComponent(slug) + '">View in Lineage</a>';
     html += '</div>';
 
     // Biography
@@ -290,7 +290,7 @@ function renderAppearanceList(items) {
             const fileId = fileIdFromPath(item.path);
             html += '<div class="master-appearance">';
             if (fileId) {
-                html += '<a href="#/' + encodeURIComponent(fileId) + '" class="master-appearance-title">' + escapeHtml(title) + '</a>';
+                html += '<a href="/' + encodeURIComponent(fileId) + '" class="master-appearance-title">' + escapeHtml(title) + '</a>';
             } else {
                 html += '<span class="master-appearance-title">' + escapeHtml(title) + '</span>';
             }
@@ -377,7 +377,7 @@ renderAppearanceList._seq = 0;
 function buildMasterLink(name) {
     // Use underscores for cleaner URLs: "Fayan Wenyi" -> "Fayan_Wenyi"
     const slug = name.replace(/ /g, '_');
-    const href = '#/master/' + encodeURIComponent(slug).replace(/%20/g, '_');
+    const href = '/master/' + encodeURIComponent(slug).replace(/%20/g, '_');
     return `<a href="${href}" class="master-lineage-link">${escapeHtml(name)}</a>`;
 }
 

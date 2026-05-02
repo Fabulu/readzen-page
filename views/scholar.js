@@ -109,7 +109,7 @@ export async function render(route, mount, shell) {
             const initial = (typeof name === 'string' ? name[0] : '?').toUpperCase();
             const count = u.collections || '';
             const countLabel = count ? `${count} collection${count !== 1 ? 's' : ''}` : 'View collections';
-            return `<a class="scholar-user-card" href="#/scholar///${encodeURIComponent(name)}">
+            return `<a class="scholar-user-card" href="/scholar///${encodeURIComponent(name)}">
                 <span class="scholar-user-avatar">${escapeHtml(initial)}</span>
                 <span class="scholar-user-info">
                     <span class="scholar-user-name">${escapeHtml(name)}</span>
@@ -192,7 +192,7 @@ export async function render(route, mount, shell) {
                 const cTags = c.tags || c.Tags || [];
                 const desc = c.description || c.Description || '';
                 const indentClass = isChild ? ' scholar-collection-card--child' : '';
-                return `<a class="scholar-collection-card${indentClass}" href="#/scholar/${encodeURIComponent(cId)}//${encodeURIComponent(user)}">
+                return `<a class="scholar-collection-card${indentClass}" href="/scholar/${encodeURIComponent(cId)}//${encodeURIComponent(user)}">
                     <span class="scholar-collection-card-title">${escapeHtml(cName)}</span>
                     <span class="scholar-collection-card-meta">${passages.length} passage${passages.length !== 1 ? 's' : ''}${desc ? ' · ' + escapeHtml(desc.slice(0, 60)) : ''}</span>
                     ${cTags.length ? `<span class="scholar-row-tags">${cTags.slice(0, 3).map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('')}</span>` : ''}
@@ -309,7 +309,7 @@ function renderCollectionMode(collection, user, shell, allCollections) {
         const parent = allCollections.find(c => (c.id || c.Id) === parentId);
         if (parent) {
             const parentName = parent.name || parent.Name || 'Parent';
-            subEl.innerHTML = `<a href="#/scholar/${encodeURIComponent(parentId)}//${encodeURIComponent(user)}" style="color:var(--accent,#6EAFF8);text-decoration:none">\u2190 ${escapeHtml(parentName)}</a> · ${passages.length} passage${passages.length === 1 ? '' : 's'} · by ${escapeHtml(user)}`;
+            subEl.innerHTML = `<a href="/scholar/${encodeURIComponent(parentId)}//${encodeURIComponent(user)}" style="color:var(--accent,#6EAFF8);text-decoration:none">\u2190 ${escapeHtml(parentName)}</a> · ${passages.length} passage${passages.length === 1 ? '' : 's'} · by ${escapeHtml(user)}`;
         } else {
             subEl.textContent = `${passages.length} passage${passages.length === 1 ? '' : 's'} · by ${user}`;
         }
@@ -321,7 +321,7 @@ function renderCollectionMode(collection, user, shell, allCollections) {
     const links = collection.links || collection.Links || [];
     if (links.length > 0) {
         const cid = collection.id || collection.Id || '';
-        const graphHref = '#/scholar/' + encodeURIComponent(cid) + '/graph/' + encodeURIComponent(user);
+        const graphHref = '/scholar/' + encodeURIComponent(cid) + '/graph/' + encodeURIComponent(user);
         const headEl = document.querySelector('#scholar-head');
         if (headEl) {
             const graphLink = document.createElement('a');
@@ -359,7 +359,7 @@ function renderCollectionMode(collection, user, shell, allCollections) {
                 const scName = sc.name || sc.Name || 'Untitled';
                 const scPassages = sc.passages || sc.Passages || [];
                 const scDesc = sc.description || sc.Description || '';
-                return `<a class="scholar-collection-card scholar-collection-card--child" href="#/scholar/${encodeURIComponent(scId)}//${encodeURIComponent(user)}">
+                return `<a class="scholar-collection-card scholar-collection-card--child" href="/scholar/${encodeURIComponent(scId)}//${encodeURIComponent(user)}">
                     <span class="scholar-collection-card-title">${escapeHtml(scName)}</span>
                     <span class="scholar-collection-card-meta">${scPassages.length} passage${scPassages.length !== 1 ? 's' : ''}${scDesc ? ' \u00b7 ' + escapeHtml(scDesc.slice(0, 60)) : ''}</span>
                 </a>`;
@@ -386,7 +386,7 @@ function renderCollectionMode(collection, user, shell, allCollections) {
 
         const displayTitle = summary || (zh.length > 60 ? zh.slice(0, 60) + '\u2026' : zh) || (en.length > 60 ? en.slice(0, 60) + '\u2026' : en) || '(untitled)';
 
-        const href = '#/scholar/' + encodeURIComponent(cid) + '/' + encodeURIComponent(pid) + '/' + encodeURIComponent(user);
+        const href = '/scholar/' + encodeURIComponent(cid) + '/' + encodeURIComponent(pid) + '/' + encodeURIComponent(user);
 
         return `<a class="scholar-row" href="${escapeHtml(href)}">
     ${readingStatus ? `<span class="scholar-row-status"><span class="status-dot status-dot--${escapeHtml(readingStatus)}"></span></span>` : ''}
@@ -470,7 +470,7 @@ function renderPassageMode(collection, passageId, user, _shell) {
     function navHref(target) {
         if (!target) return null;
         const pid = target.id || target.Id || '';
-        return '#/scholar/' + encodeURIComponent(cid) + '/' + encodeURIComponent(pid) + '/' + encodeURIComponent(user);
+        return '/scholar/' + encodeURIComponent(cid) + '/' + encodeURIComponent(pid) + '/' + encodeURIComponent(user);
     }
 
     const prevHref = navHref(prev);
@@ -507,7 +507,7 @@ function renderPassageMode(collection, passageId, user, _shell) {
 </details>` : '';
 
     const workId = extractWorkId(relPath);
-    const readerHref = workId && fromLb ? `#/${encodeURIComponent(workId)}/${encodeURIComponent(fromLb)}${toLb && toLb !== fromLb ? '-' + encodeURIComponent(toLb) : ''}` : '';
+    const readerHref = workId && fromLb ? `/${encodeURIComponent(workId)}/${encodeURIComponent(fromLb)}${toLb && toLb !== fromLb ? '-' + encodeURIComponent(toLb) : ''}` : '';
     const openReaderHtml = readerHref ? `<a class="btn btn--small scholar-open-reader" href="${readerHref}">Open in Reader \u2197</a>` : '';
 
     body.innerHTML = `

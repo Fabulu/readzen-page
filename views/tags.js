@@ -311,7 +311,7 @@ function buildRow(tag, workId, user) {
         ? `${fromLb} – ${toLb}`
         : (fromLb || '');
 
-    const href = '#/' + workId + '/' + fromLb + (toLb && toLb !== fromLb ? '-' + toLb : '') + '/en/' + encodeURIComponent(user);
+    const href = '/' + workId + '/' + fromLb + (toLb && toLb !== fromLb ? '-' + toLb : '') + '/en/' + encodeURIComponent(user);
 
     const row = document.createElement('a');
     row.className = 'tag-row';

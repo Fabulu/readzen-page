@@ -7,6 +7,7 @@ import { loadAllTitlesAsArray } from '../lib/titles.js';
 import { loadMasters } from './master.js';
 import { initGraph } from './lineage-graph.js';
 import { escapeHtml } from '../lib/format.js';
+import { navigate } from '../lib/navigate.js';
 import { initTypeahead } from '../lib/typeahead.js';
 import { DATA_REPO_BASE } from '../lib/github.js';
 
@@ -68,7 +69,7 @@ async function loadCommunityCards(mount) {
 
         // Render cards
         scrollEl.innerHTML = cards.map(c => `
-            <div class="community-card" onclick="window.location.hash='#/scholar/${encodeURIComponent(c.id)}//${encodeURIComponent(c.user)}'">
+            <div class="community-card" data-nav="/scholar/${encodeURIComponent(c.id)}//${encodeURIComponent(c.user)}">
                 <div class="community-card-head">
                     <span class="community-card-avatar">${escapeHtml((c.user[0] || '?').toUpperCase())}</span>
                     <div class="community-card-info">
@@ -79,9 +80,16 @@ async function loadCommunityCards(mount) {
                 <div class="community-card-stats">
                     ${c.passageCount} passages${c.conceptCount ? ' \u00b7 ' + c.conceptCount + ' concepts' : ''}
                 </div>
-                ${c.linkCount > 0 ? `<button class="community-card-graph-link" onclick="event.stopPropagation(); window.location.hash='#/scholar/${encodeURIComponent(c.id)}/graph/${encodeURIComponent(c.user)}';">View Graph \u2192</button>` : ''}
+                ${c.linkCount > 0 ? `<button class="community-card-graph-link" data-nav="/scholar/${encodeURIComponent(c.id)}/graph/${encodeURIComponent(c.user)}">View Graph \u2192</button>` : ''}
             </div>
         `).join('');
+        // Wire delegated click for community cards
+        scrollEl.addEventListener('click', (e) => {
+            const graphBtn = e.target.closest('.community-card-graph-link[data-nav]');
+            if (graphBtn) { e.stopPropagation(); navigate(graphBtn.dataset.nav); return; }
+            const card = e.target.closest('.community-card[data-nav]');
+            if (card) navigate(card.dataset.nav);
+        });
     } catch {
         hideCommunitySection(mount);
     }
@@ -113,7 +121,7 @@ export function render(_route, mount, shell) {
     const lastRead = getLastRead();
     const continueHtml = lastRead
         ? `<div class="continue-reading" id="continue-reading">
-               <a class="continue-reading-link" href="#/${escapeHtml(lastRead.route || lastRead.fileId)}">
+               <a class="continue-reading-link" href="/${escapeHtml(lastRead.route || lastRead.fileId)}">
                    Continue reading: ${escapeHtml(lastRead.title)} (${lastRead.scrollPercent}%)
                </a>
                <button class="continue-reading-dismiss" id="dismiss-continue" title="Dismiss">\u00d7</button>
@@ -129,7 +137,7 @@ export function render(_route, mount, shell) {
                <div class="reading-list-items">
                    ${myList.map((i) =>
                        `<div class="reading-list-entry">
-                            <a class="reading-list-item" href="#/${escapeHtml(i.route || i.fileId)}">${escapeHtml(i.title)}</a>
+                            <a class="reading-list-item" href="/${escapeHtml(i.route || i.fileId)}">${escapeHtml(i.title)}</a>
                             <button class="reading-list-remove" data-file-id="${escapeHtml(i.fileId)}" title="Remove from reading list">\u00d7</button>
                         </div>`
                    ).join('')}
@@ -139,7 +147,7 @@ export function render(_route, mount, shell) {
 
     // ── Start Here rows ──
     const startHereRows = START_HERE.map((t) =>
-        `<a class="start-here-item" href="#/${escapeHtml(t.id)}">
+        `<a class="start-here-item" href="/${escapeHtml(t.id)}">
             <span class="start-here-zh">${escapeHtml(t.zh)}</span>
             <span class="start-here-en">${escapeHtml(t.en)}</span>
         </a>`
@@ -173,8 +181,8 @@ export function render(_route, mount, shell) {
                     <div id="landing-lineage-legend" class="lineage-legend lineage-legend--landing"></div>
                 </div>
                 <div class="lineage-showcase-controls">
-                    <a class="btn btn--outline btn--small" href="#/lineage">Open Full Screen</a>
-                    <a class="btn btn--outline btn--small" href="#/masters">Browse All Masters</a>
+                    <a class="btn btn--outline btn--small" href="/lineage">Open Full Screen</a>
+                    <a class="btn btn--outline btn--small" href="/masters">Browse All Masters</a>
                     <button class="btn btn--outline btn--small" id="random-master-btn">\uD83C\uDFB2 Random Master</button>
                 </div>
             </div>
@@ -188,12 +196,12 @@ export function render(_route, mount, shell) {
                     <div class="community-card community-card--skeleton"></div>
                 </div>
                 <div class="community-research-cta">
-                    <a class="text-link" href="#/scholar">Browse All Collections \u2192</a>
+                    <a class="text-link" href="/scholar">Browse All Collections \u2192</a>
                 </div>
             </div>
 
             <div class="hero-actions">
-                <a class="btn" href="#/search">Advanced Search &amp; Filters</a>
+                <a class="btn" href="/search">Advanced Search &amp; Filters</a>
                 <a class="btn btn--outline" href="${RELEASES_URL}">Download Desktop App</a>
                 <a class="btn btn--outline" href="https://ko-fi.com/readzen">Support on Ko-fi</a>
             </div>
@@ -220,7 +228,7 @@ export function render(_route, mount, shell) {
                         <li class="feature-desktop">Translation editor with translation memory assistant</li>
                         <li class="feature-desktop">AI-assisted translation drafts</li>
                     </ul>
-                    <a class="feature-group-cta" href="#/T48n2005">Try a text</a>
+                    <a class="feature-group-cta" href="/T48n2005">Try a text</a>
                 </div>
                 <div class="feature-group">
                     <h3 class="feature-group-title">Research</h3>
@@ -231,7 +239,7 @@ export function render(_route, mount, shell) {
                         <li class="feature-desktop">Tag &amp; code passages for qualitative research</li>
                         <li class="feature-desktop">Scholar collections with export &amp; comparison</li>
                     </ul>
-                    <a class="feature-group-cta" href="#/search">Search the corpus</a>
+                    <a class="feature-group-cta" href="/search">Search the corpus</a>
                 </div>
                 <div class="feature-group">
                     <h3 class="feature-group-title">Explore</h3>
@@ -241,7 +249,7 @@ export function render(_route, mount, shell) {
                         <li class="feature-desktop">Compare translations side by side</li>
                         <li class="feature-desktop">Critical edition provenance &amp; apparatus</li>
                     </ul>
-                    <a class="feature-group-cta" href="#/masters">Browse masters</a>
+                    <a class="feature-group-cta" href="/masters">Browse masters</a>
                 </div>
             </div>
 
@@ -402,7 +410,7 @@ export function render(_route, mount, shell) {
         landingSearchForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const q = (landingSearchInput.value || '').trim();
-            window.location.hash = '#/search' + (q ? '?q=' + encodeURIComponent(q) : '');
+            navigate('/search' + (q ? '?q=' + encodeURIComponent(q) : ''));
         });
     }
 
@@ -421,10 +429,10 @@ export function render(_route, mount, shell) {
                 masters: masters,
                 onSelect(item) {
                     if (item.kind === 'fulltext') {
-                        window.location.hash = '#/search?q=' + encodeURIComponent(item.query);
+                        navigate('/search?q=' + encodeURIComponent(item.query));
                     } else if (item.href) {
                         const qSuffix = item.query ? '?q=' + encodeURIComponent(item.query) : '';
-                        window.location.hash = item.href + qSuffix;
+                        navigate(item.href + qSuffix);
                     }
                 }
             });
@@ -464,7 +472,7 @@ export function render(_route, mount, shell) {
                     const fname = entry.path.split('/').pop() || '';
                     fileId = fname.replace(/\.xml$/i, '');
                 }
-                if (fileId) window.location.hash = '#/' + fileId;
+                if (fileId) navigate('/' + fileId);
             } catch { /* silent */ }
             randomTextBtn.disabled = false;
         });
@@ -479,7 +487,7 @@ export function render(_route, mount, shell) {
                 if (masters.length === 0) return;
                 const m = masters[Math.floor(Math.random() * masters.length)];
                 const name = (m.names && m.names[0]) || '';
-                if (name) window.location.hash = '#/master/' + encodeURIComponent(name.replace(/ /g, '_'));
+                if (name) navigate('/master/' + encodeURIComponent(name.replace(/ /g, '_')));
             } catch { /* silent */ }
             randomMasterBtn.disabled = false;
         });

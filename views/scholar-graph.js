@@ -8,13 +8,15 @@
 // ego-on-hover highlighting, popup cards, and animated entry.
 
 import { escapeHtml } from '../lib/format.js';
+import { navigate } from '../lib/navigate.js';
 import { DATA_REPO_BASE } from '../lib/github.js';
 import { streamJsonl } from '../lib/jsonl.js';
 import * as cache from '../lib/cache.js';
+import { loadMasters } from './master.js';
 
 // ── Node colors by type ──
 
-const NODE_COLORS = ['#6EAFF8', '#FF8A65', '#64B5F6', '#81C784', '#AB47BC'];
+const NODE_COLORS = ['#6EAFF8', '#FF8A65', '#64B5F6', '#81C784', '#AB47BC', '#D4A574'];
 
 // ── Edge colors by relation type ──
 
@@ -40,11 +42,21 @@ const EDGE_COLORS = {
     'teacher-of':    '#64B5F6',
     'same-school':   '#64B5F6',
     'cross-ref':     '#AB47BC',
+    'excerpted-from-book': '#D4A574',
+    'appears-in':    '#D4A574',
+    'book-contains': '#D4A574',
+    'book-explores': '#D4A574',
+    'book-attributed-to': '#D4A574',
+    'book-records':  '#D4A574',
+    'related-book':  '#D4A574',
+    'commentary-on-book': '#51D996',
+    'book-in-collection': '#AB47BC',
+    'master-authored-book': '#D4A574',
 };
 const DEFAULT_EDGE_COLOR = '#9E9E9E';
 
 const NON_DIRECTIONAL_TYPES = new Set([
-    'parallels', 'is-variant-of', 'opposes', 'related-to', 'same-school', 'cross-ref',
+    'parallels', 'is-variant-of', 'opposes', 'related-to', 'same-school', 'cross-ref', 'related-book',
 ]);
 
 // ── Data loading ──
@@ -123,7 +135,7 @@ export async function render(route, mount, shell) {
                     Clusters
                 </label>
             </div>
-            <a class="lineage-browse-link" href="#/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">&larr; Back to Collection</a>
+            <a class="lineage-browse-link" href="/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">&larr; Back to Collection</a>
         </div>
     `;
 
@@ -154,7 +166,14 @@ export async function render(route, mount, shell) {
     const concepts = collection.concepts || collection.Concepts || [];
     const newEdges = collection.edges || collection.Edges || [];
 
-    if (passages.length === 0 && concepts.length === 0) {
+    // Find sub-collections whose parent is this collection
+    const collId = collection.id || collection.Id || '';
+    const subCollections = collections.filter(c => {
+        const parentId = c.parentCollectionId || c.ParentCollectionId || '';
+        return parentId === collId;
+    });
+
+    if (passages.length === 0 && concepts.length === 0 && subCollections.length === 0) {
         mount.innerHTML = `<article class="panel lookup-card"><p>This collection has no passages to graph.</p></article>`;
         return;
     }
@@ -228,6 +247,24 @@ export async function render(route, mount, shell) {
                 x: 0, y: 0, vx: 0, vy: 0, degree: 0,
             });
         }
+    }
+
+    // Sub-collections → type 4
+    for (const sc of subCollections) {
+        const scId = sc.id || sc.Id || '';
+        if (!scId || nodeMap.has(scId)) continue;
+        const scName = sc.name || sc.Name || 'Sub-collection';
+        const scPassages = sc.passages || sc.Passages || [];
+        const scDesc = sc.description || sc.Description || '';
+        nodeMap.set(scId, {
+            id: scId,
+            type: 4,
+            label: scName,
+            description: scDesc,
+            ownerUser: user,
+            passageCount: scPassages.length,
+            x: 0, y: 0, vx: 0, vy: 0, degree: 0,
+        });
     }
 
     // Build edges
@@ -480,6 +517,15 @@ function drawNodeShape(ctx, node, x, y, r, color, alpha, strokeStyle, lineWidth)
         ctx.roundRect(rx, ry, s, s, cr);
         ctx.fill();
         if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
+    } else if (type === 5) {
+        // Book: Tall rectangle
+        const w = r * 1.2, h = r * 1.8;
+        const rx = x - w / 2, ry = y - h / 2;
+        const cr = r * 0.15;
+        ctx.beginPath();
+        ctx.roundRect(rx, ry, w, h, cr);
+        ctx.fill();
+        if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
     } else {
         // Passage: Circle (default, type 0)
         ctx.beginPath();
@@ -491,9 +537,9 @@ function drawNodeShape(ctx, node, x, y, r, color, alpha, strokeStyle, lineWidth)
 }
 
 function nodeRadius(n) {
-    const base = [10, 12, 14, 12, 14][n.type || 0];
-    const scale = [2, 2, 1.5, 1.5, 2][n.type || 0];
-    const cap = [12, 14, 10, 10, 12][n.type || 0];
+    const base = [10, 12, 14, 12, 14, 14][n.type || 0];
+    const scale = [2, 2, 1.5, 1.5, 2, 2][n.type || 0];
+    const cap = [12, 14, 10, 10, 12, 12][n.type || 0];
     return base + Math.min(n.degree * scale, cap);
 }
 
@@ -755,8 +801,8 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
                 ctx.fill();
             }
 
-            // Edge type labels for ego-relevant edges
-            if (egoNodeId && edgeRelevant && state.zoom >= 0.7) {
+            // Edge type labels for hovered or ego-relevant edges
+            if ((e === state.hoveredEdge) || (egoNodeId && edgeRelevant && state.zoom >= 0.7)) {
                 // For curved edges, use the quadratic Bezier midpoint at t=0.5
                 const midX = useCurve
                     ? 0.25 * e.from.x + 0.5 * cpx + 0.25 * e.to.x
@@ -819,7 +865,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
                     }
                     label = label.slice(0, lo) + '\u2026';
                 }
-                const labelOffset = [4, 6, 5, 8, 8][n.type || 0];
+                const labelOffset = [4, 6, 5, 8, 8, 10][n.type || 0];
 
                 // Text shadow for readability
                 ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
@@ -1023,6 +1069,19 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         }
     });
 
+    // ── Double-click: navigate into sub-collection or open text in reader ──
+    canvas.addEventListener('dblclick', e => {
+        const hit = hitTest(e.offsetX, e.offsetY);
+        if (hit && hit.type === 4) {
+            const scId = hit.id.startsWith('collection:') ? hit.id.slice(11) : hit.id;
+            const owner = hit.ownerUser || user;
+            navigate('/scholar/' + encodeURIComponent(scId) + '/graph/' + encodeURIComponent(owner));
+        } else if (hit && hit.type === 5) {
+            const workId = (hit.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';
+            if (workId) navigate('/' + encodeURIComponent(workId));
+        }
+    });
+
     // ── Wheel zoom ──
     canvas.addEventListener('wheel', e => {
         e.preventDefault();
@@ -1201,7 +1260,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         const card = document.createElement('div');
         card.className = 'graph-card';
 
-        const typeNames = ['Passage', 'Concept', 'Master', 'Term', 'Collection'];
+        const typeNames = ['Passage', 'Concept', 'Master', 'Term', 'Collection', 'Text'];
         const typeName = typeNames[node.type || 0];
 
         let content = `<button class="graph-card-close">\u2715</button>`;
@@ -1230,6 +1289,10 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
             if (node.masterNames && node.masterNames.length) {
                 content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">Masters: ${escapeHtml(node.masterNames.join(', '))}</div>`;
             }
+            // Notes
+            if (node.notes) {
+                content += `<div style="font-size:0.78rem;color:var(--text-soft);margin-top:0.3rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.3rem"><strong>Notes.</strong> ${escapeHtml(node.notes.slice(0, 150))}${node.notes.length > 150 ? '\u2026' : ''}</div>`;
+            }
             // Reading status + importance
             if (node.readingStatus || node.importance > 0) {
                 let meta = '';
@@ -1244,8 +1307,28 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
                 content += `<div class="graph-card-tags">${node.tags.slice(0, 4).map(t => `<span class="graph-card-tag">${escapeHtml(t)}</span>`).join('')}</div>`;
             }
         } else if (node.type === 2) {
-            // Master
+            // Master — show dates inline, then async-load full bio
             if (node.dates) content += `<div class="graph-card-snippet">${escapeHtml(node.dates)}</div>`;
+            content += `<div id="master-extra-info" style="font-size:0.78rem;color:var(--muted)">Loading...</div>`;
+            // Async enrich after card renders
+            const masterName = node.id.startsWith('master:') ? node.id.slice(7) : node.label;
+            loadMasters().then(masters => {
+                const el = document.getElementById('master-extra-info');
+                if (!el) return;
+                const m = (masters || []).find(r =>
+                    (r.names || []).some(n => n === masterName || n.toLowerCase() === masterName.toLowerCase()));
+                if (!m) { el.textContent = ''; return; }
+                let info = '';
+                if (m.school) info += `<div>School: ${escapeHtml(m.school)}</div>`;
+                if (m.teacher) info += `<div>Teacher: ${escapeHtml(m.teacher)}</div>`;
+                if (m.students && m.students.length > 0)
+                    info += `<div>Students: ${escapeHtml(m.students.slice(0, 5).join(', '))}${m.students.length > 5 ? ' +' + (m.students.length - 5) : ''}</div>`;
+                if (m.notes) info += `<div style="margin-top:0.3rem;font-size:0.75rem;opacity:0.8">${escapeHtml(m.notes.slice(0, 200))}${m.notes.length > 200 ? '\u2026' : ''}</div>`;
+                el.innerHTML = info || '';
+            }).catch(() => {
+                const el = document.getElementById('master-extra-info');
+                if (el) el.textContent = '';
+            });
         } else if (node.type === 3) {
             // Term node
             content += `<div class="graph-card-snippet" style="font-size:1.1rem;font-weight:600">${escapeHtml(node.label)}</div>`;
@@ -1259,17 +1342,31 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
                 content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">Used in ${termEdges.length} connection${termEdges.length !== 1 ? 's' : ''}</div>`;
             }
         } else if (node.type === 4) {
-            // Collection node
-            content += `<div style="font-size:0.85rem;color:var(--muted)">Collection Reference</div>`;
+            // Collection node (sub-collection)
+            content += `<div style="font-size:0.85rem;color:var(--muted)">Sub-Collection</div>`;
             if (node.description) {
                 content += `<div class="graph-card-snippet">${escapeHtml(node.description.slice(0, 100))}</div>`;
             }
-            if (node.ownerUser) {
-                content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">by ${escapeHtml(node.ownerUser)}</div>`;
+            if (node.passageCount > 0) {
+                content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${node.passageCount} passage${node.passageCount !== 1 ? 's' : ''}</div>`;
             }
             const collEdges = edges.filter(e => e.from.id === node.id || e.to.id === node.id);
             if (collEdges.length > 0) {
                 content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${collEdges.length} connection${collEdges.length !== 1 ? 's' : ''}</div>`;
+            }
+            content += `<div style="font-size:0.75rem;color:var(--accent);margin-top:0.3rem">Double-click to navigate \u2192</div>`;
+        } else if (node.type === 5) {
+            // Book node
+            content += `<div style="font-size:0.85rem;color:var(--muted)">Text</div>`;
+            if (node.sourceRelPath) {
+                content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${escapeHtml(node.sourceRelPath)}</div>`;
+            }
+            if (node.zhTitle) {
+                content += `<div style="font-size:0.9rem;margin-top:0.3rem">${escapeHtml(node.zhTitle)}</div>`;
+            }
+            const bookEdges = edges.filter(e => e.from.id === node.id || e.to.id === node.id);
+            if (bookEdges.length > 0) {
+                content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${bookEdges.length} connection${bookEdges.length !== 1 ? 's' : ''}</div>`;
             }
         }
 
@@ -1298,23 +1395,29 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
                 const range = node.toLb && node.toLb !== node.fromLb
                     ? `${node.fromLb}-${node.toLb}`
                     : node.fromLb;
-                content += `<a href="#/${encodeURIComponent(workId)}/${encodeURIComponent(range)}">Open in Reader \u2192</a>`;
+                content += `<a href="/${encodeURIComponent(workId)}/${encodeURIComponent(range)}">Open in Reader \u2192</a>`;
             }
-            content += `<a href="#/scholar/${encodeURIComponent(collectionId)}/${encodeURIComponent(node.id)}/${encodeURIComponent(user)}">View in Collection \u2192</a>`;
+            content += `<a href="/scholar/${encodeURIComponent(collectionId)}/${encodeURIComponent(node.id)}/${encodeURIComponent(user)}">View in Collection \u2192</a>`;
         } else if (node.type === 1) {
-            content += `<a href="#/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">View Collection \u2192</a>`;
+            content += `<a href="/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">View Collection \u2192</a>`;
         } else if (node.type === 2) {
             const masterName = node.id.startsWith('master:') ? node.id.slice(7) : node.label;
-            content += `<a href="#/master/${encodeURIComponent(masterName)}">Master Profile \u2192</a>`;
+            content += `<a href="/master/${encodeURIComponent(masterName)}">Master Profile \u2192</a>`;
         } else if (node.type === 3) {
             // Term — link to dictionary if we have the source term
             const term = node.label;
-            content += `<a href="#/dict/${encodeURIComponent(term)}">View in Dictionary \u2192</a>`;
+            content += `<a href="/dict/${encodeURIComponent(term)}">View in Dictionary \u2192</a>`;
         } else if (node.type === 4) {
-            // Collection — link to browse it
-            const collId = node.id.startsWith('collection:') ? node.id.slice(11) : node.id;
-            if (node.ownerUser) {
-                content += `<a href="#/scholar/${encodeURIComponent(collId)}//${encodeURIComponent(node.ownerUser)}">Browse Collection \u2192</a>`;
+            // Sub-collection — link to browse and view graph
+            const scCollId = node.id.startsWith('collection:') ? node.id.slice(11) : node.id;
+            const scOwner = node.ownerUser || user;
+            content += `<a href="/scholar/${encodeURIComponent(scCollId)}//${encodeURIComponent(scOwner)}">Browse Collection \u2192</a>`;
+            content += `<a href="/scholar/${encodeURIComponent(scCollId)}/graph/${encodeURIComponent(scOwner)}">View Graph \u2192</a>`;
+        } else if (node.type === 5) {
+            // Book — link to reader
+            const bookWorkId = (node.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';
+            if (bookWorkId) {
+                content += `<a href="/${encodeURIComponent(bookWorkId)}">Open in Reader \u2192</a>`;
             }
         }
         content += `</div>`;

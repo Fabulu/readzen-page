@@ -6,6 +6,7 @@
 // ES module. Loaded with <script type="module"> in index.html.
 
 import { getRawRoute, parseRoute, buildZenUri } from './lib/route.js';
+import { navigate } from './lib/navigate.js';
 import { escapeHtml } from './lib/format.js';
 import { mountShell } from './views/shell.js';
 import * as landing from './views/landing.js';
@@ -154,12 +155,43 @@ try {
     if (saved) document.documentElement.style.setProperty('--text-size', saved + 'px');
 } catch {}
 
-// Re-run init on hash changes so users navigating between links inside the
-// same tab get a fresh view.
-window.addEventListener('hashchange', () => {
+// Re-run init on popstate (back/forward) and routechange (programmatic navigate).
+window.addEventListener('popstate', () => {
     dismissAllPopups();
     window.scrollTo(0, 0);
     init();
+});
+window.addEventListener('routechange', () => {
+    dismissAllPopups();
+    window.scrollTo(0, 0);
+    init();
+});
+
+// Backward compat: if someone arrives with a hash URL, convert to history URL.
+window.addEventListener('hashchange', () => {
+    if (window.location.hash.length > 1) {
+        const path = window.location.hash.substring(1);
+        history.replaceState(null, '', path);
+    }
+    dismissAllPopups();
+    window.scrollTo(0, 0);
+    init();
+});
+
+// Delegated click handler: intercept internal <a href="/..."> links and use
+// history navigation instead of full page loads.
+document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href]');
+    if (!a) return;
+    const href = a.getAttribute('href');
+    if (!href || href.startsWith('http') || href.startsWith('//') || href.startsWith('mailto:')
+        || href.startsWith('zen://') || a.hasAttribute('target') || a.hasAttribute('download')
+        || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    // Only intercept absolute-path internal links
+    if (href.startsWith('/')) {
+        e.preventDefault();
+        navigate(href);
+    }
 });
 
 initKeyboard();

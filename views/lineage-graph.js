@@ -7,6 +7,7 @@
 
 import { loadMasters } from './master.js';
 import { escapeHtml } from '../lib/format.js';
+import { navigate } from '../lib/navigate.js';
 
 // ── School colors ──
 
@@ -71,7 +72,7 @@ export async function render(route, mount, shell) {
                 </div>
             </div>
             <div class="lineage-legend" id="lineage-legend"></div>
-            <a href="#/masters" class="lineage-browse-link">&larr; Browse Masters</a>
+            <a href="/masters" class="lineage-browse-link">&larr; Browse Masters</a>
         </div>
     `;
 
@@ -369,8 +370,8 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
             '<strong>' + escapeHtml(node.primary || '') + '</strong>' +
             (meta ? '<br><span class="lineage-popup-meta">' + escapeHtml(meta) + '</span>' : '') +
             '<div class="lineage-popup-actions">' +
-            '<a href="#/master/' + encodeURIComponent(slug) + '">Profile</a>' +
-            '<a href="#/search?master=' + encodeURIComponent(slug) + '">Search Texts</a>' +
+            '<a href="/master/' + encodeURIComponent(slug) + '">Profile</a>' +
+            '<a href="/search?master=' + encodeURIComponent(slug) + '">Search Texts</a>' +
             '</div>';
         // Remove popup when any link inside is clicked
         popup.querySelectorAll('a').forEach(a => a.addEventListener('click', () => removeNodePopup()));
@@ -398,7 +399,7 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
         const hit = hitTest(e.offsetX, e.offsetY);
         if (hit) {
             const slug = hit.primary.replace(/ /g, '_');
-            window.location.hash = '#/master/' + encodeURIComponent(slug);
+            navigate('/master/' + encodeURIComponent(slug));
         }
     });
 
@@ -491,7 +492,7 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName) {
                 if (now - lastTapTime < 350 && hit) {
                     // Double-tap: navigate to profile
                     const slug = hit.primary.replace(/ /g, '_');
-                    window.location.hash = '#/master/' + encodeURIComponent(slug);
+                    navigate('/master/' + encodeURIComponent(slug));
                 } else if (hit) {
                     state.focused = hit.key;
                     draw();
