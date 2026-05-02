@@ -96,7 +96,23 @@ export async function render(route, mount, shell) {
         shell.setTitle('Scholar Collections');
         shell.setContext('Community');
 
-        const users = await loadScholarIndex();
+        let users = await loadScholarIndex();
+        // Filter out users with no collections (empty JSONL files)
+        const usersWithCollections = [];
+        for (const u of users) {
+            const name = u.name || u;
+            const count = u.collections || 0;
+            if (count > 0) { usersWithCollections.push(u); continue; }
+            // Unknown count (fallback path) — check by fetching the JSONL
+            try {
+                const url = DATA_REPO_BASE + 'community/collections/' + encodeURIComponent(name) + '.jsonl';
+                const resp = await fetch(url, { method: 'HEAD' });
+                if (resp.ok && parseInt(resp.headers.get('content-length') || '0', 10) > 10) {
+                    usersWithCollections.push(u);
+                }
+            } catch {}
+        }
+        users = usersWithCollections;
         shell.hideStatus();
 
         if (users.length === 0) {
