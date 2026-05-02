@@ -25,6 +25,24 @@ import { addToList, removeFromList, isInList, setLastRead, resumeLastReadTrackin
 import { CITE_STYLES, buildCitation, getPreferredStyle, setPreferredStyle } from '../lib/citation.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Build a short apparatus summary string like " · 12 textual variants, 3 witnesses".
+ * Returns empty string when apparatus is empty or missing.
+ */
+function apparatusSummary(apparatus) {
+    if (!apparatus || !apparatus.length) return '';
+    const variants = apparatus.length;
+    const witnesses = new Set();
+    for (const entry of apparatus) {
+        for (const rdg of entry.readings) {
+            if (rdg.wit) rdg.wit.split(/\s+/).forEach(w => { if (w) witnesses.add(w); });
+        }
+    }
+    const wCount = witnesses.size;
+    return ` \u00b7 ${variants} textual variant${variants === 1 ? '' : 's'}`
+         + (wCount ? `, ${wCount} witness${wCount === 1 ? '' : 'es'}` : '');
+}
 const DEFAULT_LIST = 'My Reading List';
 const VIEW_PREF_KEY = 'zen-view-pref'; // 'zh' | 'en' | 'both'
 
@@ -190,7 +208,7 @@ export async function render(route, mount, shell) {
             sourceLines = sliceLines(sourceWork.linesById, sourceWork.lineOrder, '', '');
         }
 
-        document.querySelector('#source-meta').textContent = sourceWork.titleZh || route.workId;
+        document.querySelector('#source-meta').textContent = (sourceWork.titleZh || route.workId) + apparatusSummary(sourceWork.apparatus);
         const rangeSearchTerm = route.q || route.highlight || '';
         let sourceHtml = renderLinesHtml(sourceLines);
         if (rangeSearchTerm) sourceHtml = highlightTextInHtml(sourceHtml, rangeSearchTerm);
@@ -354,7 +372,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
             <article class="panel" id="source-panel" ${viewPref === 'en' ? 'hidden' : ''}>
                 <div class="panel-head">
                     <p class="panel-label">Chinese Source</p>
-                    <p class="panel-meta">${escapeHtml(titleZh)}</p>
+                    <p class="panel-meta">${escapeHtml(titleZh)}${apparatusSummary(sourceWork.apparatus)}</p>
                 </div>
                 <div class="panel-title">Chinese source</div>
                 <div class="panel-body panel-body--source" id="source-body">
@@ -482,7 +500,7 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
         <article class="panel outline-panel">
             <header class="outline-head">
                 <h2 class="outline-title">${titleLine}</h2>
-                <p class="outline-sub">${subtitle}</p>
+                <p class="outline-sub">${subtitle}${apparatusSummary(sourceWork.apparatus)}</p>
             </header>
             <div class="panel-body panel-body--source" id="firstn-source-body">
                 ${initHtml}
