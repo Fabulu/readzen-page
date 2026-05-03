@@ -1738,6 +1738,13 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
         document.body.appendChild(backdrop);
         document.body.appendChild(card);
 
+        // Re-clamp after render using actual card height
+        const actualH = card.offsetHeight;
+        if (cardY + actualH + margin > window.innerHeight) {
+            cardY = Math.max(margin, window.innerHeight - actualH - margin);
+            card.style.top = cardY + 'px';
+        }
+
         const closeBtn = card.querySelector('.graph-card-close');
         closeBtn.addEventListener('click', () => {
             state.focused = null;
