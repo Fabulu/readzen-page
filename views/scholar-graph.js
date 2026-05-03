@@ -1046,7 +1046,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
 
         // Draw nodes
         for (const n of nodes) {
-            const r = nodeRadius(n) * entryScale;
+            let r = nodeRadius(n) * entryScale;
             const color = nodeColor(n);
             let nodeAlpha = connectedSet && !connectedSet.has(n.id) ? 0.35 : 1.0;
 
