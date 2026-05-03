@@ -1056,15 +1056,41 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
                 drawNodeShape(ctx, n, n.x + 1.5, n.y + 1.5, r + 0.5, 'rgba(0,0,0,0.25)', nodeAlpha * entryScale, null, 0);
             }
 
-            // Starting node glow
-            if (n.id === startingNodeId && nodeAlpha > 0.5) {
+            // Starting node: 1.3x size + ripple pulse + outer ring
+            const isStarting = n.id === startingNodeId;
+            if (isStarting && nodeAlpha > 0.5) {
+                r *= 1.3; // size boost
+
+                // Ripple pulse: two expanding rings that fade out
+                const time = performance.now() / 1000;
+                for (let ri = 0; ri < 2; ri++) {
+                    const t = ((time + ri * 0.75) % 1.5) / 1.5;
+                    const rippleR = r + (r * 2.0 * t);
+                    const rippleOpacity = 0.5 * (1.0 - t) * entryScale;
+                    const rippleWidth = 2.5 * (1.0 - t) + 0.5;
+                    ctx.globalAlpha = rippleOpacity;
+                    ctx.strokeStyle = `rgba(255,200,50,${rippleOpacity})`;
+                    ctx.lineWidth = rippleWidth;
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, rippleR, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                // Thin outer ring (halo)
+                ctx.globalAlpha = 0.6 * entryScale;
+                ctx.strokeStyle = 'rgba(255,200,50,0.6)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, r + 6, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Soft glow behind node
                 ctx.globalAlpha = 0.15 * entryScale;
                 ctx.fillStyle = '#FFD700';
                 ctx.beginPath();
                 ctx.arc(n.x, n.y, r + 10, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.globalAlpha = 0.25 * entryScale;
-                ctx.fillStyle = '#FFD700';
                 ctx.beginPath();
                 ctx.arc(n.x, n.y, r + 5, 0, Math.PI * 2);
                 ctx.fill();
@@ -1073,7 +1099,6 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
 
             // Draw shape with integrated stroke
             const isHighlighted = state.highlightedIds && state.highlightedIds.has(n.id);
-            const isStarting = n.id === startingNodeId;
             const strokeColor = (n.id === state.hovered || n.id === state.focused)
                 ? '#FFD700'
                 : isHighlighted
@@ -1081,13 +1106,13 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
                     : isStarting
                         ? '#FFB400'
                         : 'rgba(255,255,255,0.6)';
-            const strokeWidth = (n.id === state.focused) ? 3 : isHighlighted ? 3 : isStarting ? 4 : 1.2;
+            const strokeWidth = (n.id === state.focused) ? 3 : isHighlighted ? 3 : isStarting ? 5 : 1.2;
             drawNodeShape(ctx, n, n.x, n.y, r, color, nodeAlpha * entryScale, strokeColor, strokeWidth);
 
             // Label below node
             if (state.zoom >= 0.5 && entryScale > 0.3) {
-                const fontSize = Math.max(10, Math.round(13 * state.zoom));
-                ctx.font = fontSize + 'px "Segoe UI", Arial, sans-serif';
+                const fontSize = Math.max(10, Math.round((isStarting ? 14 : 13) * state.zoom));
+                ctx.font = (isStarting ? 'bold ' : '') + fontSize + 'px "Segoe UI", Arial, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.globalAlpha = nodeAlpha * entryScale;
@@ -1184,7 +1209,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
         }
 
         // Continue animation or physics
-        if (entryProgress < 1.0 || state.physicsEnabled) {
+        if (entryProgress < 1.0 || state.physicsEnabled || startingNodeId) {
             state.physicsRAF = requestAnimationFrame(draw);
         } else {
             state.physicsRAF = null;
