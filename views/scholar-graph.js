@@ -1072,8 +1072,8 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.globalAlpha = nodeAlpha * entryScale;
-                // Measure and truncate by pixel width (handles CJK vs Latin correctly)
-                const maxLabelWidth = Math.max(40, nodeRadius(n) * 4);
+                // Generous max width so labels are readable
+                const maxLabelWidth = Math.max(80, nodeRadius(n) * 8);
                 let label = n.label || '';
                 if (ctx.measureText(label).width > maxLabelWidth) {
                     let lo = 0, hi = label.length;
@@ -1097,6 +1097,19 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
 
                 ctx.fillStyle = '#ffffff';
                 ctx.fillText(label, n.x, n.y + r + labelOffset);
+
+                // Secondary label (dates for masters, description snippet for concepts)
+                const secondary = n.dates || (n.type === 1 && n.description ? n.description.slice(0, 30) : '');
+                if (secondary) {
+                    const secSize = Math.max(8, Math.round(10 * state.zoom));
+                    ctx.font = secSize + 'px "Segoe UI", Arial, sans-serif';
+                    ctx.globalAlpha = nodeAlpha * entryScale * 0.6;
+                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+                    ctx.lineWidth = 2;
+                    ctx.strokeText(secondary, n.x, n.y + r + labelOffset + fontSize + 2);
+                    ctx.fillStyle = '#cccccc';
+                    ctx.fillText(secondary, n.x, n.y + r + labelOffset + fontSize + 2);
+                }
             }
 
             ctx.globalAlpha = 1.0;
