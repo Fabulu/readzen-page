@@ -239,6 +239,21 @@ export async function render(route, mount, shell) {
     const links = collection.links || collection.Links || [];
     const graphLayout = collection.graphLayout || collection.GraphLayout || null;
 
+    // Suppressed nodes and edges
+    const suppressedNodes = new Set(collection.suppressedAutoNodeIds || collection.SuppressedAutoNodeIds || []);
+    const suppressedEdges = new Set(collection.suppressedAutoEdgeIds || collection.SuppressedAutoEdgeIds || []);
+
+    // Custom edge type colors (merge into lookup)
+    const customEdgeTypes = collection.customEdgeTypes || collection.CustomEdgeTypes || [];
+    for (const ct of customEdgeTypes) {
+        const id = ct.id || ct.Id || '';
+        const color = ct.colorHex || ct.ColorHex || '';
+        if (id && color) EDGE_COLORS[id] = color;
+    }
+
+    // Node annotations
+    const nodeAnnotations = collection.nodeAnnotations || collection.NodeAnnotations || {};
+
     // Schema v2 support
     const schemaVersion = collection.schemaVersion || collection.SchemaVersion || 1;
     const concepts = collection.concepts || collection.Concepts || [];
@@ -317,7 +332,7 @@ export async function render(route, mount, shell) {
         const masters = p.masterNames || p.MasterNames || [];
         for (const masterName of masters) {
             const masterId = 'master:' + masterName;
-            if (nodeMap.has(masterId)) continue;
+            if (nodeMap.has(masterId) || suppressedNodes.has(masterId)) continue;
             nodeMap.set(masterId, {
                 id: masterId,
                 type: 2,
@@ -331,7 +346,7 @@ export async function render(route, mount, shell) {
     const extraMasters = collection.extraMasters || collection.ExtraMasters || [];
     for (const name of extraMasters) {
         const masterId = 'master:' + name;
-        if (nodeMap.has(masterId)) continue;
+        if (nodeMap.has(masterId) || suppressedNodes.has(masterId)) continue;
         nodeMap.set(masterId, {
             id: masterId, type: 2, label: name,
             x: 0, y: 0, vx: 0, vy: 0, degree: 0,
@@ -375,7 +390,7 @@ export async function render(route, mount, shell) {
     // Sub-collections → type 4
     for (const sc of subCollections) {
         const scId = sc.id || sc.Id || '';
-        if (!scId || nodeMap.has(scId)) continue;
+        if (!scId || nodeMap.has(scId) || suppressedNodes.has(scId)) continue;
         const scName = sc.name || sc.Name || 'Sub-collection';
         const scPassages = sc.passages || sc.Passages || [];
         const scDesc = sc.description || sc.Description || '';
@@ -386,6 +401,21 @@ export async function render(route, mount, shell) {
             description: scDesc,
             ownerUser: user,
             passageCount: scPassages.length,
+            x: 0, y: 0, vx: 0, vy: 0, degree: 0,
+        });
+    }
+
+    // CollectionRefs (explicit references to other collections)
+    const collectionRefs = collection.collectionRefs || collection.CollectionRefs || [];
+    for (const ref of collectionRefs) {
+        const refId = ref.collectionId || ref.CollectionId || '';
+        if (!refId) continue;
+        const nodeId = 'collection:' + refId;
+        if (nodeMap.has(nodeId) || suppressedNodes.has(nodeId)) continue;
+        nodeMap.set(nodeId, {
+            id: nodeId, type: 4,
+            label: ref.collectionName || ref.CollectionName || 'Collection',
+            ownerUser: ref.ownerUsername || ref.OwnerUsername || user,
             x: 0, y: 0, vx: 0, vy: 0, degree: 0,
         });
     }
@@ -425,6 +455,27 @@ export async function render(route, mount, shell) {
         }
     }
 
+    // Auto-edges: connect passages to their masters (like desktop app)
+    const edgePairSet = new Set(edges.map(e => e.from.id + '|' + e.to.id));
+    for (const p of passages) {
+        const pid = p.id || p.Id || '';
+        const masters = p.masterNames || p.MasterNames || [];
+        if ((p.annotationType || p.AnnotationType || '').toLowerCase() === 'book') continue;
+        for (const mn of masters) {
+            const masterId = 'master:' + mn;
+            const autoEdgeId = `auto:attributed:${pid}\u2192${masterId}`;
+            if (suppressedEdges.has(autoEdgeId)) continue;
+            const fromNode = nodeMap.get(pid);
+            const toNode = nodeMap.get(masterId);
+            if (fromNode && toNode) {
+                if (edgePairSet.has(pid + '|' + masterId) || edgePairSet.has(masterId + '|' + pid)) continue;
+                fromNode.degree++;
+                toNode.degree++;
+                edges.push({ from: fromNode, to: toNode, relationType: 'attributed-to', weight: 0.5, colorHex: '', isAuto: true });
+            }
+        }
+    }
+
     const nodes = [...nodeMap.values()];
 
     // Apply saved positions or run force layout
@@ -449,7 +500,7 @@ export async function render(route, mount, shell) {
 
     const canvas = mount.querySelector('#scholar-graph-canvas');
     canvas.style.touchAction = 'none';
-    initGraph(canvas, nodes, edges, collectionId, user, graphLayout);
+    initGraph(canvas, nodes, edges, collectionId, user, graphLayout, nodeAnnotations);
 }
 
 // ── Force-directed layout ──
@@ -684,7 +735,7 @@ function edgeColor(e) {
 
 // ── Graph engine ──
 
-function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
+function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAnnotations) {
     const ctx = canvas.getContext('2d');
 
     // Declare easing helper before first use (used in draw())
@@ -1082,8 +1133,13 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
                 const vt = (-state.panY/state.zoom - bounds.minY)*sc;
                 const vw = (state.width/state.zoom)*sc;
                 const vh = (state.height/state.zoom)*sc;
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(mmX, mmY, mmW, mmH);
+                ctx.clip();
                 ctx.strokeStyle = '#00E5FF'; ctx.lineWidth = 1;
                 ctx.strokeRect(ox+vl, oy+vt, vw, vh);
+                ctx.restore();
             }
         }
 
@@ -1186,7 +1242,6 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
 
     canvas.addEventListener('mouseup', e => {
         if (state.dragNode) {
-            state.wasDragging = true;
             state.dragNode = null;
             canvas.style.cursor = 'grab';
             return;
@@ -1427,6 +1482,11 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         let content = `<button class="graph-card-close">\u2715</button>`;
         content += `<div class="graph-card-type">${typeName}</div>`;
         content += `<div class="graph-card-title">${escapeHtml(node.label)}</div>`;
+        // Node annotation
+        const annotation = nodeAnnotations ? nodeAnnotations[node.id] : null;
+        if (annotation) {
+            content += `<div style="font-size:0.82rem;color:#FFD700;background:rgba(255,215,0,0.08);padding:0.4rem 0.6rem;margin:0.3rem 0;border-left:2px solid #FFD700;border-radius:2px;font-style:italic">${escapeHtml(annotation)}</div>`;
+        }
 
         // Type-specific content
         if (node.type === 0) {
