@@ -14,9 +14,24 @@ import { streamJsonl } from '../lib/jsonl.js';
 import * as cache from '../lib/cache.js';
 import { loadMasters } from './master.js';
 
+// ── Title metadata loading ──
+let _titlesMap = null;
+async function loadTitlesMap() {
+    if (_titlesMap) return _titlesMap;
+    _titlesMap = new Map();
+    try {
+        const lines = [];
+        await streamJsonl(DATA_REPO_BASE + 'titles.jsonl', obj => lines.push(obj));
+        for (const t of lines) {
+            if (t.path) _titlesMap.set(t.path, t);
+        }
+    } catch { /* titles unavailable */ }
+    return _titlesMap;
+}
+
 // ── Node colors by type ──
 
-const NODE_COLORS = ['#6EAFF8', '#FF8A65', '#64B5F6', '#81C784', '#AB47BC', '#D4A574'];
+const NODE_COLORS = ['#6EAFF8', '#FF8A65', '#FFB74D', '#81C784', '#AB47BC', '#D4A574', '#78909C'];
 
 // ── Edge colors by relation type ──
 
@@ -106,12 +121,20 @@ const EDGE_COLORS = {
     'builds-on':           '#51D996',
     'complements-collection': '#59B3FF',
     'contrasts-with':      '#FF6B6B',
+    'link-references-passage': '#78909C',
+    'link-supports':       '#78909C',
+    'link-about-master':   '#78909C',
+    'link-references-book':'#78909C',
+    'related-link':        '#78909C',
+    'passage-references-link': '#78909C',
+    'concept-references-link': '#78909C',
 };
 const DEFAULT_EDGE_COLOR = '#9E9E9E';
 
 const NON_DIRECTIONAL_TYPES = new Set([
     'parallels', 'is-variant-of', 'opposes', 'related-to', 'same-school', 'cross-ref', 'related-book',
     'synonym-of', 'antonym-of', 'term-related-to', 'variant-of', 'complements-collection', 'contrasts-with',
+    'related-link',
 ]);
 
 // ── Data loading ──
@@ -302,6 +325,33 @@ export async function render(route, mount, shell) {
                 x: 0, y: 0, vx: 0, vy: 0, degree: 0,
             });
         }
+    }
+
+    // ExtraMasters (manually-added masters not derived from passages)
+    const extraMasters = collection.extraMasters || collection.ExtraMasters || [];
+    for (const name of extraMasters) {
+        const masterId = 'master:' + name;
+        if (nodeMap.has(masterId)) continue;
+        nodeMap.set(masterId, {
+            id: masterId, type: 2, label: name,
+            x: 0, y: 0, vx: 0, vy: 0, degree: 0,
+        });
+    }
+
+    // Link nodes (web references)
+    const linkNodes = collection.linkNodes || collection.LinkNodes || [];
+    for (const ln of linkNodes) {
+        const lid = ln.id || ln.Id || '';
+        if (!lid) continue;
+        const linkId = 'link:' + lid;
+        if (nodeMap.has(linkId)) continue;
+        nodeMap.set(linkId, {
+            id: linkId, type: 6,
+            label: ln.name || ln.Name || 'Link',
+            url: ln.url || ln.Url || '',
+            description: ln.description || ln.Description || '',
+            x: 0, y: 0, vx: 0, vy: 0, degree: 0,
+        });
     }
 
     // Enrich master nodes with full names and metadata from masters.json
@@ -599,6 +649,12 @@ function drawNodeShape(ctx, node, x, y, r, color, alpha, strokeStyle, lineWidth)
         ctx.roundRect(rx, ry, w, h, cr);
         ctx.fill();
         if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
+    } else if (type === 6) {
+        // Link: Horizontal oval
+        ctx.beginPath();
+        ctx.ellipse(x, y, r, r * 0.7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
     } else {
         // Passage: Circle (default, type 0)
         ctx.beginPath();
@@ -610,9 +666,9 @@ function drawNodeShape(ctx, node, x, y, r, color, alpha, strokeStyle, lineWidth)
 }
 
 function nodeRadius(n) {
-    const base = [10, 12, 14, 12, 14, 14][n.type || 0];
-    const scale = [2, 2, 1.5, 1.5, 2, 2][n.type || 0];
-    const cap = [12, 14, 10, 10, 12, 12][n.type || 0];
+    const base = [10, 12, 14, 12, 14, 14, 12][n.type || 0];
+    const scale = [2, 2, 1.5, 1.5, 2, 2, 1.5][n.type || 0];
+    const cap = [12, 14, 10, 10, 12, 12, 10][n.type || 0];
     return base + Math.min(n.degree * scale, cap);
 }
 
@@ -972,7 +1028,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
                     }
                     label = label.slice(0, lo) + '\u2026';
                 }
-                const labelOffset = [4, 6, 5, 8, 8, 10][n.type || 0];
+                const labelOffset = [4, 6, 5, 8, 8, 10, 4][n.type || 0];
 
                 // Text shadow for readability
                 ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
@@ -1182,6 +1238,8 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         } else if (hit && hit.type === 5) {
             const workId = (hit.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';
             if (workId) window.location.hash = '#/' + encodeURIComponent(workId);
+        } else if (hit && hit.type === 6 && hit.url) {
+            window.open(hit.url, '_blank', 'noopener');
         }
     });
 
@@ -1363,7 +1421,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         const card = document.createElement('div');
         card.className = 'graph-card';
 
-        const typeNames = ['Passage', 'Concept', 'Master', 'Term', 'Collection', 'Text'];
+        const typeNames = ['Passage', 'Concept', 'Master', 'Term', 'Collection', 'Text', 'Link'];
         const typeName = typeNames[node.type || 0];
 
         let content = `<button class="graph-card-close">\u2715</button>`;
@@ -1372,6 +1430,19 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
 
         // Type-specific content
         if (node.type === 0) {
+            // Source text title (async)
+            if (node.sourceRelPath) {
+                content += `<div id="passage-source-title" style="font-size:0.78rem;color:var(--muted);margin-bottom:0.3rem">${escapeHtml(node.sourceRelPath)}</div>`;
+                loadTitlesMap().then(titles => {
+                    const el = document.getElementById('passage-source-title');
+                    if (!el) return;
+                    const t = titles.get(node.sourceRelPath);
+                    if (t) {
+                        const parts = [t.enShort || t.en, t.zh].filter(Boolean);
+                        el.textContent = parts.join(' \u2014 ') || node.sourceRelPath;
+                    }
+                }).catch(() => {});
+            }
             // Passage: summary highlight
             if (node.summary) {
                 content += `<div class="graph-card-snippet" style="border-left:2px solid var(--accent);padding-left:0.6rem">${escapeHtml(node.summary)}</div>`;
@@ -1482,17 +1553,36 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
             }
             content += `<div style="font-size:0.75rem;color:var(--accent);margin-top:0.3rem">Double-click to navigate \u2192</div>`;
         } else if (node.type === 5) {
-            // Book node
-            content += `<div style="font-size:0.85rem;color:var(--muted)">Text</div>`;
-            if (node.sourceRelPath) {
-                content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${escapeHtml(node.sourceRelPath)}</div>`;
+            // Text node — show titles and metadata
+            content += `<div id="text-meta-info" style="font-size:0.82rem;color:var(--text-soft)">Loading...</div>`;
+            const textRelPath = node.sourceRelPath || '';
+            loadTitlesMap().then(titles => {
+                const el = document.getElementById('text-meta-info');
+                if (!el) return;
+                const t = titles.get(textRelPath);
+                let info = '';
+                if (t) {
+                    if (t.en) info += `<div style="font-size:0.9rem;font-weight:600">${escapeHtml(t.en)}</div>`;
+                    if (t.zh) info += `<div style="font-size:0.9rem">${escapeHtml(t.zh)}</div>`;
+                }
+                if (node.zhTitle && !t?.zh) info += `<div style="font-size:0.9rem">${escapeHtml(node.zhTitle)}</div>`;
+                if (textRelPath) info += `<div style="font-size:0.75rem;color:var(--muted);margin-top:0.3rem">${escapeHtml(textRelPath)}</div>`;
+                if (node.masterNames && node.masterNames.length)
+                    info += `<div style="font-size:0.78rem;margin-top:0.2rem">Masters: ${escapeHtml(node.masterNames.join(', '))}</div>`;
+                const bookEdges = edges.filter(e => e.from.id === node.id || e.to.id === node.id);
+                if (bookEdges.length > 0)
+                    info += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${bookEdges.length} connection${bookEdges.length !== 1 ? 's' : ''}</div>`;
+                el.innerHTML = info || '<span style="color:var(--muted)">No metadata available</span>';
+            }).catch(() => {});
+        }
+
+        } else if (node.type === 6) {
+            // Link node
+            if (node.url) {
+                content += `<div style="font-size:0.85rem;margin-top:0.3rem"><a href="${escapeHtml(node.url)}" target="_blank" rel="noopener" style="color:cornflowerblue;text-decoration:none;word-break:break-all">${escapeHtml(node.url)}</a></div>`;
             }
-            if (node.zhTitle) {
-                content += `<div style="font-size:0.9rem;margin-top:0.3rem">${escapeHtml(node.zhTitle)}</div>`;
-            }
-            const bookEdges = edges.filter(e => e.from.id === node.id || e.to.id === node.id);
-            if (bookEdges.length > 0) {
-                content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${bookEdges.length} connection${bookEdges.length !== 1 ? 's' : ''}</div>`;
+            if (node.description) {
+                content += `<div style="font-size:0.82rem;color:var(--text-soft);margin-top:0.3rem">${escapeHtml(node.description)}</div>`;
             }
         }
 
@@ -1544,6 +1634,11 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
             const bookWorkId = (node.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';
             if (bookWorkId) {
                 content += `<a href="#/${encodeURIComponent(bookWorkId)}">Open in Reader \u2192</a>`;
+            }
+        } else if (node.type === 6) {
+            // Link — open in browser
+            if (node.url) {
+                content += `<a href="${escapeHtml(node.url)}" target="_blank" rel="noopener">Open Link \u2192</a>`;
             }
         }
         content += `</div>`;
