@@ -200,7 +200,7 @@ export async function render(route, mount, shell) {
                     <input type="text" class="lineage-search-input" placeholder="Search nodes..." id="scholar-graph-search"
                            style="width:100%;padding:4px 8px;font-size:11px;background:#2A2A32;border:1px solid #3A3A42;color:#fff;border-radius:4px" />
                 </div>
-                <label style="display:flex;align-items:center;gap:4px;margin-top:8px;font-size:11px;color:#B8B8C8;cursor:pointer">
+                <label style="display:none;align-items:center;gap:4px;margin-top:8px;font-size:11px;color:#B8B8C8;cursor:pointer">
                     <input type="checkbox" id="scholar-physics-toggle" />
                     Physics
                 </label>
@@ -243,12 +243,15 @@ export async function render(route, mount, shell) {
     const suppressedNodes = new Set(collection.suppressedAutoNodeIds || collection.SuppressedAutoNodeIds || []);
     const suppressedEdges = new Set(collection.suppressedAutoEdgeIds || collection.SuppressedAutoEdgeIds || []);
 
-    // Custom edge type colors (merge into lookup)
+    // Custom edge type colors and display names
     const customEdgeTypes = collection.customEdgeTypes || collection.CustomEdgeTypes || [];
+    const edgeNameMap = {};
     for (const ct of customEdgeTypes) {
         const id = ct.id || ct.Id || '';
         const color = ct.colorHex || ct.ColorHex || '';
+        const name = ct.displayName || ct.DisplayName || '';
         if (id && color) EDGE_COLORS[id] = color;
+        if (id && name) edgeNameMap[id] = name;
     }
 
     // Node annotations
@@ -500,7 +503,7 @@ export async function render(route, mount, shell) {
 
     const canvas = mount.querySelector('#scholar-graph-canvas');
     canvas.style.touchAction = 'none';
-    initGraph(canvas, nodes, edges, collectionId, user, graphLayout, nodeAnnotations);
+    initGraph(canvas, nodes, edges, collectionId, user, graphLayout, nodeAnnotations, edgeNameMap);
 }
 
 // ── Force-directed layout ──
@@ -735,7 +738,7 @@ function edgeColor(e) {
 
 // ── Graph engine ──
 
-function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAnnotations) {
+function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAnnotations, edgeNameMap) {
     const ctx = canvas.getContext('2d');
 
     // Declare easing helper before first use (used in draw())
@@ -1028,7 +1031,8 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
                 ctx.fillStyle = color;
                 ctx.globalAlpha = 0.8;
                 ctx.textAlign = 'center';
-                ctx.fillText(e.relationType, midX, midY - 4);
+                const edgeLbl = (edgeNameMap && edgeNameMap[e.relationType]) || e.relationType.replace(/^custom-/, '');
+                ctx.fillText(edgeLbl, midX, midY - 4);
                 ctx.textAlign = 'start';
             }
 
@@ -1507,13 +1511,13 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             if (node.summary) {
                 content += `<div class="graph-card-snippet" style="border-left:2px solid var(--accent);padding-left:0.6rem">${escapeHtml(node.summary)}</div>`;
             }
-            // Chinese text
+            // Chinese text (full, scrollable)
             if (node.zhText) {
-                content += `<div style="font-size:0.82rem;color:var(--text-soft);margin-bottom:0.4rem">${escapeHtml(node.zhText.slice(0, 120))}${node.zhText.length > 120 ? '\u2026' : ''}</div>`;
+                content += `<div style="max-height:150px;overflow-y:auto;font-size:0.82rem;color:var(--text-soft);margin-bottom:0.4rem;padding:0.3rem;border:1px solid rgba(255,255,255,0.06);border-radius:4px">${escapeHtml(node.zhText)}</div>`;
             }
-            // English text
+            // English text (full, scrollable)
             if (node.enText) {
-                content += `<div style="font-size:0.8rem;opacity:0.8;margin-bottom:0.4rem">${escapeHtml(node.enText.slice(0, 120))}${node.enText.length > 120 ? '\u2026' : ''}</div>`;
+                content += `<div style="max-height:150px;overflow-y:auto;font-size:0.8rem;opacity:0.8;margin-bottom:0.4rem;padding:0.3rem;border:1px solid rgba(255,255,255,0.06);border-radius:4px">${escapeHtml(node.enText)}</div>`;
             }
             // Tags
             if (node.tags && node.tags.length) {
@@ -1525,7 +1529,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             }
             // Notes
             if (node.notes) {
-                content += `<div style="font-size:0.78rem;color:var(--text-soft);margin-top:0.3rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.3rem"><strong>Notes.</strong> ${escapeHtml(node.notes.slice(0, 150))}${node.notes.length > 150 ? '\u2026' : ''}</div>`;
+                content += `<div style="max-height:120px;overflow-y:auto;font-size:0.78rem;color:var(--text-soft);margin-top:0.3rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.3rem"><strong>Notes.</strong> ${escapeHtml(node.notes)}</div>`;
             }
             // Reading status + importance
             if (node.readingStatus || node.importance > 0) {
@@ -1599,10 +1603,11 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
                 content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">Used in ${termEdges.length} connection${termEdges.length !== 1 ? 's' : ''}</div>`;
             }
         } else if (node.type === 4) {
-            // Collection node (sub-collection)
-            content += `<div style="font-size:0.85rem;color:var(--muted)">Sub-Collection</div>`;
+            // Collection node (sub-collection or CollectionRef)
+            const isCollRef = node.id.startsWith('collection:');
+            content += `<div style="font-size:0.85rem;color:var(--muted)">${isCollRef ? 'Collection Reference' : 'Sub-Collection'}</div>`;
             if (node.description) {
-                content += `<div class="graph-card-snippet">${escapeHtml(node.description.slice(0, 100))}</div>`;
+                content += `<div class="graph-card-snippet">${escapeHtml(node.description)}</div>`;
             }
             if (node.passageCount > 0) {
                 content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${node.passageCount} passage${node.passageCount !== 1 ? 's' : ''}</div>`;
@@ -1611,7 +1616,9 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             if (collEdges.length > 0) {
                 content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${collEdges.length} connection${collEdges.length !== 1 ? 's' : ''}</div>`;
             }
-            content += `<div style="font-size:0.75rem;color:var(--accent);margin-top:0.3rem">Double-click to navigate \u2192</div>`;
+            if (!isCollRef) {
+                content += `<div style="font-size:0.75rem;color:var(--accent);margin-top:0.3rem">Double-click to navigate \u2192</div>`;
+            }
         } else if (node.type === 5) {
             // Text node — show titles and metadata
             content += `<div id="text-meta-info" style="font-size:0.82rem;color:var(--text-soft)">Loading...</div>`;
@@ -1653,7 +1660,8 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             for (const e of shown) {
                 const other = e.from.id === node.id ? e.to : e.from;
                 const dir = e.from.id === node.id ? '\u2192' : '\u2190';
-                content += `<div style="font-size:0.75rem;color:var(--text-soft)">${dir} ${escapeHtml(other.label)} <span style="color:${edgeColor(e)}">(${escapeHtml(e.relationType)})</span></div>`;
+                const edgeDisplayName = edgeNameMap[e.relationType] || e.relationType.replace(/^custom-/, '');
+                content += `<div style="font-size:0.75rem;color:var(--text-soft)">${dir} ${escapeHtml(other.label)} <span style="color:${edgeColor(e)}">(${escapeHtml(edgeDisplayName)})</span></div>`;
             }
             if (nodeEdges.length > 5) {
                 content += `<div style="font-size:0.72rem;color:var(--muted)">+${nodeEdges.length - 5} more</div>`;
@@ -1681,9 +1689,9 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             // Term — link to dictionary if we have the source term
             const term = node.label;
             content += `<a href="#/dict/${encodeURIComponent(term)}">View in Dictionary \u2192</a>`;
-        } else if (node.type === 4) {
-            // Sub-collection — link to browse and view graph
-            const scCollId = node.id.startsWith('collection:') ? node.id.slice(11) : node.id;
+        } else if (node.type === 4 && !node.id.startsWith('collection:')) {
+            // Sub-collection — link to browse and view graph (not for CollectionRefs)
+            const scCollId = node.id;
             const scOwner = node.ownerUser || user;
             content += `<a href="#/scholar/${encodeURIComponent(scCollId)}//${encodeURIComponent(scOwner)}">Browse Collection \u2192</a>`;
             content += `<a href="#/scholar/${encodeURIComponent(scCollId)}/graph/${encodeURIComponent(scOwner)}">View Graph \u2192</a>`;
@@ -1703,20 +1711,24 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
 
         card.innerHTML = content;
 
-        // Position near clicked node, not viewport center
+        // Position near clicked node, edge-aware
         const rect = canvas.getBoundingClientRect();
         const sx = node.x * state.zoom + state.panX + rect.left;
         const sy = node.y * state.zoom + state.panY + rect.top;
 
-        let cardX = sx + 30;
+        const cardW = 420;
+        const cardMaxH = Math.min(window.innerHeight * 0.8, 600);
+        const margin = 10;
+        const offset = 30;
+
+        let cardX = sx + offset;
         let cardY = sy - 50;
 
-        const cardW = 380;
-        const cardH = 350;
-        if (cardX + cardW > window.innerWidth) cardX = sx - cardW - 30;
-        if (cardY < 10) cardY = 10;
-        if (cardY + cardH > window.innerHeight) cardY = window.innerHeight - cardH - 10;
-        cardX = Math.max(10, cardX);
+        if (cardX + cardW + margin > window.innerWidth) {
+            cardX = sx - cardW - offset;
+        }
+        cardX = Math.max(margin, Math.min(cardX, window.innerWidth - cardW - margin));
+        cardY = Math.max(margin, Math.min(cardY, window.innerHeight - cardMaxH - margin));
 
         card.style.position = 'fixed';
         card.style.left = cardX + 'px';
