@@ -1634,8 +1634,6 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
                     info += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${bookEdges.length} connection${bookEdges.length !== 1 ? 's' : ''}</div>`;
                 el.innerHTML = info || '<span style="color:var(--muted)">No metadata available</span>';
             }).catch(() => {});
-        }
-
         } else if (node.type === 6) {
             // Link node
             if (node.url) {
