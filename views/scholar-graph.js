@@ -145,7 +145,7 @@ async function loadCollections(user) {
     const key = 'scholar:' + user;
     const cached = cache.get(key);
     if (cached) return cached;
-    const url = `${DATA_REPO_BASE}community/collections/${encodeURIComponent(user)}.jsonl`;
+    const url = `${DATA_REPO_BASE}community/collections/${encodeURIComponent(user)}.jsonl?_=${Date.now()}`;
     const rows = [];
     for await (const row of streamJsonl(url)) {
         if (row && typeof row === 'object') rows.push(row);
