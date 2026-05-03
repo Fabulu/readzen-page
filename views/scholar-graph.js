@@ -260,6 +260,7 @@ export async function render(route, mount, shell) {
 
     // Node annotations
     const nodeAnnotations = collection.nodeAnnotations || collection.NodeAnnotations || {};
+    const startingNodeId = collection.startingNodeId || collection.StartingNodeId || null;
 
     // Schema v2 support
     const schemaVersion = collection.schemaVersion || collection.SchemaVersion || 1;
@@ -507,7 +508,7 @@ export async function render(route, mount, shell) {
 
     const canvas = mount.querySelector('#scholar-graph-canvas');
     canvas.style.touchAction = 'none';
-    initGraph(canvas, nodes, edges, collectionId, user, graphLayout, nodeAnnotations, edgeNameMap);
+    initGraph(canvas, nodes, edges, collectionId, user, graphLayout, nodeAnnotations, edgeNameMap, startingNodeId);
 }
 
 // ── Force-directed layout ──
@@ -742,7 +743,7 @@ function edgeColor(e) {
 
 // ── Graph engine ──
 
-function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAnnotations, edgeNameMap) {
+function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAnnotations, edgeNameMap, startingNodeId) {
     const ctx = canvas.getContext('2d');
 
     // Declare easing helper before first use (used in draw())
@@ -1055,14 +1056,32 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
                 drawNodeShape(ctx, n, n.x + 1.5, n.y + 1.5, r + 0.5, 'rgba(0,0,0,0.25)', nodeAlpha * entryScale, null, 0);
             }
 
+            // Starting node glow
+            if (n.id === startingNodeId && nodeAlpha > 0.5) {
+                ctx.globalAlpha = 0.15 * entryScale;
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, r + 10, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 0.25 * entryScale;
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, r + 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            }
+
             // Draw shape with integrated stroke
             const isHighlighted = state.highlightedIds && state.highlightedIds.has(n.id);
+            const isStarting = n.id === startingNodeId;
             const strokeColor = (n.id === state.hovered || n.id === state.focused)
                 ? '#FFD700'
                 : isHighlighted
                     ? '#00E5FF'
-                    : 'rgba(255,255,255,0.6)';
-            const strokeWidth = (n.id === state.focused) ? 3 : isHighlighted ? 3 : 1.2;
+                    : isStarting
+                        ? '#FFB400'
+                        : 'rgba(255,255,255,0.6)';
+            const strokeWidth = (n.id === state.focused) ? 3 : isHighlighted ? 3 : isStarting ? 4 : 1.2;
             drawNodeShape(ctx, n, n.x, n.y, r, color, nodeAlpha * entryScale, strokeColor, strokeWidth);
 
             // Label below node
