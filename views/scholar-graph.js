@@ -235,6 +235,10 @@ export async function render(route, mount, shell) {
         return;
     }
 
+    // Update title with actual collection name
+    const collectionName = collection.name || collection.Name || collectionId;
+    if (shell) shell.setTitle(`Scholar Graph \u00b7 ${collectionName}`);
+
     const passages = collection.passages || collection.Passages || [];
     const links = collection.links || collection.Links || [];
     const graphLayout = collection.graphLayout || collection.GraphLayout || null;
