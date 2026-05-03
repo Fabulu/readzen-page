@@ -304,6 +304,24 @@ export async function render(route, mount, shell) {
         }
     }
 
+    // Enrich master nodes with full names and metadata from masters.json
+    loadMasters().then(masters => {
+        if (!masters || !masters.length) return;
+        for (const [id, node] of nodeMap) {
+            if (node.type !== 2) continue;
+            const name = id.startsWith('master:') ? id.slice(7) : node.label;
+            const m = masters.find(r =>
+                (r.names || []).some(n => n === name || (n && n.toLowerCase() === name.toLowerCase())));
+            if (!m) continue;
+            if (m.names && m.names[0]) node.label = m.names[0];
+            if (m.floruit && m.death) node.dates = `${m.floruit}\u2013${m.death}`;
+            else if (m.floruit) node.dates = `fl. ${m.floruit}`;
+            else if (m.death) node.dates = `d. ${m.death}`;
+            node.masterData = m;
+        }
+        draw();
+    }).catch(() => {});
+
     // Sub-collections → type 4
     for (const sc of subCollections) {
         const scId = sc.id || sc.Id || '';
@@ -705,6 +723,40 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
         return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
     }
 
+    // ── Distance from point to quadratic Bezier curve (sampled) ──
+    function distToQuadBezier(px, py, x0, y0, cx, cy, x1, y1) {
+        let best = Infinity;
+        const steps = 16;
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps, u = 1 - t;
+            const bx = u * u * x0 + 2 * u * t * cx + t * t * x1;
+            const by = u * u * y0 + 2 * u * t * cy + t * t * y1;
+            const d2 = (px - bx) * (px - bx) + (py - by) * (py - by);
+            if (d2 < best) best = d2;
+        }
+        return Math.sqrt(best);
+    }
+
+    // ── Edge hit-test: matches curved/straight rendering logic ──
+    function edgeDistFromPoint(px, py, ed, zoom, panX, panY) {
+        const x1 = ed.from.x * zoom + panX, y1 = ed.from.y * zoom + panY;
+        const x2 = ed.to.x * zoom + panX, y2 = ed.to.y * zoom + panY;
+        const dx = x2 - x1, dy = y2 - y1;
+        const screenLen = Math.sqrt(dx * dx + dy * dy);
+        if (screenLen < 0.1) return Infinity;
+        // Rendering decides curve vs straight in graph space (edgeLen >= 50)
+        const graphDx = ed.to.x - ed.from.x, graphDy = ed.to.y - ed.from.y;
+        const graphLen = Math.sqrt(graphDx * graphDx + graphDy * graphDy);
+        if (graphLen >= 50) {
+            const perpX = -dy / screenLen, perpY = dx / screenLen;
+            const curveOffset = Math.min(20 * zoom, screenLen * 0.12);
+            const cpx = (x1 + x2) / 2 + perpX * curveOffset;
+            const cpy = (y1 + y2) / 2 + perpY * curveOffset;
+            return distToQuadBezier(px, py, x1, y1, cpx, cpy, x2, y2);
+        }
+        return pointToSegmentDist(px, py, x1, y1, x2, y2);
+    }
+
     // ── Drawing ──
     function draw() {
         state.physicsRAF = null; // clear so re-entry doesn't create parallel chains
@@ -1058,14 +1110,10 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
 
         // Edge hover detection (only when no node is hovered)
         if (!hit) {
-            let bestEdge = null, bestDist = 8;
+            let bestEdge = null, bestDist = 10;
             for (const ed of edges) {
                 if (!ed.from || !ed.to) continue;
-                const ex1 = ed.from.x * state.zoom + state.panX;
-                const ey1 = ed.from.y * state.zoom + state.panY;
-                const ex2 = ed.to.x * state.zoom + state.panX;
-                const ey2 = ed.to.y * state.zoom + state.panY;
-                const d = pointToSegmentDist(e.offsetX, e.offsetY, ex1, ey1, ex2, ey2);
+                const d = edgeDistFromPoint(e.offsetX, e.offsetY, ed, state.zoom, state.panX, state.panY);
                 if (d < bestDist) { bestDist = d; bestEdge = ed; }
             }
             if (state.hoveredEdge !== bestEdge) {
@@ -1362,28 +1410,51 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout) {
                 content += `<div class="graph-card-tags">${node.tags.slice(0, 4).map(t => `<span class="graph-card-tag">${escapeHtml(t)}</span>`).join('')}</div>`;
             }
         } else if (node.type === 2) {
-            // Master — show dates inline, then async-load full bio
-            if (node.dates) content += `<div class="graph-card-snippet">${escapeHtml(node.dates)}</div>`;
-            content += `<div id="master-extra-info" style="font-size:0.78rem;color:var(--muted)">Loading...</div>`;
-            // Async enrich after card renders
-            const masterName = node.id.startsWith('master:') ? node.id.slice(7) : node.label;
-            loadMasters().then(masters => {
-                const el = document.getElementById('master-extra-info');
-                if (!el) return;
-                const m = (masters || []).find(r =>
-                    (r.names || []).some(n => n === masterName || n.toLowerCase() === masterName.toLowerCase()));
-                if (!m) { el.textContent = ''; return; }
-                let info = '';
-                if (m.school) info += `<div>School: ${escapeHtml(m.school)}</div>`;
-                if (m.teacher) info += `<div>Teacher: ${escapeHtml(m.teacher)}</div>`;
+            // Master — show rich info from pre-loaded masterData
+            const m = node.masterData;
+            if (m) {
+                // Aliases
+                if (m.names && m.names.length > 1)
+                    content += `<div style="font-size:0.78rem;color:var(--muted)">${m.names.slice(0, 4).map(n => escapeHtml(n)).join(' \u00B7 ')}</div>`;
+                if (node.dates)
+                    content += `<div class="graph-card-snippet">${escapeHtml(node.dates)}</div>`;
+                if (m.school)
+                    content += `<div style="font-size:0.82rem;margin-top:0.2rem">School: ${escapeHtml(m.school)}</div>`;
+                if (m.teacher)
+                    content += `<div style="font-size:0.82rem">Teacher: ${escapeHtml(m.teacher)}</div>`;
                 if (m.students && m.students.length > 0)
-                    info += `<div>Students: ${escapeHtml(m.students.slice(0, 5).join(', '))}${m.students.length > 5 ? ' +' + (m.students.length - 5) : ''}</div>`;
-                if (m.notes) info += `<div style="margin-top:0.3rem;font-size:0.75rem;opacity:0.8">${escapeHtml(m.notes.slice(0, 200))}${m.notes.length > 200 ? '\u2026' : ''}</div>`;
-                el.innerHTML = info || '';
-            }).catch(() => {
-                const el = document.getElementById('master-extra-info');
-                if (el) el.textContent = '';
-            });
+                    content += `<div style="font-size:0.82rem">Students: ${escapeHtml(m.students.slice(0, 8).join(', '))}${m.students.length > 8 ? '\u2026' : ''}</div>`;
+                if (m.notes)
+                    content += `<div style="margin-top:0.3rem;font-size:0.75rem;opacity:0.8">${escapeHtml(m.notes.slice(0, 300))}${m.notes.length > 300 ? '\u2026' : ''}</div>`;
+                if (m.links && m.links.length > 0) {
+                    content += `<div style="margin-top:0.3rem">`;
+                    for (const link of m.links.slice(0, 3)) {
+                        const label = escapeHtml(link.label || link.url || 'Link');
+                        const url = escapeHtml(link.url || '');
+                        content += `<a href="${url}" target="_blank" rel="noopener" style="display:block;font-size:0.75rem;color:var(--accent);text-decoration:none;margin-top:0.15rem">\uD83D\uDD17 ${label}</a>`;
+                    }
+                    content += `</div>`;
+                }
+            } else {
+                // Fallback: async-load
+                if (node.dates) content += `<div class="graph-card-snippet">${escapeHtml(node.dates)}</div>`;
+                content += `<div id="master-extra-info" style="font-size:0.78rem;color:var(--muted)">Loading...</div>`;
+                const masterName = node.id.startsWith('master:') ? node.id.slice(7) : node.label;
+                loadMasters().then(masters => {
+                    const el = document.getElementById('master-extra-info');
+                    if (!el) return;
+                    const found = (masters || []).find(r =>
+                        (r.names || []).some(n => n === masterName || (n && n.toLowerCase() === masterName.toLowerCase())));
+                    if (!found) { el.textContent = ''; return; }
+                    let info = '';
+                    if (found.school) info += `<div>School: ${escapeHtml(found.school)}</div>`;
+                    if (found.teacher) info += `<div>Teacher: ${escapeHtml(found.teacher)}</div>`;
+                    if (found.students && found.students.length > 0)
+                        info += `<div>Students: ${escapeHtml(found.students.slice(0, 5).join(', '))}</div>`;
+                    if (found.notes) info += `<div style="margin-top:0.3rem;font-size:0.75rem;opacity:0.8">${escapeHtml(found.notes.slice(0, 200))}</div>`;
+                    el.innerHTML = info || '';
+                }).catch(() => {});
+            }
         } else if (node.type === 3) {
             // Term node
             content += `<div class="graph-card-snippet" style="font-size:1.1rem;font-weight:600">${escapeHtml(node.label)}</div>`;
