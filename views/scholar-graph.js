@@ -8,6 +8,7 @@
 // ego-on-hover highlighting, popup cards, and animated entry.
 
 import { escapeHtml } from '../lib/format.js';
+import { attachInlineDict } from '../lib/inline-dict.js';
 
 import { DATA_REPO_BASE } from '../lib/github.js';
 import { streamJsonl } from '../lib/jsonl.js';
@@ -1812,6 +1813,9 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             removeNodeCard();
             draw();
         });
+
+        // Attach hover dictionary to Chinese text in the popup
+        attachInlineDict(card);
     }
 
     function removeNodeCard() {
