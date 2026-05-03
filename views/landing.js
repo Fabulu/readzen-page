@@ -181,7 +181,7 @@ export function render(_route, mount, shell) {
 
             <div class="community-research" id="community-research">
                 <h3 class="community-research-heading">Community Research</h3>
-                <p class="community-research-desc">Browse knowledge graphs and passage collections shared by scholars.</p>
+                <p class="community-research-desc">Browse knowledge graphs and passage collections shared by scholars. Sync your own collections, translations, termbases, and translation memory with the community &mdash; all your local data is preserved during sync.</p>
                 <div class="community-research-scroll" id="community-research-scroll">
                     <div class="community-card community-card--skeleton"></div>
                     <div class="community-card community-card--skeleton"></div>
@@ -189,6 +189,45 @@ export function render(_route, mount, shell) {
                 </div>
                 <div class="community-research-cta">
                     <a class="text-link" href="#/scholar">Browse All Collections \u2192</a>
+                </div>
+            </div>
+
+            <div class="graph-showcase">
+                <h3 class="graph-showcase-heading">Interactive Knowledge Graphs</h3>
+                <p class="graph-showcase-desc">
+                    Every collection can be visualized as a force-directed graph. Seven node types &mdash;
+                    passages, concepts, Zen masters, terms, collections, books, and web links &mdash;
+                    connected by typed, labeled edges.
+                </p>
+                <div class="graph-showcase-features">
+                    <div class="graph-showcase-feature">
+                        <span class="graph-showcase-icon">\u2B50</span>
+                        <div>
+                            <strong>Starting node with golden glow</strong>
+                            <p>Your entry point is always highlighted so you can orient yourself.</p>
+                        </div>
+                    </div>
+                    <div class="graph-showcase-feature">
+                        <span class="graph-showcase-icon">\uD83D\uDCC4</span>
+                        <div>
+                            <strong>Rich popup cards</strong>
+                            <p>Click any node for a card with full Chinese/English text, metadata, and hover dictionary.</p>
+                        </div>
+                    </div>
+                    <div class="graph-showcase-feature">
+                        <span class="graph-showcase-icon">\uD83D\uDD17</span>
+                        <div>
+                            <strong>Double-click navigation</strong>
+                            <p>Double-click a passage node to jump straight to the text in the reader.</p>
+                        </div>
+                    </div>
+                    <div class="graph-showcase-feature">
+                        <span class="graph-showcase-icon">\uD83D\uDCD6</span>
+                        <div>
+                            <strong>Hover dictionary everywhere</strong>
+                            <p>CC-CEDICT lookup on any Chinese character &mdash; in the reader, graph popups, and collection views.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -211,32 +250,42 @@ export function render(_route, mount, shell) {
                 </div>
             </div>
 
-            <div class="feature-showcase">
+            <div class="feature-showcase feature-showcase--four">
                 <div class="feature-group">
                     <h3 class="feature-group-title">Read &amp; Translate</h3>
                     <ul class="feature-group-list">
                         <li>Side-by-side Chinese/English reading</li>
-                        <li>Click any character for dictionary lookup</li>
+                        <li>Click or hover on any Chinese character for instant CC-CEDICT dictionary lookup</li>
                         <li class="feature-desktop">Translation editor with translation memory assistant</li>
                         <li class="feature-desktop">AI-assisted translation drafts</li>
                     </ul>
                     <a class="feature-group-cta" href="#/T48n2005">Try a text</a>
                 </div>
                 <div class="feature-group">
+                    <h3 class="feature-group-title">Collections &amp; Graphs</h3>
+                    <ul class="feature-group-list">
+                        <li>Build research collections of passages from across the corpus</li>
+                        <li>Organize with concepts and typed edges</li>
+                        <li>Interactive force-directed knowledge graphs</li>
+                        <li>7 node types: passages, concepts, masters, terms, collections, books, web links</li>
+                        <li>Share collections via URL</li>
+                    </ul>
+                    <a class="feature-group-cta" href="#/scholar">Browse collections</a>
+                </div>
+                <div class="feature-group">
                     <h3 class="feature-group-title">Research</h3>
                     <ul class="feature-group-list">
-                        <li>Search work titles across both corpora</li>
                         <li>Full-text corpus search across 5,000+ texts</li>
                         <li class="feature-desktop">Co-occurrence analysis, n-gram charts, and TSV export</li>
                         <li class="feature-desktop">Tag &amp; code passages for qualitative research</li>
-                        <li class="feature-desktop">Scholar collections with export &amp; comparison</li>
+                        <li>Hover dictionary in reader, graph popups, and collection views</li>
                     </ul>
                     <a class="feature-group-cta" href="#/search">Search the corpus</a>
                 </div>
                 <div class="feature-group">
                     <h3 class="feature-group-title">Explore</h3>
                     <ul class="feature-group-list">
-                        <li>200+ Zen masters with lineages and biographies</li>
+                        <li>301 Zen masters with lineages and biographies</li>
                         <li>Interactive lineage web across nine schools</li>
                         <li class="feature-desktop">Compare translations side by side</li>
                         <li class="feature-desktop">Critical edition provenance &amp; apparatus</li>
@@ -258,8 +307,8 @@ export function render(_route, mount, shell) {
                         <p>Full-text search with co-occurrence charts, n-gram analysis, association metrics, and TSV export.</p>
                     </div>
                     <div class="desktop-feature-card">
-                        <h4>Scholar Assistant</h4>
-                        <p>Build passage collections, compare 2&ndash;4 texts side by side, extract vocabulary, and export for citation managers.</p>
+                        <h4>Scholar Collections &amp; Graphs</h4>
+                        <p>Build passage collections, connect them with typed edges, visualize as interactive knowledge graphs, and share via URL. Compare 2&ndash;4 texts side by side.</p>
                     </div>
                     <div class="desktop-feature-card">
                         <h4>Tagging &amp; Coding</h4>

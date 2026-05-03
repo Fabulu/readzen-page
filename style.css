@@ -1103,6 +1103,86 @@ code, .mono { font-family: var(--mono); }
     color: var(--muted);
 }
 
+/* ── Feature showcase 4-column variant ── */
+
+.feature-showcase--four {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 900px) {
+    .feature-showcase--four { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 680px) {
+    .feature-showcase--four { grid-template-columns: 1fr; }
+}
+
+/* ── Knowledge graph showcase ── */
+
+.graph-showcase {
+    margin: 2rem 0 2.5rem;
+    padding: 1.8rem 0;
+    border-top: 1px solid var(--border-soft);
+}
+
+.graph-showcase-heading {
+    color: var(--accent);
+    font-family: var(--serif);
+    font-size: 1.1rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.4rem;
+}
+
+.graph-showcase-desc {
+    color: var(--text-soft);
+    font-size: 0.88rem;
+    max-width: 60ch;
+    margin-bottom: 1.2rem;
+    line-height: 1.55;
+}
+
+.graph-showcase-features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.9rem;
+}
+
+@media (max-width: 640px) {
+    .graph-showcase-features { grid-template-columns: 1fr; }
+}
+
+.graph-showcase-feature {
+    display: flex;
+    gap: 0.7rem;
+    align-items: flex-start;
+    padding: 0.7rem 0.9rem;
+    background: var(--paper);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+}
+
+.graph-showcase-icon {
+    font-size: 1.3rem;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-top: 0.15rem;
+}
+
+.graph-showcase-feature strong {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text);
+    margin-bottom: 0.15rem;
+}
+
+.graph-showcase-feature p {
+    font-size: 0.78rem;
+    color: var(--text-soft);
+    line-height: 1.45;
+    margin: 0;
+}
+
 /* ── Install collapsed (single details wrapper) ── */
 
 .install-collapsed {
