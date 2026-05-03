@@ -3723,10 +3723,14 @@ a.master-appearance-title:hover {
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 1.2rem 1.5rem;
-    max-width: 380px;
+    max-width: 420px;
+    max-height: 80vh;
+    overflow-y: auto;
     width: 90%;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     animation: slideUp 0.2s ease-out;
+    user-select: text;
+    -webkit-user-select: text;
 }
 .graph-card-close {
     position: absolute;
@@ -3923,7 +3927,7 @@ a.master-appearance-title:hover {
 .header-nav-item:hover { background: var(--accent-soft); color: var(--accent); }
 
 /* ━━ Graph Canvas Sizing ━━ */
-.lineage-container--scholar { height: min(600px, 70vh); }
+.lineage-container--scholar { height: min(800px, 85vh); }
 
 /* ━━ Graph Loading Spinner ━━ */
 .graph-loading { display: flex; align-items: center; justify-content: center; height: 300px; }
@@ -3969,7 +3973,7 @@ a.master-appearance-title:hover {
     .graph-card { max-width: 95vw; padding: 1rem; }
     .header-nav-label { display: none; }
     .header-nav-trigger { padding: 0.25rem 0.5rem; }
-    .lineage-container--scholar { height: 450px; }
+    .lineage-container--scholar { height: min(600px, 80vh); }
 }
 
 .spacer-row {
