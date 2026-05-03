@@ -1616,8 +1616,8 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             if (collEdges.length > 0) {
                 content += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">${collEdges.length} connection${collEdges.length !== 1 ? 's' : ''}</div>`;
             }
-            if (!isCollRef) {
-                content += `<div style="font-size:0.75rem;color:var(--accent);margin-top:0.3rem">Double-click to navigate \u2192</div>`;
+            {
+                content += `<div style="font-size:0.75rem;color:var(--accent);margin-top:0.3rem">Double-click to open graph \u2192</div>`;
             }
         } else if (node.type === 5) {
             // Text node — show titles and metadata
@@ -1689,12 +1689,12 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             // Term — link to dictionary if we have the source term
             const term = node.label;
             content += `<a href="#/dict/${encodeURIComponent(term)}">View in Dictionary \u2192</a>`;
-        } else if (node.type === 4 && !node.id.startsWith('collection:')) {
-            // Sub-collection — link to browse and view graph (not for CollectionRefs)
-            const scCollId = node.id;
+        } else if (node.type === 4) {
+            // Collection — browse and open graph
+            const scCollId = node.id.startsWith('collection:') ? node.id.slice(11) : node.id;
             const scOwner = node.ownerUser || user;
+            content += `<a href="#/scholar/${encodeURIComponent(scCollId)}/graph/${encodeURIComponent(scOwner)}"><strong>Open Graph \u2192</strong></a>`;
             content += `<a href="#/scholar/${encodeURIComponent(scCollId)}//${encodeURIComponent(scOwner)}">Browse Collection \u2192</a>`;
-            content += `<a href="#/scholar/${encodeURIComponent(scCollId)}/graph/${encodeURIComponent(scOwner)}">View Graph \u2192</a>`;
         } else if (node.type === 5) {
             // Book — link to reader
             const bookWorkId = (node.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';
