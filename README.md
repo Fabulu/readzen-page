@@ -35,6 +35,31 @@ This is the web companion to the [Read Zen desktop app](https://github.com/Fabul
 - Corpus text appearances: which texts mention each master, with snippets
 - Master-to-master navigation via teacher/student links
 
+### Scholar Graph
+- **Interactive force-directed graph** for scholar collections - visualizes passages, concepts, masters, terms, and their relationships
+- **7 node types** with unique shapes: Passage (circle), Concept (diamond), Zen Master (hexagon), Term (pill), Collection (square), Book (rectangle), Link (oval)
+- **7 node colors**: Passage blue, Concept coral, Master amber, Term green, Collection purple, Book tan, Link blue-grey
+- **Starting node** highlighted with golden ripple pulse animation
+- **Click** any node for a popup card with full details: Chinese/English text, masters, tags, notes, and connections
+- **Double-click** to navigate: passages open in reader, books open in reader, links open in browser, collections navigate to their own graph
+- **Hover dictionary** on Chinese text inside popup cards (CC-CEDICT lookup, same as the reader)
+- Auto-generated master attribution edges with suppression support (`SuppressedAutoNodeIds`/`SuppressedAutoEdgeIds`)
+- Custom edge type colors and display names
+- Non-directional edge types rendered with dashed lines
+- Node annotations displayed in gold italic
+- `CollectionRef` nodes for cross-collection references
+- `ExtraMasters` loading (manually-added masters persist)
+- `LinkNodes` loading (web reference nodes)
+- Edge labels on hover and in ego-network mode
+- Minimap with viewport clipping
+- Secondary labels: dates for masters, description snippets for concepts
+- Wide node labels (8x radius) for readability
+- Full passage text in popups (scrollable)
+- Edge-aware popup positioning (never goes off screen)
+- Collection title in page header
+- Cache-busting for fresh data on reload
+- Responsive graph height (800px / 85vh)
+
 ### Other
 - Scholar collection browser (community-shared research collections)
 - Termbase / terminology lookup
@@ -51,25 +76,37 @@ index.html          Entry point (hash router)
 app.js              Router + view dispatcher
 style.css           All styles (single file)
 views/              Page-level view modules
+  compare.js        Side-by-side translation comparison
   landing.js        Home page with lineage graph + search
-  passage.js        Bilingual text reader (paginated, ranged, compare)
+  passage.js        Bilingual text reader (paginated, ranged)
   search.js         Federated search (title + full-text + masters)
   master.js         Individual master profile page
   masters-browse.js Master list browser
   lineage-graph.js  Interactive lineage web (canvas-based)
   dictionary.js     Dictionary lookup page
   scholar.js        Scholar collection viewer
+  scholar-graph.js  Force-directed collection graph (canvas-based)
+  tags.js           Tag browser
+  termbase.js       Terminology lookup
   shell.js          Shared header, nav, footer
 lib/                Shared utilities
-  github.js         GitHub raw content fetcher with retry + caching
-  inline-dict.js    Hover/click dictionary overlay
-  search.js         Pagefind integration + federated search
-  typeahead.js       Search suggestions (masters, titles, corpus)
-  route.js          Hash-based routing
-  tei.js            TEI XML parser
-  format.js         Line rendering (HTML generation)
-  highlight.js      Search term highlighting + scroll-to-match
   cache.js          In-memory LRU cache
+  citation.js       Citation formatting
+  corpus.js         Corpus data helpers
+  format.js         Line rendering (HTML generation)
+  github.js         GitHub raw content fetcher with retry + caching
+  highlight.js      Search term highlighting + scroll-to-match
+  inline-dict.js    Hover/click dictionary overlay (CC-CEDICT)
+  jsonl.js          JSONL streaming parser (scholar collections)
+  keyboard.js       Keyboard shortcut handling
+  lookup-card.js    Dictionary lookup card component
+  reading-lists.js  Reading list management
+  route.js          Hash-based routing
+  search.js         Pagefind integration + federated search
+  share.js          Share / link generation
+  tei.js            TEI XML parser
+  titles.js         Title resolution helpers
+  typeahead.js      Search suggestions (masters, titles, corpus)
 dict/               CC-CEDICT dictionary data
   _manifest.json    Character → bucket mapping
   {0-200}.json      201 bucket files (~60 entries each)
