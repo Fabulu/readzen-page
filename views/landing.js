@@ -201,30 +201,30 @@ export function render(_route, mount, shell) {
                 </p>
                 <div class="graph-showcase-features">
                     <div class="graph-showcase-feature">
-                        <span class="graph-showcase-icon">\u2B50</span>
+                        <span class="graph-showcase-icon" style="font-size:1.3rem;color:#FFD700">&#x25C9;</span>
                         <div>
-                            <strong>Starting node with golden glow</strong>
-                            <p>Your entry point is always highlighted so you can orient yourself.</p>
+                            <strong>Starting node highlight</strong>
+                            <p>The collection author marks an entry point so readers know where to begin.</p>
                         </div>
                     </div>
                     <div class="graph-showcase-feature">
-                        <span class="graph-showcase-icon">\uD83D\uDCC4</span>
+                        <span class="graph-showcase-icon" style="font-size:1.3rem;color:var(--accent)">&#x25A3;</span>
                         <div>
                             <strong>Rich popup cards</strong>
-                            <p>Click any node for a card with full Chinese/English text, metadata, and hover dictionary.</p>
+                            <p>Click any node for a card with full Chinese/English text, metadata, connections, and dictionary lookup.</p>
                         </div>
                     </div>
                     <div class="graph-showcase-feature">
-                        <span class="graph-showcase-icon">\uD83D\uDD17</span>
+                        <span class="graph-showcase-icon" style="font-size:1.3rem;color:var(--accent)">&#x2192;</span>
                         <div>
-                            <strong>Double-click navigation</strong>
-                            <p>Double-click a passage node to jump straight to the text in the reader.</p>
+                            <strong>Click to navigate</strong>
+                            <p>Click a passage to see its details. Open it in the reader to see it in full context.</p>
                         </div>
                     </div>
                     <div class="graph-showcase-feature">
-                        <span class="graph-showcase-icon">\uD83D\uDCD6</span>
+                        <span class="graph-showcase-icon" style="font-size:1.3rem;color:var(--accent)">&#x5B57;</span>
                         <div>
-                            <strong>Hover dictionary everywhere</strong>
+                            <strong>Hover dictionary</strong>
                             <p>CC-CEDICT lookup on any Chinese character &mdash; in the reader, graph popups, and collection views.</p>
                         </div>
                     </div>
