@@ -774,6 +774,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
         dragNode: null,
         dragStartX: 0, dragStartY: 0,
         dragPanX: 0, dragPanY: 0,
+        dragNodeStartX: 0, dragNodeStartY: 0,
         width: 0, height: 0,
         highlightedIds: new Set(),
         physicsEnabled: false,
@@ -1245,6 +1246,8 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
         if (hit) {
             // Start dragging this individual node
             state.dragNode = hit;
+            state.dragNodeStartX = hit.x;
+            state.dragNodeStartY = hit.y;
             canvas.style.cursor = 'grabbing';
         } else {
             removeNodeCard();
@@ -1308,6 +1311,10 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
 
     canvas.addEventListener('mouseup', e => {
         if (state.dragNode) {
+            // Check if node actually moved — if so, suppress the click popup
+            const dx = state.dragNode.x - (state.dragNodeStartX || 0);
+            const dy = state.dragNode.y - (state.dragNodeStartY || 0);
+            if (dx * dx + dy * dy > 4) state.wasDragging = true;
             state.dragNode = null;
             canvas.style.cursor = 'grab';
             return;
