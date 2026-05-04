@@ -264,11 +264,11 @@ export function render(_route, mount, shell) {
                 <div class="feature-group">
                     <h3 class="feature-group-title">Collections &amp; Graphs</h3>
                     <ul class="feature-group-list">
-                        <li>Build research collections of passages from across the corpus</li>
-                        <li>Organize with concepts and typed edges</li>
+                        <li class="feature-desktop">Build research collections of passages from across the corpus</li>
+                        <li class="feature-desktop">Organize with concepts, typed edges, and web links</li>
                         <li>Interactive force-directed knowledge graphs</li>
-                        <li>7 node types: passages, concepts, masters, terms, collections, books, web links</li>
-                        <li>Share collections via URL</li>
+                        <li>7 node types with unique shapes and colors</li>
+                        <li>Share and browse collections via URL</li>
                     </ul>
                     <a class="feature-group-cta" href="#/scholar">Browse collections</a>
                 </div>
@@ -308,7 +308,7 @@ export function render(_route, mount, shell) {
                     </div>
                     <div class="desktop-feature-card">
                         <h4>Scholar Collections &amp; Graphs</h4>
-                        <p>Build passage collections, connect them with typed edges, visualize as interactive knowledge graphs, and share via URL. Compare 2&ndash;4 texts side by side.</p>
+                        <p>Build and edit passage collections, add concepts and typed edges, set starting nodes, rename passages, and manage web links. Graphs are viewable on the web; editing requires the desktop app.</p>
                     </div>
                     <div class="desktop-feature-card">
                         <h4>Tagging &amp; Coding</h4>
