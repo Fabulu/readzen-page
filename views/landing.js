@@ -79,7 +79,7 @@ async function loadCommunityCards(mount) {
                 <div class="community-card-stats">
                     ${c.passageCount} passages${c.conceptCount ? ' \u00b7 ' + c.conceptCount + ' concepts' : ''}
                 </div>
-                ${c.linkCount > 0 ? `<button class="community-card-graph-link" onclick="event.stopPropagation(); window.location.hash='#/scholar/${encodeURIComponent(c.id)}/graph/${encodeURIComponent(c.user)}';">View Graph \u2192</button>` : ''}
+                ${(c.linkCount > 0 || c.conceptCount > 0) ? `<button class="community-card-graph-link" onclick="event.stopPropagation(); window.location.hash='#/scholar/${encodeURIComponent(c.id)}/graph/${encodeURIComponent(c.user)}';">View Graph \u2192</button>` : ''}
             </div>
         `).join('');
     } catch {
@@ -405,9 +405,8 @@ export function render(_route, mount, shell) {
                             <li>Run it: <code>./ReadZen.App</code></li>
                         </ol>
                         <p class="install-tip">
-                            <strong>Coming in v4.5:</strong> AppImage with auto-update -
-                            single executable file, no extraction required, in-app updates
-                            instead of redownloading.
+                            <strong>Tip:</strong> For the simplest experience, download the
+                            self-contained zip — no .NET runtime needed, just extract and run.
                         </p>
                         <p class="install-why">
                             Linux gets first-class treatment. No signing required, no

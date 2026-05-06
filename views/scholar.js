@@ -333,9 +333,11 @@ function renderCollectionMode(collection, user, shell, allCollections) {
         subEl.textContent = `${passages.length} passage${passages.length === 1 ? '' : 's'} · by ${user}`;
     }
 
-    // Graph button (only shown if the collection has inter-passage links)
+    // Graph button (shown if the collection has links, concepts, or extra masters)
     const links = collection.links || collection.Links || [];
-    if (links.length > 0) {
+    const concepts = collection.concepts || collection.Concepts || [];
+    const extraMasters = collection.extraMasters || collection.ExtraMasters || [];
+    if (links.length > 0 || concepts.length > 0 || extraMasters.length > 0) {
         const cid = collection.id || collection.Id || '';
         const graphHref = '#/scholar/' + encodeURIComponent(cid) + '/graph/' + encodeURIComponent(user);
         const headEl = document.querySelector('#scholar-head');

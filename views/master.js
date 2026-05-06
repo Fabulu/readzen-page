@@ -2,7 +2,7 @@
 // Renders a rich Zen master profile page.
 //
 // Data source: masters.json at the root of CbetaZenTranslations repo.
-// Contains all 195 masters with names, dates, school, teacher, students,
+// Contains all 301 masters with names, dates, school, teacher, students,
 // biography, region, and reference links.
 //
 // Route: #/master/{name}
