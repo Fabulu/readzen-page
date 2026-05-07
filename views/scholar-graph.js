@@ -517,7 +517,7 @@ export async function render(route, mount, shell) {
                     Clusters
                 </label>
             </div>
-            <a class="lineage-browse-link" id="scholar-graph-back-link" href="#/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">&larr; Back to Collection</a>
+            <a class="lineage-browse-link" id="scholar-graph-back-link" href="#/scholar/${encodeURIComponent(collectionId)}?user=${encodeURIComponent(user)}">&larr; Back to Collection</a>
         </div>
     `;
 
@@ -545,7 +545,7 @@ export async function render(route, mount, shell) {
 
     // Update back link to use collection name instead of whatever was in the URL
     const backLink = mount.querySelector('#scholar-graph-back-link');
-    if (backLink) backLink.href = '#/scholar/' + encodeURIComponent(collectionSlug(collection)) + '//' + encodeURIComponent(user);
+    if (backLink) backLink.href = '#/scholar/' + encodeURIComponent(collectionSlug(collection)) + '?user=' + encodeURIComponent(user);
 
     const passages = collection.passages || collection.Passages || [];
     const links = collection.links || collection.Links || [];
@@ -2059,7 +2059,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             const cSlug = collectionSlug(collection);
             content += `<a href="#/scholar/${encodeURIComponent(cSlug)}/${encodeURIComponent(pSlug)}/${encodeURIComponent(user)}">View in Collection \u2192</a>`;
         } else if (node.type === 1) {
-            content += `<a href="#/scholar/${encodeURIComponent(collectionSlug(collection))}//${encodeURIComponent(user)}">View Collection \u2192</a>`;
+            content += `<a href="#/scholar/${encodeURIComponent(collectionSlug(collection))}?user=${encodeURIComponent(user)}">View Collection \u2192</a>`;
         } else if (node.type === 2) {
             const masterName = node.id.startsWith('master:') ? node.id.slice(7) : node.label;
             content += `<a href="#/master/${encodeURIComponent(masterName)}">Master Profile \u2192</a>`;
@@ -2072,7 +2072,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             const scLabel = node.label || (node.id.startsWith('collection:') ? node.id.slice(11) : node.id);
             const scOwner = node.ownerUser || user;
             content += `<a href="#/scholar/${encodeURIComponent(scLabel)}/graph/${encodeURIComponent(scOwner)}"><strong>Open Graph \u2192</strong></a>`;
-            content += `<a href="#/scholar/${encodeURIComponent(scLabel)}//${encodeURIComponent(scOwner)}">Browse Collection \u2192</a>`;
+            content += `<a href="#/scholar/${encodeURIComponent(scLabel)}?user=${encodeURIComponent(scOwner)}">Browse Collection \u2192</a>`;
         } else if (node.type === 5) {
             // Book — link to reader
             const bookWorkId = (node.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';

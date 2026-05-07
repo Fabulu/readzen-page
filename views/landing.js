@@ -68,7 +68,7 @@ async function loadCommunityCards(mount) {
 
         // Render cards
         scrollEl.innerHTML = cards.map(c => `
-            <div class="community-card" onclick="window.location.hash='#/scholar/${encodeURIComponent(c.name)}//${encodeURIComponent(c.user)}'">
+            <div class="community-card" onclick="window.location.hash='#/scholar/${encodeURIComponent(c.name)}?user=${encodeURIComponent(c.user)}'">
                 <div class="community-card-head">
                     <span class="community-card-avatar">${escapeHtml((c.user[0] || '?').toUpperCase())}</span>
                     <div class="community-card-info">
