@@ -305,6 +305,12 @@ async function main() {
     console.log(`Total indexed: ${count} files (source + translations + community)`);
     console.log(`Writing Pagefind output to ${OUTPUT_DIR}...`);
 
+    // Force GC before the memory-intensive writeFiles step
+    if (global.gc) {
+        global.gc();
+        console.log('GC triggered before writeFiles');
+    }
+
     await index.writeFiles({ outputPath: OUTPUT_DIR });
     await pagefind.close();
 

@@ -7,7 +7,7 @@ import { escapeHtml } from '../lib/format.js';
 import { DATA_REPO_BASE, OPEN_DATA_REPO_BASE, loadTranslatedFileIds } from '../lib/github.js';
 import { inferCorpusForRelPath } from '../lib/corpus.js';
 import { loadAllTitlesAsArray } from '../lib/titles.js';
-import { federatedSearch } from '../lib/search.js';
+import { federatedSearch, loadAndSearchXml } from '../lib/search.js';
 import { loadMasters } from './master.js';
 
 const TITLES_URL = DATA_REPO_BASE + 'titles.jsonl';
@@ -372,7 +372,7 @@ export async function render(route, mount, shell) {
         // Wire title pagination clicks
         wireTitlePageClicks(query);
 
-        // Load full-text results async
+        // Load full-text results async — grouped by book with expandable KWIC
         results.fulltext.then(function(ftResults) {
             var ftContainer = mount.querySelector('#ft-results');
             var ftLabel = mount.querySelector('#ft-section-label');
@@ -388,39 +388,70 @@ export async function render(route, mount, shell) {
                 return;
             }
 
-            if (ftLabel) {
-                ftLabel.innerHTML = 'Full-Text Matches (' + ftResults.length + ')';
+            // Group results by file_id (dedup multiple hits in same book)
+            var groups = new Map();
+            for (var k = 0; k < ftResults.length; k++) {
+                var r = ftResults[k];
+                var meta = r.meta || {};
+                var fid = meta.file_id || '';
+                if (!fid) continue;
+                if (!groups.has(fid)) {
+                    groups.set(fid, {
+                        fileId: fid,
+                        title: meta.title || fid,
+                        titleEn: meta.title_en || '',
+                        excerpt: r.excerpt || '',
+                        subResultCount: (r.sub_results || []).length || 1
+                    });
+                } else {
+                    // Accumulate hit indicators from duplicate entries
+                    var existing = groups.get(fid);
+                    existing.subResultCount += (r.sub_results || []).length || 1;
+                }
             }
+
+            var groupArr = Array.from(groups.values());
+
+            if (ftLabel) {
+                ftLabel.innerHTML = 'Full-Text Matches (' + groupArr.length + ' text' + (groupArr.length === 1 ? '' : 's') + ')';
+            }
+
+            // Show first 20 groups, "show more" for the rest
+            var MAX_GROUPS = 20;
+            var visibleGroups = groupArr.slice(0, MAX_GROUPS);
+            var hiddenGroups = groupArr.slice(MAX_GROUPS);
 
             var ftHtml = '';
-            var ftSlice = ftResults.slice(0, 30);
-            for (var k = 0; k < ftSlice.length; k++) {
-                var r = ftSlice[k];
-                var meta = r.meta || {};
-                var fFileId = meta.file_id || '';
-                var fHref = fFileId ? '#/' + fFileId + (query ? '?q=' + encodeURIComponent(query) : '') : '#';
-                var fTitle = meta.title || fFileId || '';
-                var fTitleEn = meta.title_en || '';
-                ftHtml += '<a class="search-row search-row--fulltext" href="' + escapeHtml(fHref) + '">';
-                ftHtml += (fFileId ? '<span class="search-row-id">' + escapeHtml(fFileId) + '</span>' : '');
-                ftHtml += '<span class="search-row-text">';
-                ftHtml += '<span class="search-row-zh">' + escapeHtml(fTitle) + '</span>';
-                if (fTitleEn) ftHtml += '<span class="search-row-en">' + escapeHtml(fTitleEn) + '</span>';
-                ftHtml += '</span>';
-                if (r.excerpt) ftHtml += '<div class="search-row-excerpt">' + r.excerpt + '</div>';
-                ftHtml += '</a>';
+            for (var g = 0; g < visibleGroups.length; g++) {
+                ftHtml += buildSearchGroup(visibleGroups[g], query);
             }
 
-            if (ftResults.length > 30) {
-                ftHtml += '<p class="muted" style="padding:0.5rem 1rem;">Showing first 30 of ' + ftResults.length + ' results.</p>';
+            if (hiddenGroups.length > 0) {
+                ftHtml += '<div id="ft-hidden-groups" style="display:none;">';
+                for (var h = 0; h < hiddenGroups.length; h++) {
+                    ftHtml += buildSearchGroup(hiddenGroups[h], query);
+                }
+                ftHtml += '</div>';
+                ftHtml += '<button class="search-show-more" id="ft-show-more-groups">Show ' + hiddenGroups.length + ' more text' + (hiddenGroups.length === 1 ? '' : 's') + '\u2026</button>';
             }
 
             ftContainer.innerHTML = ftHtml;
 
-            // Track clicks on full-text results
-            ftContainer.querySelectorAll('.search-row').forEach(function(row) {
-                row.addEventListener('click', function() { resultClickedThisSession = true; });
-            });
+            // Wire expand handlers on all groups
+            wireGroupExpanders(ftContainer, query);
+
+            // Wire "show more groups" button
+            var showMoreBtn = ftContainer.querySelector('#ft-show-more-groups');
+            if (showMoreBtn) {
+                showMoreBtn.addEventListener('click', function() {
+                    var hidden = ftContainer.querySelector('#ft-hidden-groups');
+                    if (hidden) {
+                        hidden.style.display = '';
+                        wireGroupExpanders(hidden, query);
+                    }
+                    showMoreBtn.remove();
+                });
+            }
 
             maybeShowSupportPrompt(body);
         }).catch(function() {
@@ -437,6 +468,121 @@ export async function render(route, mount, shell) {
 
         maybeShowSupportPrompt(body);
         window.scrollTo(0, 0);
+    }
+
+    /** Build HTML for a single expandable search group (book-level). */
+    function buildSearchGroup(group, query) {
+        var fHref = '#/' + group.fileId + (query ? '?q=' + encodeURIComponent(query) : '');
+        var countLabel = group.subResultCount > 1 ? group.subResultCount + '+' : '';
+        return '<details class="search-group" data-file-id="' + escapeHtml(group.fileId) + '">' +
+            '<summary>' +
+                '<span class="search-row-id">' + escapeHtml(group.fileId) + '</span>' +
+                '<span class="search-group-title">' +
+                    '<span class="search-group-zh">' + escapeHtml(group.title) + '</span>' +
+                    (group.titleEn ? '<span class="search-group-en">' + escapeHtml(group.titleEn) + '</span>' : '') +
+                    '<span class="search-group-excerpt">' + sanitizeExcerpt(group.excerpt || '') + '</span>' +
+                '</span>' +
+                '<span class="search-group-meta">' +
+                    (countLabel ? '<span class="search-group-count">' + escapeHtml(countLabel) + '</span>' : '') +
+                    '<a class="btn btn--small" href="' + escapeHtml(fHref) + '" onclick="event.stopPropagation();">Open text</a>' +
+                '</span>' +
+            '</summary>' +
+            '<div class="search-group-body" data-loaded="false">' +
+                '<div class="search-group-loading">Loading passages\u2026</div>' +
+            '</div>' +
+        '</details>';
+    }
+
+    /** Wire toggle handlers on <details> groups to lazy-load KWIC passages. */
+    function wireGroupExpanders(container, query) {
+        container.querySelectorAll('.search-group').forEach(function(details) {
+            if (details._wired) return;
+            details._wired = true;
+
+            details.addEventListener('toggle', function() {
+                if (!details.open) return;
+
+                var groupBody = details.querySelector('.search-group-body');
+                if (!groupBody || groupBody.dataset.loaded === 'true') return;
+                groupBody.dataset.loaded = 'true';
+
+                var fileId = details.dataset.fileId;
+                loadAndSearchXml(fileId, query).then(function(result) {
+                    if (!result || result.passages.length === 0) {
+                        groupBody.innerHTML = '<p class="muted" style="padding:0.5rem 1rem 0.5rem 10.1rem;">No passage-level matches found. <a href="#/' + escapeHtml(fileId) + '?q=' + encodeURIComponent(query) + '">Open full text \u2192</a></p>';
+                        return;
+                    }
+
+                    // Update hit count badge
+                    var countEl = details.querySelector('.search-group-count');
+                    if (countEl) {
+                        countEl.textContent = result.totalHits + ' match' + (result.totalHits === 1 ? '' : 'es');
+                    } else {
+                        // Create one if it didn't exist
+                        var metaEl = details.querySelector('.search-group-meta');
+                        if (metaEl) {
+                            var badge = document.createElement('span');
+                            badge.className = 'search-group-count';
+                            badge.textContent = result.totalHits + ' match' + (result.totalHits === 1 ? '' : 'es');
+                            metaEl.insertBefore(badge, metaEl.firstChild);
+                        }
+                    }
+
+                    // Render KWIC rows — show first 5, "show more" for rest
+                    var MAX_KWIC = 5;
+                    var passages = result.passages;
+                    var kwicHtml = '';
+
+                    for (var i = 0; i < Math.min(passages.length, MAX_KWIC); i++) {
+                        kwicHtml += buildKwicRow(passages[i], fileId, query);
+                    }
+
+                    if (passages.length > MAX_KWIC) {
+                        kwicHtml += '<div class="kwic-hidden" style="display:none;">';
+                        for (var j = MAX_KWIC; j < passages.length; j++) {
+                            kwicHtml += buildKwicRow(passages[j], fileId, query);
+                        }
+                        kwicHtml += '</div>';
+                        kwicHtml += '<button class="search-show-more kwic-show-more">Show ' + (passages.length - MAX_KWIC) + ' more match' + (passages.length - MAX_KWIC === 1 ? '' : 'es') + '\u2026</button>';
+                    }
+
+                    groupBody.innerHTML = kwicHtml;
+
+                    // Wire "show more" within this group
+                    var showMore = groupBody.querySelector('.kwic-show-more');
+                    if (showMore) {
+                        showMore.addEventListener('click', function() {
+                            var hidden = groupBody.querySelector('.kwic-hidden');
+                            if (hidden) hidden.style.display = '';
+                            showMore.remove();
+                        });
+                    }
+
+                    // Track clicks
+                    groupBody.querySelectorAll('.kwic-row').forEach(function(row) {
+                        row.addEventListener('click', function() { resultClickedThisSession = true; });
+                    });
+                }).catch(function() {
+                    groupBody.innerHTML = '<p class="muted" style="padding:0.5rem 1rem 0.5rem 10.1rem;">Could not load passage data.</p>';
+                });
+            });
+        });
+    }
+
+    /** Build a single KWIC row linking to a specific passage. */
+    function buildKwicRow(passage, fileId, query) {
+        var lbRange = passage.startLb;
+        if (passage.endLb && passage.endLb !== passage.startLb) {
+            lbRange = passage.startLb + '-' + passage.endLb;
+        }
+        var href = '#/' + fileId + '/' + lbRange + '?q=' + encodeURIComponent(query);
+
+        return '<a class="kwic-row" href="' + escapeHtml(href) + '">' +
+            '<span class="kwic-left">' + escapeHtml(passage.left) + '</span>' +
+            '<span class="kwic-match">' + escapeHtml(passage.match) + '</span>' +
+            '<span class="kwic-right">' + escapeHtml(passage.right) + '</span>' +
+            '<span class="kwic-lb">' + escapeHtml(passage.lineId) + '</span>' +
+        '</a>';
     }
 
     function buildTitlePagination(current, total, query) {
@@ -571,6 +717,15 @@ function maybeShowSupportPrompt(container) {
         var supportBtn = document.querySelector('#support-btn');
         if (supportBtn) supportBtn.click();
     });
+}
+
+/** Sanitize Pagefind excerpt HTML: allow only <mark> tags, escape everything else. */
+function sanitizeExcerpt(html) {
+    if (!html) return '';
+    // Extract mark-delimited segments, escape everything else
+    return html.replace(/<mark>/g, '\x00MARK\x00').replace(/<\/mark>/g, '\x00/MARK\x00')
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\x00MARK\x00/g, '<mark>').replace(/\x00\/MARK\x00/g, '</mark>');
 }
 
 /** Best-effort workId extraction from a relative path. */
