@@ -1764,7 +1764,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
                 if (hit) {
                     state.focused = hit.id;
                     draw();
-                    showNodeCard(hit);
+                    try { showNodeCard(hit); } catch (err) { console.error('showNodeCard touch error:', err); }
                 } else {
                     state.focused = null;
                     removeNodeCard();
@@ -1847,7 +1847,6 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
 
     // ── Popup Card ──
     function showNodeCard(node) {
-        console.log('showNodeCard called, type:', node.type, 'id:', node.id, 'label:', node.label);
         removeNodeCard();
         const backdrop = document.createElement('div');
         backdrop.className = 'graph-card-backdrop';
@@ -2114,7 +2113,6 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
         card.style.top = cardY + 'px';
         card.style.transform = 'none';
 
-        console.log('showNodeCard appending card, content length:', content.length);
         document.body.appendChild(backdrop);
         document.body.appendChild(card);
 
