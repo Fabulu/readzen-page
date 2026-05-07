@@ -208,7 +208,7 @@ export async function render(route, mount, shell) {
                 const cTags = c.tags || c.Tags || [];
                 const desc = c.description || c.Description || '';
                 const indentClass = isChild ? ' scholar-collection-card--child' : '';
-                return `<a class="scholar-collection-card${indentClass}" href="#/scholar/${encodeURIComponent(cId)}//${encodeURIComponent(user)}">
+                return `<a class="scholar-collection-card${indentClass}" href="#/scholar/${encodeURIComponent(cName)}//${encodeURIComponent(user)}">
                     <span class="scholar-collection-card-title">${escapeHtml(cName)}</span>
                     <span class="scholar-collection-card-meta">${passages.length} passage${passages.length !== 1 ? 's' : ''}${desc ? ' · ' + escapeHtml(desc.slice(0, 60)) : ''}</span>
                     ${cTags.length ? `<span class="scholar-row-tags">${cTags.slice(0, 3).map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('')}</span>` : ''}
@@ -325,7 +325,7 @@ function renderCollectionMode(collection, user, shell, allCollections) {
         const parent = allCollections.find(c => (c.id || c.Id) === parentId);
         if (parent) {
             const parentName = parent.name || parent.Name || 'Parent';
-            subEl.innerHTML = `<a href="#/scholar/${encodeURIComponent(parentId)}//${encodeURIComponent(user)}" style="color:var(--accent,#6EAFF8);text-decoration:none">\u2190 ${escapeHtml(parentName)}</a> · ${passages.length} passage${passages.length === 1 ? '' : 's'} · by ${escapeHtml(user)}`;
+            subEl.innerHTML = `<a href="#/scholar/${encodeURIComponent(parentName)}//${encodeURIComponent(user)}" style="color:var(--accent,#6EAFF8);text-decoration:none">\u2190 ${escapeHtml(parentName)}</a> · ${passages.length} passage${passages.length === 1 ? '' : 's'} · by ${escapeHtml(user)}`;
         } else {
             subEl.textContent = `${passages.length} passage${passages.length === 1 ? '' : 's'} · by ${user}`;
         }
@@ -338,8 +338,8 @@ function renderCollectionMode(collection, user, shell, allCollections) {
     const concepts = collection.concepts || collection.Concepts || [];
     const extraMasters = collection.extraMasters || collection.ExtraMasters || [];
     if (links.length > 0 || concepts.length > 0 || extraMasters.length > 0) {
-        const cid = collection.id || collection.Id || '';
-        const graphHref = '#/scholar/' + encodeURIComponent(cid) + '/graph/' + encodeURIComponent(user);
+        const cSlug = collectionSlug(collection);
+        const graphHref = '#/scholar/' + encodeURIComponent(cSlug) + '/graph/' + encodeURIComponent(user);
         const headEl = document.querySelector('#scholar-head');
         if (headEl) {
             const graphLink = document.createElement('a');
@@ -377,7 +377,7 @@ function renderCollectionMode(collection, user, shell, allCollections) {
                 const scName = sc.name || sc.Name || 'Untitled';
                 const scPassages = sc.passages || sc.Passages || [];
                 const scDesc = sc.description || sc.Description || '';
-                return `<a class="scholar-collection-card scholar-collection-card--child" href="#/scholar/${encodeURIComponent(scId)}//${encodeURIComponent(user)}">
+                return `<a class="scholar-collection-card scholar-collection-card--child" href="#/scholar/${encodeURIComponent(scName)}//${encodeURIComponent(user)}">
                     <span class="scholar-collection-card-title">${escapeHtml(scName)}</span>
                     <span class="scholar-collection-card-meta">${scPassages.length} passage${scPassages.length !== 1 ? 's' : ''}${scDesc ? ' \u00b7 ' + escapeHtml(scDesc.slice(0, 60)) : ''}</span>
                 </a>`;
@@ -404,7 +404,9 @@ function renderCollectionMode(collection, user, shell, allCollections) {
 
         const displayTitle = summary || (zh.length > 60 ? zh.slice(0, 60) + '\u2026' : zh) || (en.length > 60 ? en.slice(0, 60) + '\u2026' : en) || '(untitled)';
 
-        const href = '#/scholar/' + encodeURIComponent(cid) + '/' + encodeURIComponent(pid) + '/' + encodeURIComponent(user);
+        const cSlugForHref = collectionSlug(collection);
+        const pSlug = passageSlug(p);
+        const href = '#/scholar/' + encodeURIComponent(cSlugForHref) + '/' + encodeURIComponent(pSlug) + '/' + encodeURIComponent(user);
 
         return `<a class="scholar-row" href="${escapeHtml(href)}">
     ${readingStatus ? `<span class="scholar-row-status"><span class="status-dot status-dot--${escapeHtml(readingStatus)}"></span></span>` : ''}
@@ -442,7 +444,12 @@ function renderPassageMode(collection, passageId, user, _shell) {
     const emptyEl = document.querySelector('#scholar-empty');
 
     const passages = collection.passages || collection.Passages || [];
-    const idx = passages.findIndex((p) => (p.id || p.Id) === passageId);
+    // Match by summary/title first (name-based URLs), then fall back to GUID for backward compat
+    let idx = passages.findIndex((p) => {
+        const slug = passageSlug(p);
+        return slug && normalizeName(slug) === normalizeName(passageId);
+    });
+    if (idx < 0) idx = passages.findIndex((p) => (p.id || p.Id) === passageId);
     if (idx < 0) {
         titleEl.textContent = `Passage not found`;
         body.hidden = true;
@@ -487,8 +494,9 @@ function renderPassageMode(collection, passageId, user, _shell) {
 
     function navHref(target) {
         if (!target) return null;
-        const pid = target.id || target.Id || '';
-        return '#/scholar/' + encodeURIComponent(cid) + '/' + encodeURIComponent(pid) + '/' + encodeURIComponent(user);
+        const pSlug = passageSlug(target);
+        const cSlugNav = collectionSlug(collection);
+        return '#/scholar/' + encodeURIComponent(cSlugNav) + '/' + encodeURIComponent(pSlug) + '/' + encodeURIComponent(user);
     }
 
     const prevHref = navHref(prev);
@@ -585,4 +593,16 @@ async function loadCollections(user, url) {
 
 function normalizeName(s) {
     return String(s || '').trim().toLowerCase().replace(/[_-]/g, ' ');
+}
+
+/** Build URL-safe slug for a passage (summary or zh text, max 50 chars). Falls back to GUID. */
+function passageSlug(p) {
+    const text = p.summary || p.Summary || p.zhText || p.ZhText || '';
+    if (text) return text.slice(0, 50).trim();
+    return p.id || p.Id || '';
+}
+
+/** Get the URL-safe name for a collection. Falls back to its ID. */
+function collectionSlug(c) {
+    return c.name || c.Name || c.id || c.Id || '';
 }

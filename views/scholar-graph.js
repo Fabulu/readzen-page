@@ -517,7 +517,7 @@ export async function render(route, mount, shell) {
                     Clusters
                 </label>
             </div>
-            <a class="lineage-browse-link" href="#/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">&larr; Back to Collection</a>
+            <a class="lineage-browse-link" id="scholar-graph-back-link" href="#/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">&larr; Back to Collection</a>
         </div>
     `;
 
@@ -542,6 +542,10 @@ export async function render(route, mount, shell) {
     // Update title with actual collection name
     const collectionName = collection.name || collection.Name || collectionId;
     if (shell) shell.setTitle(`Scholar Graph \u00b7 ${collectionName}`);
+
+    // Update back link to use collection name instead of whatever was in the URL
+    const backLink = mount.querySelector('#scholar-graph-back-link');
+    if (backLink) backLink.href = '#/scholar/' + encodeURIComponent(collectionSlug(collection)) + '//' + encodeURIComponent(user);
 
     const passages = collection.passages || collection.Passages || [];
     const links = collection.links || collection.Links || [];
@@ -1663,9 +1667,9 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
     canvas.addEventListener('dblclick', e => {
         const hit = hitTest(e.offsetX, e.offsetY);
         if (hit && hit.type === 4) {
-            const scId = hit.id.startsWith('collection:') ? hit.id.slice(11) : hit.id;
+            const scLabel = hit.label || (hit.id.startsWith('collection:') ? hit.id.slice(11) : hit.id);
             const owner = hit.ownerUser || user;
-            window.location.hash = '#/scholar/' + encodeURIComponent(scId) + '/graph/' + encodeURIComponent(owner);
+            window.location.hash = '#/scholar/' + encodeURIComponent(scLabel) + '/graph/' + encodeURIComponent(owner);
         } else if (hit && hit.type === 5) {
             const workId = (hit.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';
             if (workId) window.location.hash = '#/' + encodeURIComponent(workId);
@@ -2051,9 +2055,11 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
                     : node.fromLb;
                 content += `<a href="#/${encodeURIComponent(workId)}/${encodeURIComponent(range)}">Open in Reader \u2192</a>`;
             }
-            content += `<a href="#/scholar/${encodeURIComponent(collectionId)}/${encodeURIComponent(node.id)}/${encodeURIComponent(user)}">View in Collection \u2192</a>`;
+            const pSlug = passageSlug(node);
+            const cSlug = collectionSlug(collection);
+            content += `<a href="#/scholar/${encodeURIComponent(cSlug)}/${encodeURIComponent(pSlug)}/${encodeURIComponent(user)}">View in Collection \u2192</a>`;
         } else if (node.type === 1) {
-            content += `<a href="#/scholar/${encodeURIComponent(collectionId)}//${encodeURIComponent(user)}">View Collection \u2192</a>`;
+            content += `<a href="#/scholar/${encodeURIComponent(collectionSlug(collection))}//${encodeURIComponent(user)}">View Collection \u2192</a>`;
         } else if (node.type === 2) {
             const masterName = node.id.startsWith('master:') ? node.id.slice(7) : node.label;
             content += `<a href="#/master/${encodeURIComponent(masterName)}">Master Profile \u2192</a>`;
@@ -2062,11 +2068,11 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             const term = node.label;
             content += `<a href="#/dict/${encodeURIComponent(term)}">View in Dictionary \u2192</a>`;
         } else if (node.type === 4) {
-            // Collection — browse and open graph
-            const scCollId = node.id.startsWith('collection:') ? node.id.slice(11) : node.id;
+            // Collection — browse and open graph (use label = collection name)
+            const scLabel = node.label || (node.id.startsWith('collection:') ? node.id.slice(11) : node.id);
             const scOwner = node.ownerUser || user;
-            content += `<a href="#/scholar/${encodeURIComponent(scCollId)}/graph/${encodeURIComponent(scOwner)}"><strong>Open Graph \u2192</strong></a>`;
-            content += `<a href="#/scholar/${encodeURIComponent(scCollId)}//${encodeURIComponent(scOwner)}">Browse Collection \u2192</a>`;
+            content += `<a href="#/scholar/${encodeURIComponent(scLabel)}/graph/${encodeURIComponent(scOwner)}"><strong>Open Graph \u2192</strong></a>`;
+            content += `<a href="#/scholar/${encodeURIComponent(scLabel)}//${encodeURIComponent(scOwner)}">Browse Collection \u2192</a>`;
         } else if (node.type === 5) {
             // Book — link to reader
             const bookWorkId = (node.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';
@@ -2207,4 +2213,16 @@ function touchMidpoint(touches) {
 
 function normalizeName(s) {
     return String(s || '').trim().toLowerCase().replace(/[_-]/g, ' ');
+}
+
+/** Build URL-safe slug for a passage (summary or zh text, max 50 chars). Falls back to GUID. */
+function passageSlug(p) {
+    const text = p.summary || p.Summary || p.zhText || p.ZhText || '';
+    if (text) return text.slice(0, 50).trim();
+    return p.id || p.Id || '';
+}
+
+/** Get the URL-safe name for a collection. Falls back to its ID. */
+function collectionSlug(c) {
+    return c.name || c.Name || c.id || c.Id || '';
 }
