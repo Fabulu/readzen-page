@@ -68,7 +68,7 @@ async function loadCommunityCards(mount) {
 
         // Render cards
         scrollEl.innerHTML = cards.map(c => `
-            <div class="community-card" onclick="window.location.hash='#/scholar/${encodeURIComponent(c.name)}?user=${encodeURIComponent(c.user)}'">
+            <div class="community-card" onclick="window.location.hash='#/scholar/${encodeURIComponent(c.user)}/${encodeURIComponent(c.name)}'">
                 <div class="community-card-head">
                     <span class="community-card-avatar">${escapeHtml((c.user[0] || '?').toUpperCase())}</span>
                     <div class="community-card-info">
@@ -79,7 +79,7 @@ async function loadCommunityCards(mount) {
                 <div class="community-card-stats">
                     ${c.passageCount} passages${c.conceptCount ? ' \u00b7 ' + c.conceptCount + ' concepts' : ''}
                 </div>
-                ${(c.linkCount > 0 || c.conceptCount > 0) ? `<button class="community-card-graph-link" onclick="event.stopPropagation(); window.location.hash='#/scholar/${encodeURIComponent(c.name)}/graph/${encodeURIComponent(c.user)}';">View Graph \u2192</button>` : ''}
+                ${(c.linkCount > 0 || c.conceptCount > 0) ? `<button class="community-card-graph-link" onclick="event.stopPropagation(); window.location.hash='#/scholar/${encodeURIComponent(c.user)}/${encodeURIComponent(c.name)}/graph';">View Graph \u2192</button>` : ''}
             </div>
         `).join('');
     } catch {

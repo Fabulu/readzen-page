@@ -2,7 +2,7 @@
 // Canvas-based force-directed graph showing passage relationships within
 // a published scholar collection.
 //
-// Route: #/scholar/{collectionId}/graph/{user}
+// Route: #/scholar/{user}/{collectionName}/graph
 //
 // Supports SchemaVersion 2 data (concepts, typed edges) with 5 node shapes,
 // ego-on-hover highlighting, popup cards, and animated entry.
@@ -517,7 +517,7 @@ export async function render(route, mount, shell) {
                     Clusters
                 </label>
             </div>
-            <a class="lineage-browse-link" id="scholar-graph-back-link" href="#/scholar/${encodeURIComponent(collectionId)}?user=${encodeURIComponent(user)}">&larr; Back to Collection</a>
+            <a class="lineage-browse-link" id="scholar-graph-back-link" href="#/scholar/${encodeURIComponent(user)}/${encodeURIComponent(collectionId)}">&larr; Back to Collection</a>
         </div>
     `;
 
@@ -545,7 +545,7 @@ export async function render(route, mount, shell) {
 
     // Update back link to use collection name instead of whatever was in the URL
     const backLink = mount.querySelector('#scholar-graph-back-link');
-    if (backLink) backLink.href = '#/scholar/' + encodeURIComponent(collectionSlug(collection)) + '?user=' + encodeURIComponent(user);
+    if (backLink) backLink.href = '#/scholar/' + encodeURIComponent(user) + '/' + encodeURIComponent(collectionSlug(collection));
 
     const passages = collection.passages || collection.Passages || [];
     const links = collection.links || collection.Links || [];
@@ -816,7 +816,7 @@ export async function render(route, mount, shell) {
 
     const canvas = mount.querySelector('#scholar-graph-canvas');
     canvas.style.touchAction = 'none';
-    initGraph(canvas, nodes, edges, collectionId, user, graphLayout, nodeAnnotations, edgeNameMap, startingNodeId);
+    initGraph(canvas, nodes, edges, collectionId, user, graphLayout, nodeAnnotations, edgeNameMap, startingNodeId, collection);
 }
 
 // ── Force-directed layout ──
@@ -1051,7 +1051,7 @@ function edgeColor(e) {
 
 // ── Graph engine ──
 
-function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAnnotations, edgeNameMap, startingNodeId) {
+function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAnnotations, edgeNameMap, startingNodeId, collection) {
     const ctx = canvas.getContext('2d');
 
     // Declare easing helper before first use (used in draw())
@@ -1669,7 +1669,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
         if (hit && hit.type === 4) {
             const scLabel = hit.label || (hit.id.startsWith('collection:') ? hit.id.slice(11) : hit.id);
             const owner = hit.ownerUser || user;
-            window.location.hash = '#/scholar/' + encodeURIComponent(scLabel) + '/graph/' + encodeURIComponent(owner);
+            window.location.hash = '#/scholar/' + encodeURIComponent(owner) + '/' + encodeURIComponent(scLabel) + '/graph';
         } else if (hit && hit.type === 5) {
             const workId = (hit.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';
             if (workId) window.location.hash = '#/' + encodeURIComponent(workId);
@@ -2057,9 +2057,9 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             }
             const pSlug = passageSlug(node);
             const cSlug = collectionSlug(collection);
-            content += `<a href="#/scholar/${encodeURIComponent(cSlug)}/${encodeURIComponent(pSlug)}/${encodeURIComponent(user)}">View in Collection \u2192</a>`;
+            content += `<a href="#/scholar/${encodeURIComponent(user)}/${encodeURIComponent(cSlug)}/${encodeURIComponent(pSlug)}">View in Collection \u2192</a>`;
         } else if (node.type === 1) {
-            content += `<a href="#/scholar/${encodeURIComponent(collectionSlug(collection))}?user=${encodeURIComponent(user)}">View Collection \u2192</a>`;
+            content += `<a href="#/scholar/${encodeURIComponent(user)}/${encodeURIComponent(collectionSlug(collection))}">View Collection \u2192</a>`;
         } else if (node.type === 2) {
             const masterName = node.id.startsWith('master:') ? node.id.slice(7) : node.label;
             content += `<a href="#/master/${encodeURIComponent(masterName)}">Master Profile \u2192</a>`;
@@ -2071,8 +2071,8 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
             // Collection — browse and open graph (use label = collection name)
             const scLabel = node.label || (node.id.startsWith('collection:') ? node.id.slice(11) : node.id);
             const scOwner = node.ownerUser || user;
-            content += `<a href="#/scholar/${encodeURIComponent(scLabel)}/graph/${encodeURIComponent(scOwner)}"><strong>Open Graph \u2192</strong></a>`;
-            content += `<a href="#/scholar/${encodeURIComponent(scLabel)}?user=${encodeURIComponent(scOwner)}">Browse Collection \u2192</a>`;
+            content += `<a href="#/scholar/${encodeURIComponent(scOwner)}/${encodeURIComponent(scLabel)}/graph"><strong>Open Graph \u2192</strong></a>`;
+            content += `<a href="#/scholar/${encodeURIComponent(scOwner)}/${encodeURIComponent(scLabel)}">Browse Collection \u2192</a>`;
         } else if (node.type === 5) {
             // Book — link to reader
             const bookWorkId = (node.sourceRelPath || '').split('/').pop()?.replace(/\.xml$/i, '') || '';
