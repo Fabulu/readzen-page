@@ -1655,7 +1655,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
         if (hit) {
             state.focused = hit.id;
             draw();
-            showNodeCard(hit);
+            try { showNodeCard(hit); } catch (err) { console.error('showNodeCard error:', err); }
         } else {
             state.focused = null;
             removeNodeCard();
