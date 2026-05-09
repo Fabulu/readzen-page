@@ -6,10 +6,8 @@
   "scripts": {
     "test": "node --test test/",
     "build": "node build/build-dict-shards.js",
-    "build:search": "node build/build-pagefind-index.js",
+    "build:search": "node --max-old-space-size=4096 --expose-gc build/build-bigram-index.js && node build/build-english-jsonl.js",
     "deploy": "npm run build"
   },
-  "dependencies": {
-    "pagefind": "^1.5.2"
-  }
+  "dependencies": {}
 }

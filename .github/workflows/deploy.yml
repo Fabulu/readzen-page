@@ -1,7 +1,7 @@
 name: Build & Deploy
 
 on:
-  # Disabled: Pagefind build OOMs on GitHub Actions runner (7GB limit).
+  # Disabled: bigram index build peaks at ~3.5 GB and is slow on GHA.
   # Deploy locally instead: npx wrangler pages deploy . --project-name=readzen --branch=main
   # See README.md for full instructions.
   #
@@ -57,33 +57,8 @@ jobs:
       - name: Build dictionary shards
         run: node build/build-dict-shards.js
 
-      - name: Cache Pagefind index
-        id: pagefind-cache
-        uses: actions/cache@v4
-        with:
-          path: pagefind
-          key: pagefind-v2-${{ hashFiles('build/build-pagefind-index.js') }}
-          restore-keys: |
-            pagefind-v2-
-            pagefind-
-
-      - name: Restore Pagefind from live site (fallback)
-        if: ${{ steps.pagefind-cache.outputs.cache-hit != 'true' }}
+      - name: Build bigram search index
         run: |
-          echo "No cached Pagefind index found. Downloading from live site..."
-          mkdir -p pagefind
-          # Download the entry point to check if live site has pagefind
-          curl -sf "https://readzen.net/pagefind/pagefind-entry.json" -o pagefind/pagefind-entry.json || true
-          if [ -f pagefind/pagefind-entry.json ]; then
-            echo "Live pagefind-entry.json found, but cannot bulk-download shards."
-            echo "Will attempt local build. If it OOMs, use [skip-pagefind] in commit message."
-            rm -rf pagefind
-          fi
-
-      - name: Build Pagefind search index
-        if: ${{ !contains(github.event.head_commit.message, '[skip-pagefind]') && steps.pagefind-cache.outputs.cache-hit != 'true' }}
-        run: |
-          # Set paths for CI environment
           export CBETA_XML_DIR=corpus/CbetaZenTexts/xml-p5
           export OPENZEN_XML_DIR=corpus/OpenZenTexts/xml-open
           export CBETA_TITLES=corpus/CbetaZenTranslations/titles.jsonl
@@ -92,19 +67,16 @@ jobs:
           export OPENZEN_TRANSLATED_DIR=corpus/OpenZenTranslations/xml-open-t
           export ZEN_TEXTS_PATH=corpus/CbetaZenTranslations/zen_texts.json
           export COMMUNITY_DIR=corpus/CbetaZenTranslations/community/translations
-          node --expose-gc build/build-pagefind-index.js
-        env:
-          NODE_OPTIONS: --max-old-space-size=7168
+          node --max-old-space-size=4096 --expose-gc build/build-bigram-index.js
+          node build/build-english-jsonl.js
 
-      - name: Verify Pagefind exists
+      - name: Verify search index exists
         run: |
-          if [ ! -d pagefind ] || [ ! -f pagefind/pagefind-entry.json ]; then
-            echo "ERROR: No Pagefind index available. The build may have OOMed."
-            echo "To deploy without rebuilding: add [skip-pagefind] to your commit message"
-            echo "and ensure a previous successful build cached the index."
+          if [ ! -f data/search/bigram/manifest.json ] || [ ! -f data/search/english.jsonl ]; then
+            echo "ERROR: Bigram search index incomplete."
             exit 1
           fi
-          echo "Pagefind index OK: $(ls pagefind/ | wc -l) files"
+          echo "Bigram index OK: $(find data/search -type f | wc -l) files"
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

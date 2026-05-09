@@ -45,71 +45,72 @@ git commit -m "Refresh CC-CEDICT shards"
 
 ---
 
-## `build-pagefind-index.js`
+## `build-bigram-index.js` + `build-english-jsonl.js`
 
-Builds a [Pagefind](https://pagefind.app) full-text search index from the CBETA
-and OpenZen XML corpus. Enables client-side full-text search across ~5000
-Buddhist texts with CJK support.
+Builds a CJK bigram inverted index (port of the desktop ReadZen app's
+`InvertedSearchIndex`) plus an English substring corpus blob. Together these
+power the SPA's full-text search across ~5000 Buddhist texts with proper
+classical-Chinese matching (no Jieba dictionary; phrases match across
+editorial punctuation).
 
 ### Prerequisites
-
-```bash
-npm install   # installs pagefind package
-```
 
 Corpus repos must be on disk (sibling directories):
 - `CbetaZenTexts/xml-p5/` — CBETA source XML (~5000 texts)
 - `OpenZenTexts/xml-open/` — OpenZen source XML
 - `CbetaZenTranslations/titles.jsonl` — title metadata
-- `CbetaZenTranslations/xml-p5t/` — translated files (filter metadata)
+- `CbetaZenTranslations/xml-p5t/` — CBETA translations
 - `CbetaZenTranslations/zen_texts.json` — zen text IDs
 - `OpenZenTranslations/titles.jsonl` — OpenZen title metadata
+- `OpenZenTranslations/xml-open-t/` — OpenZen translations
+- `CbetaZenTranslations/community/translations/<user>/` — community translations
 
 ### How to run
 
 ```bash
 npm run build:search
-# or: node build/build-pagefind-index.js
+# expands to:
+#   node --max-old-space-size=4096 --expose-gc build/build-bigram-index.js
+#   node build/build-english-jsonl.js
 ```
 
 ### Output
 
-`pagefind/` directory (~30MB, ~7500 files). This is **gitignored** — rebuild
-locally or during deployment. Contents:
-
-- `pagefind.js` — client entry point
-- `wasm.*.pagefind` — WASM search engine (includes CJK segmenter)
-- `index/` — sharded inverted index (~2500 files, loaded on demand)
-- `fragment/` — per-document excerpts (~5000 files)
-- `filter/` — faceted filter data
-
-### What it indexes
-
-1. All CBETA XML source texts (Chinese, `language: "zh"`)
-2. All OpenZen XML source texts (Chinese)
-3. Filters per text: `corpus`, `translated`, `zen`, `collection`
+`data/search/` directory:
+- `bigram/manifest.json` — shard hash table + corpus metadata
+- `bigram/docs.txt` — line N is URL for docId N
+- `bigram/shards/XX/YY-<hash6>.bin` — 4096 hashed shards (FNV-1a32 mod 4096)
+- `text/{XX}.bin` — 256 NDJSON shards of normalized per-doc text (verification + KWIC)
+- `english.jsonl` — one record per English-side file (~20 records, ~3.5 MB)
 
 ### How it works at runtime
 
-The SPA lazy-loads Pagefind when the user picks "Full Text" search mode.
-Only the index shards needed for each query are downloaded (~200KB–2MB
-per search). The WASM engine runs entirely in the browser.
+`lib/bigram-search.js` lazy-fetches the manifest on first query, then
+HTTP/2-multiplexes shard fetches per query (typically 1-5 shards = ~50-100 KB
+total). Postings intersect shortest-first. Verification step re-fetches the
+normalized doc text per top-200 candidate to confirm the literal phrase is
+present (bigrams are necessary, not sufficient — `甲乙丙` could have `甲乙`
+and `乙丙` non-contiguously).
+
+CJK queries route through the bigram index; Latin queries scan
+`english.jsonl` in memory. KWIC on group-expand re-uses the existing
+`lib/kwic.js` against fresh TEI XML for line-anchored highlights.
 
 ### Timing
 
-- ~10–15 minutes for ~5000 files
-- ~4GB RAM peak during index construction
-- One-time build; output is static
+- ~6 minutes for ~5000 files
+- ~3.5 GB RAM peak during index construction
+- One-time build; output is static, content-addressed, immutable-cached.
 
 ### When to rebuild
 
 - New texts added to corpus
 - Translations updated (affects `translated` filter)
-- Pagefind version bumped
+- Build script changes (e.g. extractText bug fixes affect indexed content)
 
 ### Configuration
 
-Paths are at the top of `build-pagefind-index.js`. Adjust if layout differs.
+Paths are env-vars at the top of `build-bigram-index.js`. Adjust if layout differs.
 
 ---
 

@@ -401,12 +401,12 @@ export async function render(route, mount, shell) {
                         title: meta.title || fid,
                         titleEn: meta.title_en || '',
                         excerpt: r.excerpt || '',
-                        subResultCount: (r.sub_results || []).length || 1
+                        hitCount: r.hitCount || 0
                     });
                 } else {
-                    // Accumulate hit indicators from duplicate entries
+                    // Accumulate hit counts from duplicate entries (rare with bigram backend)
                     var existing = groups.get(fid);
-                    existing.subResultCount += (r.sub_results || []).length || 1;
+                    existing.hitCount += r.hitCount || 0;
                 }
             }
 
@@ -416,8 +416,8 @@ export async function render(route, mount, shell) {
                 ftLabel.innerHTML = 'Full-Text Matches (' + groupArr.length + ' text' + (groupArr.length === 1 ? '' : 's') + ')';
             }
 
-            // Render every grouped book \u2014 Pagefind already bounds the candidate
-            // set to ~300 raw hits upstream, and KWIC fetches are lazy on expand.
+            // Render every grouped book \u2014 the bigram backend already bounds the
+            // candidate set upstream, and KWIC fetches are lazy on expand.
             var ftHtml = '';
             for (var g = 0; g < groupArr.length; g++) {
                 ftHtml += buildSearchGroup(groupArr[g], query);
@@ -447,14 +447,16 @@ export async function render(route, mount, shell) {
     /** Build HTML for a single expandable search group (book-level). */
     function buildSearchGroup(group, query) {
         var fHref = '#/' + group.fileId + (query ? '?q=' + encodeURIComponent(query) : '');
-        var countLabel = group.subResultCount > 1 ? group.subResultCount + '+' : '';
+        var hits = group.hitCount || 0;
+        var countLabel = hits > 0 ? hits + ' match' + (hits === 1 ? '' : 'es') : '';
+        var excerptHtml = group.excerpt ? sanitizeExcerpt(group.excerpt) : '';
         return '<details class="search-group" data-file-id="' + escapeHtml(group.fileId) + '">' +
             '<summary>' +
                 '<span class="search-row-id">' + escapeHtml(group.fileId) + '</span>' +
                 '<span class="search-group-title">' +
                     '<span class="search-group-zh">' + escapeHtml(group.title) + '</span>' +
                     (group.titleEn ? '<span class="search-group-en">' + escapeHtml(group.titleEn) + '</span>' : '') +
-                    '<span class="search-group-excerpt">' + sanitizeExcerpt(group.excerpt || '') + '</span>' +
+                    '<span class="search-group-excerpt">' + excerptHtml + '</span>' +
                 '</span>' +
                 '<span class="search-group-meta">' +
                     (countLabel ? '<span class="search-group-count">' + escapeHtml(countLabel) + '</span>' : '') +
@@ -487,7 +489,8 @@ export async function render(route, mount, shell) {
                         return;
                     }
 
-                    // Update hit count badge
+                    // Update hit count badge — replace the bigram-backend pre-count
+                    // with the precise post-KWIC count.
                     var countEl = details.querySelector('.search-group-count');
                     if (countEl) {
                         countEl.textContent = result.totalHits + ' match' + (result.totalHits === 1 ? '' : 'es');
@@ -500,6 +503,16 @@ export async function render(route, mount, shell) {
                             badge.textContent = result.totalHits + ' match' + (result.totalHits === 1 ? '' : 'es');
                             metaEl.insertBefore(badge, metaEl.firstChild);
                         }
+                    }
+
+                    // Lazy excerpt injection: if the summary has no excerpt yet
+                    // (the bigram backend always emits empty), build one from the
+                    // first passage so the user sees context the moment they expand.
+                    var excerptEl = details.querySelector('.search-group-excerpt');
+                    if (excerptEl && !excerptEl.innerHTML && result.passages.length > 0) {
+                        var p0 = result.passages[0];
+                        var inline = (p0.left || '') + '<mark>' + (p0.match || '') + '</mark>' + (p0.right || '');
+                        excerptEl.innerHTML = sanitizeExcerpt(inline);
                     }
 
                     // Render KWIC rows — show first 5, "show more" for rest
@@ -693,31 +706,18 @@ function maybeShowSupportPrompt(container) {
     });
 }
 
-/** Sanitize Pagefind excerpt HTML: allow only <mark> tags, escape everything else. */
+/** Sanitize excerpt HTML: allow only <mark> tags, escape everything else;
+ *  truncate to ~160 chars centered on the first <mark> window. */
 function sanitizeExcerpt(html) {
     if (!html) return '';
     var safe = html.replace(/<mark>/g, '\x00MARK\x00').replace(/<\/mark>/g, '\x00/MARK\x00')
         .replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/\x00MARK\x00/g, '<mark>').replace(/\x00\/MARK\x00/g, '</mark>');
-    // Index-time CJK tokenization injects a space after every CJK ideograph.
-    // Collapse those spaces in the display (preserve <mark> boundaries).
-    var CJK = '㐀-䶿一-鿿豈-﫿';
-    var reBetweenCjk = new RegExp('([' + CJK + '])\\s+(?=[' + CJK + '])', 'g');
-    var reBeforeMark = new RegExp('([' + CJK + '])\\s+(<\\/?mark>)', 'g');
-    var reAfterMark = new RegExp('(<\\/?mark>)\\s+(?=[' + CJK + '])', 'g');
-    var reBetweenMarks = /<\/mark>\s+<mark>/g;
-    var collapsed = safe
-        .replace(reBetweenCjk, '$1')
-        .replace(reBeforeMark, '$1$2')
-        .replace(reAfterMark, '$1')
-        .replace(reBetweenMarks, '</mark><mark>');
-    // Pagefind concatenates multiple <mark> neighborhoods into one excerpt,
-    // so a doc with many hits emits a wall of text. Center on the first mark.
     var MAX = 160;
-    var plain = collapsed.replace(/<\/?mark>/g, '');
-    if (plain.length <= MAX) return collapsed;
-    var m = collapsed.match(/[\s\S]{0,60}<mark>[\s\S]*?<\/mark>[\s\S]{0,60}/);
-    return (m ? m[0] : collapsed.slice(0, MAX)) + '…';
+    var plain = safe.replace(/<\/?mark>/g, '');
+    if (plain.length <= MAX) return safe;
+    var m = safe.match(/[\s\S]{0,60}<mark>[\s\S]*?<\/mark>[\s\S]{0,60}/);
+    return (m ? m[0] : safe.slice(0, MAX)) + '…';
 }
 
 /** Best-effort workId extraction from a relative path. */

@@ -1,0 +1,6 @@
+pagefind-old/
+.git/
+.github/
+.wrangler/
+.claude/
+node_modules/

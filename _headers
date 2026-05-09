@@ -3,3 +3,15 @@
 
 /robots.txt
   Content-Type: text/plain; charset=utf-8
+
+/data/search/bigram/shards/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/data/search/text/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/data/search/manifest.json
+  Cache-Control: public, max-age=60, must-revalidate
+
+/data/search/english.jsonl
+  Cache-Control: public, max-age=300, must-revalidate

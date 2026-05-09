@@ -456,11 +456,6 @@ export function render(_route, mount, shell) {
 
     // ── Typeahead autocomplete on hero search ──
     if (landingSearchInput) {
-        // Pagefind preload: start downloading WASM on first keystroke
-        landingSearchInput.addEventListener('input', () => {
-            import('/pagefind/pagefind.js').catch(() => {});
-        }, { once: true });
-
         // Wire typeahead once data is available
         Promise.all([loadAllTitlesAsArray(), loadMasters()]).then(([titles, masters]) => {
             if (!landingSearchInput.isConnected) return;
