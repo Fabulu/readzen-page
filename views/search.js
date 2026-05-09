@@ -416,42 +416,16 @@ export async function render(route, mount, shell) {
                 ftLabel.innerHTML = 'Full-Text Matches (' + groupArr.length + ' text' + (groupArr.length === 1 ? '' : 's') + ')';
             }
 
-            // Show first 20 groups, "show more" for the rest
-            var MAX_GROUPS = 20;
-            var visibleGroups = groupArr.slice(0, MAX_GROUPS);
-            var hiddenGroups = groupArr.slice(MAX_GROUPS);
-
+            // Render every grouped book \u2014 Pagefind already bounds the candidate
+            // set to ~300 raw hits upstream, and KWIC fetches are lazy on expand.
             var ftHtml = '';
-            for (var g = 0; g < visibleGroups.length; g++) {
-                ftHtml += buildSearchGroup(visibleGroups[g], query);
+            for (var g = 0; g < groupArr.length; g++) {
+                ftHtml += buildSearchGroup(groupArr[g], query);
             }
-
-            if (hiddenGroups.length > 0) {
-                ftHtml += '<div id="ft-hidden-groups" style="display:none;">';
-                for (var h = 0; h < hiddenGroups.length; h++) {
-                    ftHtml += buildSearchGroup(hiddenGroups[h], query);
-                }
-                ftHtml += '</div>';
-                ftHtml += '<button class="search-show-more" id="ft-show-more-groups">Show ' + hiddenGroups.length + ' more text' + (hiddenGroups.length === 1 ? '' : 's') + '\u2026</button>';
-            }
-
             ftContainer.innerHTML = ftHtml;
 
             // Wire expand handlers on all groups
             wireGroupExpanders(ftContainer, query);
-
-            // Wire "show more groups" button
-            var showMoreBtn = ftContainer.querySelector('#ft-show-more-groups');
-            if (showMoreBtn) {
-                showMoreBtn.addEventListener('click', function() {
-                    var hidden = ftContainer.querySelector('#ft-hidden-groups');
-                    if (hidden) {
-                        hidden.style.display = '';
-                        wireGroupExpanders(hidden, query);
-                    }
-                    showMoreBtn.remove();
-                });
-            }
 
             maybeShowSupportPrompt(body);
         }).catch(function() {
@@ -732,11 +706,18 @@ function sanitizeExcerpt(html) {
     var reBeforeMark = new RegExp('([' + CJK + '])\\s+(<\\/?mark>)', 'g');
     var reAfterMark = new RegExp('(<\\/?mark>)\\s+(?=[' + CJK + '])', 'g');
     var reBetweenMarks = /<\/mark>\s+<mark>/g;
-    return safe
+    var collapsed = safe
         .replace(reBetweenCjk, '$1')
         .replace(reBeforeMark, '$1$2')
         .replace(reAfterMark, '$1')
         .replace(reBetweenMarks, '</mark><mark>');
+    // Pagefind concatenates multiple <mark> neighborhoods into one excerpt,
+    // so a doc with many hits emits a wall of text. Center on the first mark.
+    var MAX = 160;
+    var plain = collapsed.replace(/<\/?mark>/g, '');
+    if (plain.length <= MAX) return collapsed;
+    var m = collapsed.match(/[\s\S]{0,60}<mark>[\s\S]*?<\/mark>[\s\S]{0,60}/);
+    return (m ? m[0] : collapsed.slice(0, MAX)) + '…';
 }
 
 /** Best-effort workId extraction from a relative path. */
