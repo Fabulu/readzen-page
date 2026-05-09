@@ -17,6 +17,20 @@ const OPENZEN_TRANSLATED_DIR = process.env.OPENZEN_TRANSLATED_DIR || 'C:/Program
 const ZEN_TEXTS_PATH = process.env.ZEN_TEXTS_PATH || 'C:/Programmieren/CbetaZenTranslations/zen_texts.json';
 const OUTPUT_DIR = './pagefind';
 
+// === CJK tokenizer ===
+// Pagefind's pagefind_extended uses Jieba for Chinese, but Jieba's modern-Chinese
+// dictionary segments classical Buddhist Chinese poorly: 2-char compounds in
+// classical grammar (e.g. 無門) often fail to register as tokens. We insert a
+// space after every CJK ideograph so Pagefind indexes each character separately.
+// Searches must apply the same tokenization (see lib/search.js).
+// Range covers CJK Unified (4E00-9FFF), Extension A (3400-4DBF), and
+// Compatibility (F900-FAFF). Pagefind already splits on punctuation, so the
+// 3000-303F range is intentionally excluded.
+const CJK_RE = /([　-鿿豈-﫿㐀-䶿])/g;
+function tokenizeCjk(text) {
+    return text.replace(CJK_RE, '$1 ');
+}
+
 // === Text extraction (ported from C# MakeSearchableTextFromXml_Fast) ===
 function extractTextFromXml(xml) {
     // Find <body> content
@@ -141,7 +155,7 @@ async function main() {
 
         await index.addCustomRecord({
             url: '/' + fileId,
-            content: text,
+            content: tokenizeCjk(text),
             language: 'zh',
             meta: {
                 title: titleEntry.zh || fileId,
@@ -176,7 +190,7 @@ async function main() {
 
         await index.addCustomRecord({
             url: '/' + fileId,
-            content: text,
+            content: tokenizeCjk(text),
             language: 'zh',
             meta: {
                 title: titleEntry.zh || fileId,

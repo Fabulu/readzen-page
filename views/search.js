@@ -722,10 +722,21 @@ function maybeShowSupportPrompt(container) {
 /** Sanitize Pagefind excerpt HTML: allow only <mark> tags, escape everything else. */
 function sanitizeExcerpt(html) {
     if (!html) return '';
-    // Extract mark-delimited segments, escape everything else
-    return html.replace(/<mark>/g, '\x00MARK\x00').replace(/<\/mark>/g, '\x00/MARK\x00')
+    var safe = html.replace(/<mark>/g, '\x00MARK\x00').replace(/<\/mark>/g, '\x00/MARK\x00')
         .replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/\x00MARK\x00/g, '<mark>').replace(/\x00\/MARK\x00/g, '</mark>');
+    // Index-time CJK tokenization injects a space after every CJK ideograph.
+    // Collapse those spaces in the display (preserve <mark> boundaries).
+    var CJK = '㐀-䶿一-鿿豈-﫿';
+    var reBetweenCjk = new RegExp('([' + CJK + '])\\s+(?=[' + CJK + '])', 'g');
+    var reBeforeMark = new RegExp('([' + CJK + '])\\s+(<\\/?mark>)', 'g');
+    var reAfterMark = new RegExp('(<\\/?mark>)\\s+(?=[' + CJK + '])', 'g');
+    var reBetweenMarks = /<\/mark>\s+<mark>/g;
+    return safe
+        .replace(reBetweenCjk, '$1')
+        .replace(reBeforeMark, '$1$2')
+        .replace(reAfterMark, '$1')
+        .replace(reBetweenMarks, '</mark><mark>');
 }
 
 /** Best-effort workId extraction from a relative path. */
