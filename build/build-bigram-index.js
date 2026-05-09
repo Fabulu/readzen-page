@@ -13,8 +13,9 @@
 //
 // Run with:
 //   node --max-old-space-size=4096 --expose-gc build/build-bigram-index.js
+// or `npm run build:search`
 //
-// Bump to --max-old-space-size=6144 if it OOMs.
+// Bump to --max-old-space-size=6144 only if rss > 3.8 GB.
 //
 // References:
 //   runs/.../SYNTHESIS.md sections 1, 5
@@ -278,6 +279,7 @@ function collectDocuments(cbetaTitles, openzenTitles, zenIds) {
     for (let i = 0; i < docs.length; i++) docs[i].docId = i;
 
     // Annotate zen flag for completeness (consumed by future filter logic).
+    // currently unused; kept for parity with desktop schema.
     for (const d of docs) {
         d.isZen = zenIds.has(d.fileId.replace(/^oz\./, ''));
     }
@@ -305,7 +307,8 @@ function buildBigramIndex(zhDocs) {
         // Per-doc set: dedupe bigrams within a single doc.
         const seen = new Set();
 
-        // Walk adjacent code-unit pairs. Both must be BMP CJK ideographs.
+        // Walk adjacent code-unit pairs. Both code units must satisfy
+        // `isCjk()` (BMP CJK + Ext A).
         const len = text.length;
         let prevCu = text.charCodeAt(0);
         let prevIsCjk = isCjk(prevCu);
@@ -313,8 +316,8 @@ function buildBigramIndex(zhDocs) {
             const cu = text.charCodeAt(i);
             const cuIsCjk = isCjk(cu);
             if (prevIsCjk && cuIsCjk) {
-                // Build the 2-char bigram. String.fromCharCode is fine here:
-                // both code units are BMP (4E00..9FFF range).
+                // Build the 2-char bigram. `substring` reuses interned 2-char
+                // slices on V8.
                 const bigram = text.substring(i - 1, i + 1);
                 if (!seen.has(bigram)) {
                     seen.add(bigram);
@@ -326,7 +329,6 @@ function buildBigramIndex(zhDocs) {
                     arr.push(doc.docId);
                 }
             }
-            prevCu = cu;
             prevIsCjk = cuIsCjk;
         }
 

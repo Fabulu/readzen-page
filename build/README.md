@@ -80,7 +80,7 @@ npm run build:search
 - `bigram/manifest.json` — shard hash table + corpus metadata
 - `bigram/docs.txt` — line N is URL for docId N
 - `bigram/shards/XX/YY-<hash6>.bin` — 4096 hashed shards (FNV-1a32 mod 4096)
-- `text/{XX}.bin` — 256 NDJSON shards of normalized per-doc text (verification + KWIC)
+- `text/{XX}.bin` — 256 NDJSON shards of normalized per-doc text (verification step in `lib/bigram-search.js`; KWIC re-fetches TEI separately)
 - `english.jsonl` — one record per English-side file (~20 records, ~3.5 MB)
 
 ### How it works at runtime
@@ -106,7 +106,7 @@ CJK queries route through the bigram index; Latin queries scan
 
 - New texts added to corpus
 - Translations updated (affects `translated` filter)
-- Build script changes (e.g. extractText bug fixes affect indexed content)
+- Build script changes (e.g. `extractText` bug fixes, `cjk-normalize.js` strip-set additions, `bigram-codec.js` wire format) — any change that alters on-disk format requires a rebuild.
 
 ### Configuration
 

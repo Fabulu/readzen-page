@@ -11,6 +11,20 @@
 //
 // Usage: node build/build-english-jsonl.js
 // No new dependencies. ESM module. Node-only.
+//
+// WARN if output > 5 MB (current ~3.5 MB).
+//
+// === Environment variables ===
+//   CBETA_TRANSLATED_DIR    CBETA translation XML root
+//                           (default: C:/Programmieren/CbetaZenTranslations/xml-p5t)
+//   OPENZEN_TRANSLATED_DIR  OpenZen translation XML root
+//                           (default: C:/Programmieren/OpenZenTranslations/xml-open-t)
+//   COMMUNITY_DIR           Per-translator community translations root
+//                           (default: C:/Programmieren/CbetaZenTranslations/community/translations)
+//   CBETA_TITLES            CBETA titles JSONL
+//                           (default: C:/Programmieren/CbetaZenTranslations/titles.jsonl)
+//   OPENZEN_TITLES          OpenZen titles JSONL
+//                           (default: C:/Programmieren/OpenZenTranslations/titles.jsonl)
 
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, statSync } from 'fs';
 import { join, relative, basename, dirname } from 'path';
@@ -130,7 +144,7 @@ function main() {
         if (rec) records.push(rec);
     }
 
-    // --- OpenZen translations: xml-open-t/<rel>.xml (currently 0 files) ---
+    // --- OpenZen translations: xml-open-t/<rel>.xml (may be empty pre-launch) ---
     const openzenFiles = findXmlFiles(OPENZEN_TRANSLATED_DIR);
     console.log(`  OpenZen translations: ${openzenFiles.length} files`);
     for (const absPath of openzenFiles) {
