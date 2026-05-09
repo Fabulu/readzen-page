@@ -180,9 +180,11 @@ test('federatedSearch: CJK query routes to bigram backend, NOT english.jsonl', a
     for (const [b, list] of textShards.entries()) ndjsonShards.set(b, buildTextShardNdjson(list));
 
     // Title data so the routing path can resolve titles.
+    // Real titles.jsonl records do NOT carry `translated`/`zen` flags;
+    // those facts live in the translatedIds/zenIds Sets passed alongside.
     const titleData = [
-        { fileId: 'T48n2005', zh: '無門關', en: 'Gateless Gate', path: 'T48n2005.xml', translated: true, zen: true, corpus: 'cbeta' },
-        { fileId: 'oz.wm32.case01', zh: '無門關 case 1', en: 'Wumenguan Case 1', path: 'oz/wm32-case01.xml', translated: false, zen: true, corpus: 'openzen' },
+        { fileId: 'T48n2005', zh: '無門關', en: 'Gateless Gate', path: 'T48n2005.xml', corpus: 'cbeta' },
+        { fileId: 'oz.wm32.case01', zh: '無門關 case 1', en: 'Wumenguan Case 1', path: 'oz/wm32-case01.xml', corpus: 'openzen' },
     ];
 
     const englishJsonl = JSON.stringify({ fileId: 'unrelated', titleEn: 'Bodhidharma', text: 'bodhidharma was a teacher' });
@@ -222,8 +224,8 @@ test('federatedSearch: Latin query routes to english.jsonl, NOT bigram backend',
     ].join('\n');
 
     const titleData = [
-        { fileId: 'T48n2005', zh: '無門關', en: 'Gateless Gate', path: 'T48n2005.xml', translated: true },
-        { fileId: 'oz.bo01', zh: '達摩', en: 'Bodhidharma intro', path: 'oz/bo01.xml', translated: true },
+        { fileId: 'T48n2005', zh: '無門關', en: 'Gateless Gate', path: 'T48n2005.xml' },
+        { fileId: 'oz.bo01', zh: '達摩', en: 'Bodhidharma intro', path: 'oz/bo01.xml' },
     ];
 
     const fetchMock = installFetchMock({ englishJsonl });
@@ -278,27 +280,131 @@ test('federatedSearch: whitespace-only query is treated as empty', async () => {
     }
 });
 
-test('federatedSearch: latin query applies translated="false" filter', async () => {
+test('federatedSearch: latin query applies translated="false" filter via translatedIds Set', async () => {
     const { federatedSearch } = await freshSearchModule();
     const englishJsonl = [
         JSON.stringify({ fileId: 'A', titleEn: 'A', text: 'foo' }),
         JSON.stringify({ fileId: 'B', titleEn: 'B', text: 'foo' }),
     ].join('\n');
+    // Real-shape fixtures: NO synthetic translated/zen fields.
     const titleData = [
-        { fileId: 'A', en: 'A', translated: true },
-        { fileId: 'B', en: 'B', translated: false },
+        { fileId: 'A', en: 'A' },
+        { fileId: 'B', en: 'B' },
     ];
+    const translatedIds = new Set(['A']); // only A is translated
     const fetchMock = installFetchMock({ englishJsonl });
     try {
         const { fulltext } = await federatedSearch('foo', {
             titles: titleData,
             filters: { translated: 'false' },
+            translatedIds,
         });
         const results = await fulltext;
         assert.equal(results.length, 1, 'only B should pass translated=false filter');
         assert.equal(results[0].meta.file_id, 'B');
     } finally {
         fetchMock.restore();
+    }
+});
+
+test('federatedSearch: stripped-shape titles + active filter requires translatedIds Set', async () => {
+    // Regression: real titles.jsonl has no `translated` field. Without the
+    // Set, `translated:true` filter must return 0. With the Set, it returns 1.
+    const { federatedSearch } = await freshSearchModule();
+    const englishJsonl = JSON.stringify({ fileId: 'X', titleEn: 'X', text: 'foo' });
+    const titleData = [{ fileId: 'X', en: 'X' }]; // stripped: no `translated`
+
+    let mock = installFetchMock({ englishJsonl });
+    try {
+        const { fulltext } = await federatedSearch('foo', {
+            titles: titleData,
+            filters: { translated: 'true' },
+            // No translatedIds Set: nothing is translated → 0 results.
+        });
+        const results = await fulltext;
+        assert.equal(results.length, 0,
+            'stripped-shape titles + translated=true filter without Set must return 0');
+    } finally {
+        mock.restore();
+    }
+
+    mock = installFetchMock({ englishJsonl });
+    try {
+        const { fulltext } = await federatedSearch('foo', {
+            titles: titleData,
+            filters: { translated: 'true' },
+            translatedIds: new Set(['X']),
+        });
+        const results = await fulltext;
+        assert.equal(results.length, 1,
+            'with translatedIds Set, X passes translated=true filter');
+        assert.equal(results[0].meta.file_id, 'X');
+    } finally {
+        mock.restore();
+    }
+});
+
+test('federatedSearch: B10 — same fileId + different translator → distinct rows', async () => {
+    // Two english.jsonl records sharing fileId but with different translator
+    // values must surface as TWO results with distinct meta, not be merged.
+    const { federatedSearch } = await freshSearchModule();
+    const englishJsonl = [
+        JSON.stringify({ fileId: 'T48n2005', titleEn: 'Gateless Gate', text: 'koan' }),
+        JSON.stringify({ fileId: 'T48n2005', translator: 'Alice', titleEn: 'Gateless Gate (Alice)', text: 'koan' }),
+        JSON.stringify({ fileId: 'T48n2005', translator: 'Bob', titleEn: 'Gateless Gate (Bob)', text: 'koan' }),
+    ].join('\n');
+    const titleData = [{ fileId: 'T48n2005', en: 'Gateless Gate' }];
+    const fetchMock = installFetchMock({ englishJsonl });
+    try {
+        const { fulltext } = await federatedSearch('koan', { titles: titleData });
+        const results = await fulltext;
+        assert.equal(results.length, 3, 'expected 3 distinct rows (canonical + Alice + Bob)');
+        const sides = results.map(r => r.meta.side).sort();
+        assert.deepEqual(sides, ['community', 'community', 'en']);
+        const translators = results.map(r => r.meta.translator).filter(Boolean).sort();
+        assert.deepEqual(translators, ['Alice', 'Bob']);
+        // URLs must carry the side/translator query params so navigation
+        // lands on the right variant.
+        const aliceRow = results.find(r => r.meta.translator === 'Alice');
+        assert.ok(aliceRow.url.includes('side=community'));
+        assert.ok(aliceRow.url.includes('translator=Alice'));
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('federatedSearch: B6 fail-closed — active filter + missing title → exclude', async () => {
+    // A docId whose fileId is not in titleData + an active filter must be
+    // excluded (fail-closed). Without an active filter, it passes through.
+    const { federatedSearch } = await freshSearchModule();
+    const englishJsonl = [
+        JSON.stringify({ fileId: 'mystery', titleEn: 'Mystery', text: 'foo' }),
+    ].join('\n');
+    const titleData = []; // mystery has no title record
+
+    let mock = installFetchMock({ englishJsonl });
+    try {
+        // Active filter + no title => fail closed.
+        const { fulltext } = await federatedSearch('foo', {
+            titles: titleData,
+            filters: { translated: 'true' },
+            translatedIds: new Set(['mystery']),
+        });
+        const results = await fulltext;
+        assert.equal(results.length, 0,
+            'fail-closed: missing title + active filter must exclude row');
+    } finally {
+        mock.restore();
+    }
+
+    mock = installFetchMock({ englishJsonl });
+    try {
+        // No active filter => row passes through.
+        const { fulltext } = await federatedSearch('foo', { titles: titleData });
+        const results = await fulltext;
+        assert.equal(results.length, 1, 'no filter → mystery row passes through');
+    } finally {
+        mock.restore();
     }
 });
 

@@ -6,7 +6,7 @@
 import { escapeHtml } from '../lib/format.js';
 import { DATA_REPO_BASE, OPEN_DATA_REPO_BASE, loadTranslatedFileIds } from '../lib/github.js';
 import { inferCorpusForRelPath } from '../lib/corpus.js';
-import { loadAllTitlesAsArray } from '../lib/titles.js';
+import { loadAllTitlesAsArray, getWorkId } from '../lib/titles.js';
 import { federatedSearch, loadAndSearchXml } from '../lib/search.js';
 import { loadMasters } from './master.js';
 
@@ -132,11 +132,6 @@ export async function render(route, mount, shell) {
         return 'all';
     }
 
-    function getWorkId(t) {
-        const path = (t.path || t.Path || '').toString();
-        return (t.fileId || t.fileID || t.workId || t.WorkId || deriveWorkIdFromPath(path));
-    }
-
     function isTranslated(t) {
         return translatedIds.has(getWorkId(t));
     }
@@ -172,7 +167,9 @@ export async function render(route, mount, shell) {
                 zen: isZenOnly(),
                 corpus: corpusFilter
             },
-            masterFilter: masterFilter
+            masterFilter: masterFilter,
+            translatedIds: translatedIds,
+            zenIds: zenIds
         });
 
         renderFederatedResults(trimmed, results, page);
@@ -388,24 +385,34 @@ export async function render(route, mount, shell) {
                 return;
             }
 
-            // Group results by file_id (dedup multiple hits in same book)
+            // Group results by (file_id, side, translator). Canonical and
+            // community translations of the same source must remain
+            // distinguishable so the user sees `[CN]`, `[EN]`, and
+            // `[EN by Alice]` as separate rows rather than a single
+            // editorially-fraudulent merger.
             var groups = new Map();
             for (var k = 0; k < ftResults.length; k++) {
                 var r = ftResults[k];
                 var meta = r.meta || {};
                 var fid = meta.file_id || '';
+                var sd  = meta.side || '';
+                var tr  = meta.translator || '';
                 if (!fid) continue;
-                if (!groups.has(fid)) {
-                    groups.set(fid, {
+                var key = fid + '|' + sd + '|' + tr;
+                if (!groups.has(key)) {
+                    groups.set(key, {
                         fileId: fid,
+                        side: sd,
+                        translator: tr,
+                        url: r.url || '',
                         title: meta.title || fid,
                         titleEn: meta.title_en || '',
                         excerpt: r.excerpt || '',
                         hitCount: r.hitCount || 0
                     });
                 } else {
-                    // Accumulate hit counts from duplicate entries (rare with bigram backend)
-                    var existing = groups.get(fid);
+                    // Accumulate hit counts from duplicate entries.
+                    var existing = groups.get(key);
                     existing.hitCount += r.hitCount || 0;
                 }
             }
@@ -446,13 +453,36 @@ export async function render(route, mount, shell) {
 
     /** Build HTML for a single expandable search group (book-level). */
     function buildSearchGroup(group, query) {
-        var fHref = '#/' + group.fileId + (query ? '?q=' + encodeURIComponent(query) : '');
+        // Preserve side+translator when navigating into the reader so the
+        // "Open text" link lands on the correct translation variant.
+        var qsep = query ? ('?q=' + encodeURIComponent(query)) : '';
+        var sideQs = '';
+        if (group.side === 'community' && group.translator) {
+            sideQs = (qsep ? '&' : '?') + 'side=community&translator=' + encodeURIComponent(group.translator);
+        } else if (group.side === 'en') {
+            sideQs = (qsep ? '&' : '?') + 'side=en';
+        }
+        var fHref = '#/' + group.fileId + qsep + sideQs;
         var hits = group.hitCount || 0;
         var countLabel = hits > 0 ? hits + ' match' + (hits === 1 ? '' : 'es') : '';
         var excerptHtml = group.excerpt ? sanitizeExcerpt(group.excerpt) : '';
-        return '<details class="search-group" data-file-id="' + escapeHtml(group.fileId) + '">' +
+        // Side badge: [CN] for source, [EN] for canonical, [EN by X] for community.
+        var badgeText = '';
+        if (group.side === 'community' && group.translator) {
+            badgeText = 'EN by ' + group.translator;
+        } else if (group.side === 'en') {
+            badgeText = 'EN';
+        } else {
+            badgeText = 'CN';
+        }
+        var sideBadge = '<span class="search-row-badge search-row-badge--side">' +
+            escapeHtml(badgeText) + '</span>';
+        return '<details class="search-group" data-file-id="' + escapeHtml(group.fileId) +
+            '" data-side="' + escapeHtml(group.side || '') +
+            '" data-translator="' + escapeHtml(group.translator || '') + '">' +
             '<summary>' +
                 '<span class="search-row-id">' + escapeHtml(group.fileId) + '</span>' +
+                sideBadge +
                 '<span class="search-group-title">' +
                     '<span class="search-group-zh">' + escapeHtml(group.title) + '</span>' +
                     (group.titleEn ? '<span class="search-group-en">' + escapeHtml(group.titleEn) + '</span>' : '') +
@@ -720,14 +750,3 @@ function sanitizeExcerpt(html) {
     return (m ? m[0] : safe.slice(0, MAX)) + '…';
 }
 
-/** Best-effort workId extraction from a relative path. */
-function deriveWorkIdFromPath(path) {
-    if (!path) return '';
-    var normalized = path.replace(/\\/g, '/');
-    var parts = normalized.split('/').filter(Boolean);
-    if (inferCorpusForRelPath(normalized) === 'openzen' && parts.length >= 2) {
-        return parts[0] + '.' + parts[1];
-    }
-    var file = parts.pop() || '';
-    return file.replace(/\.xml$/i, '');
-}
