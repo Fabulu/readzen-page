@@ -731,16 +731,37 @@ code, .mono { font-family: var(--mono); }
 .search-group > summary::-webkit-details-marker { display: none; }
 .search-group > summary::before {
     content: "\25B8";
-    font-size: 0.7rem;
-    color: var(--muted);
-    transition: transform 200ms ease;
+    font-size: 0.95rem;
+    color: var(--accent);
+    opacity: 0.55;
+    transition: transform 200ms ease, opacity 140ms ease;
     align-self: center;
     grid-column: 1;
-    justify-self: end;
-    margin-right: 0.5rem;
+    justify-self: start;
+    margin-left: 0.1rem;
+    margin-right: 0.4rem;
 }
+.search-group > summary:hover::before { opacity: 1; }
 .search-group[open] > summary::before {
     transform: rotate(90deg);
+    opacity: 1;
+}
+
+/* Quiet link in the meta column. Not a button — the caret is the primary
+ * affordance for expanding to KWIC; "Open" is the secondary navigation. */
+.search-group-open {
+    color: var(--text-soft);
+    font-size: 0.9rem;
+    text-decoration: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: color 140ms ease, background 140ms ease;
+    white-space: nowrap;
+}
+.search-group-open:hover,
+.search-group-open:focus-visible {
+    color: var(--accent);
+    background: rgba(212, 171, 88, 0.08);
 }
 .search-group > summary:hover {
     background: rgba(255, 255, 255, 0.04);
@@ -1108,6 +1129,53 @@ code, .mono { font-family: var(--mono); }
     animation: pulse 1s infinite;
     margin-left: 0.5rem;
     vertical-align: middle;
+}
+
+.ft-loading-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(212, 171, 88, 0.25);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-left: 0.6rem;
+    vertical-align: middle;
+}
+
+.ft-progress {
+    padding: 1rem 1.35rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.ft-progress-bar {
+    height: 4px;
+    width: 100%;
+    background: rgba(212, 171, 88, 0.12);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+}
+
+.ft-progress-fill {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    background-size: 50% 100%;
+    background-repeat: no-repeat;
+    animation: ft-progress-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes ft-progress-sweep {
+    0%   { background-position: -50% 0; }
+    100% { background-position: 150% 0; }
+}
+
+.ft-progress-text {
+    margin: 0;
+    font-size: 0.88rem;
 }
 
 @keyframes pulse {

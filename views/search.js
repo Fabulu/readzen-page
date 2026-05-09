@@ -350,9 +350,12 @@ export async function render(route, mount, shell) {
 
         // Section 3: Full-text (async, rendered when ready)
         html += '<div class="search-section-label" id="ft-section-label">';
-        html += 'Full-Text Matches <span class="ft-loading-dot" id="ft-loading"></span>';
+        html += 'Full-Text Matches <span class="ft-loading-spinner" id="ft-loading" aria-label="Searching"></span>';
         html += '</div>';
-        html += '<div id="ft-results"><p class="muted" style="padding:0.5rem 1rem;">Searching full corpus\u2026</p></div>';
+        html += '<div id="ft-results"><div class="ft-progress" role="status">';
+        html += '<div class="ft-progress-bar"><div class="ft-progress-fill"></div></div>';
+        html += '<p class="ft-progress-text muted">Searching full corpus\u2026</p>';
+        html += '</div></div>';
 
         // Update header
         titleEl.textContent = 'Results for \u201c' + query + '\u201d';
@@ -378,8 +381,8 @@ export async function render(route, mount, shell) {
             if (ftResults.length === 0) {
                 ftContainer.innerHTML = '<p class="muted" style="padding:0.5rem 1rem;">No full-text matches.</p>';
                 if (ftLabel) {
-                    var dot = ftLabel.querySelector('.ft-loading-dot');
-                    if (dot) dot.remove();
+                    var spinner = ftLabel.querySelector('#ft-loading');
+                    if (spinner) spinner.remove();
                     ftLabel.textContent = 'Full-Text Matches (0)';
                 }
                 return;
@@ -442,8 +445,8 @@ export async function render(route, mount, shell) {
             }
             var ftLabel = mount.querySelector('#ft-section-label');
             if (ftLabel) {
-                var dot = ftLabel.querySelector('.ft-loading-dot');
-                if (dot) dot.remove();
+                var spinner = ftLabel.querySelector('#ft-loading');
+                if (spinner) spinner.remove();
             }
         });
 
@@ -490,7 +493,7 @@ export async function render(route, mount, shell) {
                 '</span>' +
                 '<span class="search-group-meta">' +
                     (countLabel ? '<span class="search-group-count">' + escapeHtml(countLabel) + '</span>' : '') +
-                    '<a class="btn btn--small" href="' + escapeHtml(fHref) + '" onclick="event.stopPropagation();">Open text</a>' +
+                    '<a class="search-group-open" href="' + escapeHtml(fHref) + '" onclick="event.stopPropagation();" title="Open the full text">Open →</a>' +
                 '</span>' +
             '</summary>' +
             '<div class="search-group-body" data-loaded="false">' +
