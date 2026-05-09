@@ -28,7 +28,7 @@
 
 import {
     readFileSync, readdirSync, existsSync,
-    mkdirSync, writeFileSync, createWriteStream,
+    mkdirSync, writeFileSync, createWriteStream, rmSync,
 } from 'fs';
 import { join, relative, basename, dirname } from 'path';
 import { createHash } from 'crypto';
@@ -382,6 +382,13 @@ function buildBigramIndex(zhDocs) {
  * manifest entries (a string: 6-hex content hash, or "0" for empty).
  */
 function shardAndWrite(index, docCount) {
+    // Pre-clear the shards directory so a rebuild with changed content (and
+    // therefore changed content-hash filenames) doesn't leave stale orphan
+    // files alongside the new ones — Cloudflare would happily upload both.
+    if (existsSync(SHARDS_DIR)) {
+        rmSync(SHARDS_DIR, { recursive: true, force: true });
+    }
+
     // Group bigrams by bucket id.
     const buckets = new Array(SHARD_COUNT);
     for (let b = 0; b < SHARD_COUNT; b++) buckets[b] = null;
