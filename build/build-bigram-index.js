@@ -196,7 +196,12 @@ function collectDocuments(cbetaTitles, openzenTitles, zenIds) {
     // 2) OpenZen source corpus (zh)
     console.log(`\nOpenZen source: ${OPENZEN_XML_DIR}`);
     const ozCount = walkAndIngest(docs, OPENZEN_XML_DIR, (absPath, relPath) => {
-        const fileId = 'oz.' + basename(absPath, '.xml');
+        // Canonical OpenZen fileId is `<topDir>.<basename>` (e.g.
+        // `ws.gateless-barrier`, `pd.wumenguan-1632`) — matches
+        // titles.jsonl `fileId` field and ZenUriParser convention.
+        const relParts = relPath.split('/').filter(Boolean);
+        const topDir = relParts[0];
+        const fileId = topDir + '.' + basename(absPath, '.xml');
         const titleEntry = openzenTitles.get(relPath) || {};
         return {
             url: '/' + fileId,
@@ -227,7 +232,10 @@ function collectDocuments(cbetaTitles, openzenTitles, zenIds) {
     // 4) OpenZen translations (en)
     console.log(`\nOpenZen translations: ${OPENZEN_TRANSLATED_DIR}`);
     const ozTransCount = walkAndIngest(docs, OPENZEN_TRANSLATED_DIR, (absPath, relPath) => {
-        const fileId = 'oz.' + basename(absPath, '.xml');
+        // Canonical OpenZen fileId — see step 2 comment.
+        const relParts = relPath.split('/').filter(Boolean);
+        const topDir = relParts[0];
+        const fileId = topDir + '.' + basename(absPath, '.xml');
         const titleEntry = openzenTitles.get(relPath) || {};
         return {
             url: '/' + fileId + '?side=en',
@@ -280,8 +288,13 @@ function collectDocuments(cbetaTitles, openzenTitles, zenIds) {
 
     // Annotate zen flag for completeness (consumed by future filter logic).
     // currently unused; kept for parity with desktop schema.
+    // OpenZen fileIds use `<publisher>.<slug>` shape; strip the publisher
+    // prefix for zen-id lookup since zen_texts.json keys by slug only.
     for (const d of docs) {
-        d.isZen = zenIds.has(d.fileId.replace(/^oz\./, ''));
+        const slug = d.fileId.includes('.')
+            ? d.fileId.substring(d.fileId.indexOf('.') + 1)
+            : d.fileId;
+        d.isZen = zenIds.has(slug) || zenIds.has(d.fileId);
     }
 
     return docs;
@@ -538,8 +551,13 @@ async function main() {
     gcPause('collectDocuments');
 
     // ---- 4. Build bigram index ----
+    // Pass ALL docs (not just zh): the inner CJK-pair gate
+    // (`prevIsCjk && cuIsCjk`) ensures English-side docs contribute ~zero
+    // bigrams, but stray CJK in English glosses (e.g. inline names) is
+    // correctly indexed. This unifies the docId space so translations and
+    // community docs participate in CJK fulltext queries.
     console.log('\n--- buildBigramIndex ---');
-    const index = buildBigramIndex(zhDocs);
+    const index = buildBigramIndex(docs);
     const bigramCount = index.size;
     let totalPostings = 0;
     for (const arr of index.values()) totalPostings += arr.length;

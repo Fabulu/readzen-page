@@ -149,9 +149,14 @@ function main() {
     console.log(`  OpenZen translations: ${openzenFiles.length} files`);
     for (const absPath of openzenFiles) {
         const relPath = relative(OPENZEN_TRANSLATED_DIR, absPath).replace(/\\/g, '/');
-        // OpenZen titles file has fileId baked in; prefer that, else derive.
+        // OpenZen titles file has fileId baked in; prefer that, else derive
+        // canonical `<topDir>.<basename>` (e.g. `ws.gateless-barrier`).
         const titleEntry = openzenTitles.get(relPath);
-        const fileId = (titleEntry && titleEntry.fileId) || ('oz.' + basename(absPath, '.xml'));
+        const relParts = relPath.split('/').filter(Boolean);
+        const derivedFileId = relParts.length >= 2
+            ? relParts[0] + '.' + basename(absPath, '.xml')
+            : basename(absPath, '.xml');
+        const fileId = (titleEntry && titleEntry.fileId) || derivedFileId;
         const titleEn = pickTitleEn(titleEntry);
         const rec = buildRecord(absPath, { fileId, translator: undefined, titleEn });
         if (rec) records.push(rec);
