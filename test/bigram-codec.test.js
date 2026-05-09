@@ -257,70 +257,33 @@ test('encodePostingList: full posting [0..65535] round-trips (worst case)', () =
     assert.equal(dec[65535], 65535);
 });
 
-// --- Invalid / truncated bytes (BUG: silent corruption, not a clean throw) ---
-//
-// FINDING: the decoder reads `bytes[p++]` past the buffer end (returning
-// undefined, treated as 0 by the bitwise ops on the next line) and silently
-// emits zeros instead of throwing. See TEST_REPORT.md.
-//
-// These tests document the CURRENT (buggy) behavior so the test suite stays
-// green; once the decoder grows a bounds check the asserts can flip to
-// `assert.throws(...)`.
+// --- Invalid / truncated bytes (decoder throws cleanly after bounds-check fix) ---
 
-test('decodePostingList: BUG truncated varint silently decodes to zero (no throw)', () => {
-    // 0x80 + 0x80 (two continuation bytes, no terminator). p[2] is undefined,
-    // (undefined & 0x7f) === 0, the `do/while` exits → delta resolves to 0.
-    const truncated = new Uint8Array([0x80, 0x80]);
-    const dec = decodePostingList(truncated, 1);
-    // Currently: returns [0]. A future bounds-checked decoder should throw.
-    assert.equal(dec.length, 1);
-    assert.equal(dec[0], 0, 'documents current silent-corruption behavior');
+test('decodePostingList: truncated varint throws', () => {
+    const truncated = new Uint8Array([0x80, 0x80]); // continuation bytes, no terminator
+    assert.throws(() => decodePostingList(truncated, 1), /truncated/i);
 });
 
-test('decodePostingList: BUG count > available varints decodes garbage (no throw)', () => {
-    // Buffer says only 1 posting (one byte: delta=5). Caller asks for 2 — the
-    // decoder should reject. Currently it reads past the end, gets undefined
-    // bytes (treated as zero), and emits the previous value again.
-    const oneOnly = new Uint8Array([5]);
-    const dec = decodePostingList(oneOnly, 2);
-    assert.equal(dec.length, 2);
-    assert.equal(dec[0], 5);
-    assert.equal(dec[1], 5, 'second varint reads past end → delta=0 → prev unchanged');
+test('decodePostingList: count exceeds available varints throws', () => {
+    const oneOnly = new Uint8Array([5]); // one varint, asking for two
+    assert.throws(() => decodePostingList(oneOnly, 2), /truncated/i);
 });
 
-test('readShardHeader: rejects truncated dictionary (per-term read past buffer end is silent)', () => {
-    // Build a valid empty shard, append "termCount=1" hint by hand, but no
-    // actual term data. readShardHeader should ideally throw; currently it
-    // reads undefined bytes and produces a Map with garbage term data.
+test('readShardHeader: truncated dictionary throws', () => {
     const shard = new Uint8Array(16);
     shard[0] = 0x49; shard[1] = 0x49; shard[2] = 0x44; shard[3] = 0x58; // IIDX
     shard[4] = 2; // version
-    shard[8] = 1; // termCount = 1
-    // docCount = 0 (already zero)
-    // No dictionary entry follows — buffer ends here.
-    // We assert the current behavior: it returns *something* without an error.
-    // If a future fix adds bounds checking, flip to assert.throws.
-    let didThrow = false;
-    try { readShardHeader(shard); } catch { didThrow = true; }
-    // Document current behavior either way:
-    assert.ok(true, `readShardHeader truncated dictionary: ${didThrow ? 'throws' : 'silently returns'}`);
+    shard[8] = 1; // termCount = 1, but no dictionary entry follows
+    assert.throws(() => readShardHeader(shard), /truncated/i);
 });
 
-test('readShardHeader: too-long term (termLen > buffer remainder) does NOT throw — silent corruption', () => {
-    // Magic + version + termCount=1 + docCount=0, then termLen=999 with no follow-on bytes.
+test('readShardHeader: too-long termLen (exceeds buffer remainder) throws', () => {
     const shard = new Uint8Array(20);
     shard[0] = 0x49; shard[1] = 0x49; shard[2] = 0x44; shard[3] = 0x58;
     shard[4] = 2;
     shard[8] = 1;
-    // bytes[16..17] = termLen u16 LE = 999 (0x03E7)
-    shard[16] = 0xE7; shard[17] = 0x03;
-    // No more bytes.
-    // Document the current behavior: TextDecoder may produce a (possibly empty)
-    // string; the function returns rather than throwing.
-    let result = null;
-    try { result = readShardHeader(shard); }
-    catch (e) { result = { error: e.message }; }
-    assert.ok(result, 'readShardHeader returned (current silent behavior is documented)');
+    shard[16] = 0xE7; shard[17] = 0x03; // termLen = 999, no follow-on bytes
+    assert.throws(() => readShardHeader(shard), /truncated/i);
 });
 
 test('encodeShard: term count 1000 (stress) round-trips through readShardHeader', () => {
