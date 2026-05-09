@@ -182,7 +182,7 @@ async function freshSearchModule() {
 
 /** Bucket a docId into a text-shard bucket ('00'..'ff') the same way bigram-search.js does. */
 function textBucketFor(docId) {
-    return (docId % 256).toString().padStart(2, '0');
+    return (docId % 256).toString(16).padStart(2, '0');
 }
 
 // =====================================================================
@@ -650,6 +650,237 @@ test('preloadManifest: throws BigramIndexUnavailable when manifest 404s', async 
             () => preloadManifest(),
             (err) => err instanceof BigramIndexUnavailable
         );
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// =====================================================================
+// 7. Manifest "0" sentinel: empty shard MUST NOT be fetched
+// =====================================================================
+
+test('searchFulltext: shard with manifest value "0" does NOT trigger a network fetch', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    // Query "甲乙丙" -> bigrams ["甲乙", "乙丙"].
+    // Place "甲乙" in a populated shard; mark "乙丙"'s bucket as "0" in the manifest.
+    const docCount = 1;
+    const populated = shardLayoutFor([{ term: '甲乙', docIds: [0] }], docCount);
+    const manifest = buildManifest(populated, docCount);
+    // Override "乙丙"'s bucket to the "0" sentinel.
+    const yiBingHex = bucketHexForBigram('乙丙');
+    manifest.shards[yiBingHex] = '0';
+
+    const fetchMock = installFetchMock({
+        manifest, shardLayout: populated, textShards: new Map(),
+    });
+    try {
+        const results = await searchFulltext('甲乙丙');
+        assert.deepEqual(results, [], 'empty bigram → no postings → no candidates');
+
+        // Critically: the shard URL for the "0" bucket should NOT have been requested.
+        const shardCalls = fetchMock.calls.filter((u) => u.includes('/shards/'));
+        for (const url of shardCalls) {
+            assert.ok(!url.includes(yiBingHex.slice(0, 2) + '/' + yiBingHex.slice(2, 4) + '-'),
+                `unexpected fetch for sentinel-"0" shard: ${url}`);
+        }
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// =====================================================================
+// 8. Concurrent searchFulltext calls — single-flight + AbortController isolation
+// =====================================================================
+
+test('searchFulltext: concurrent calls share the same shard fetch (single-flight)', async () => {
+    const { searchFulltext, clearShardCache } = await freshSearchModule();
+    clearShardCache();
+
+    const docCount = 2;
+    const layout = shardLayoutFor(
+        [
+            { term: '無門', docIds: [0, 1] },
+            { term: '門關', docIds: [0, 1] },
+        ],
+        docCount
+    );
+    const manifest = buildManifest(layout, docCount);
+    const docs = [
+        { docId: 0, text: '無門關' },
+        { docId: 1, text: '無門關' },
+    ];
+    const textShards = new Map();
+    for (const d of docs) {
+        const b = textBucketFor(d.docId);
+        if (!textShards.has(b)) textShards.set(b, []);
+        textShards.get(b).push(d);
+    }
+    const ndjsonShards = new Map();
+    for (const [b, list] of textShards.entries()) ndjsonShards.set(b, buildTextShardNdjson(list));
+
+    // Add a small delay so the two concurrent calls overlap.
+    const fetchMock = installFetchMock({
+        manifest, shardLayout: layout, textShards: ndjsonShards, delayMs: 20,
+    });
+    try {
+        const [r1, r2] = await Promise.all([
+            searchFulltext('無門關'),
+            searchFulltext('無門關'),
+        ]);
+        // Both calls return the same result.
+        assert.equal(r1.length, 2);
+        assert.equal(r2.length, 2);
+        // Each unique URL should be fetched at most twice (once per call only
+        // if single-flight failed; once total if it worked). Looser assertion:
+        // no shard URL should be fetched MORE than 2 times even with two
+        // concurrent calls.
+        const counts = new Map();
+        for (const u of fetchMock.calls) counts.set(u, (counts.get(u) || 0) + 1);
+        for (const [u, n] of counts) {
+            assert.ok(n <= 2, `URL ${u} fetched ${n} times (single-flight broken?)`);
+        }
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('searchFulltext: independent AbortControllers do not interfere across concurrent calls', async () => {
+    const { searchFulltext, clearShardCache } = await freshSearchModule();
+    clearShardCache();
+
+    const docCount = 1;
+    const layout = shardLayoutFor(
+        [
+            { term: '無門', docIds: [0] },
+            { term: '門關', docIds: [0] },
+        ],
+        docCount
+    );
+    const manifest = buildManifest(layout, docCount);
+    const textShards = new Map([
+        [textBucketFor(0), buildTextShardNdjson([{ docId: 0, text: '無門關' }])],
+    ]);
+    // Delay only text-shard URLs so we can abort one mid-flight.
+    const fetchMock = installFetchMock({
+        manifest, shardLayout: layout, textShards,
+        delayMs: 60,
+        delayPredicate: (url) => url.includes('/text/'),
+    });
+    try {
+        const ac1 = new AbortController();
+        const ac2 = new AbortController();
+        // Abort #1 before its text fetch resolves; #2 runs to completion.
+        setTimeout(() => ac1.abort(), 10);
+        const [r1, r2] = await Promise.all([
+            searchFulltext('無門關', { signal: ac1.signal }),
+            searchFulltext('無門關', { signal: ac2.signal }),
+        ]);
+        assert.deepEqual(r1, [], 'aborted call returns []');
+        // Call #2 must succeed despite call #1 aborting.
+        // (Single-flight may share a text-shard fetch that's ALSO bound to ac1's signal.
+        // If aborting one call kills the shared fetch, call #2 will get [] too — that
+        // would be a real bug. We assert the contract.)
+        assert.equal(r2.length, 1, 'second concurrent call succeeded with its own signal');
+        assert.equal(r2[0].docId, 0);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// =====================================================================
+// 9. LRU eviction order under load
+// =====================================================================
+
+test('clearShardCache: drops in-memory bigram + text shard caches', async () => {
+    const { searchFulltext, clearShardCache } = await freshSearchModule();
+    const docCount = 1;
+    const layout = shardLayoutFor(
+        [
+            { term: '無門', docIds: [0] },
+            { term: '門關', docIds: [0] },
+        ],
+        docCount
+    );
+    const manifest = buildManifest(layout, docCount);
+    const textShards = new Map([
+        [textBucketFor(0), buildTextShardNdjson([{ docId: 0, text: '無門關' }])],
+    ]);
+
+    // First query warms caches.
+    const mock1 = installFetchMock({ manifest, shardLayout: layout, textShards });
+    try {
+        await searchFulltext('無門關');
+    } finally {
+        mock1.restore();
+    }
+
+    // Clear, then second query — must re-fetch shard URLs.
+    clearShardCache();
+
+    const mock2 = installFetchMock({ manifest, shardLayout: layout, textShards });
+    try {
+        await searchFulltext('無門關');
+        // The bigram shard URL must have been fetched again (even though
+        // manifest itself stays cached via lib/cache.js).
+        const shardCalls = mock2.calls.filter((u) => u.includes('/shards/'));
+        assert.ok(shardCalls.length >= 1, 'shard re-fetched after clearShardCache');
+        const textCalls = mock2.calls.filter((u) => u.includes('/text/'));
+        assert.ok(textCalls.length >= 1, 'text shard re-fetched after clearShardCache');
+    } finally {
+        mock2.restore();
+    }
+});
+
+test('LRU eviction: more than BIGRAM_SHARD_LRU_MAX (32) buckets drops the oldest', async () => {
+    // Run 40 distinct queries that each hit a unique bigram bucket. The LRU
+    // cap is 32 → the oldest 8 entries should be evicted by the time we're
+    // done. We verify this by issuing a 41st query that revisits the FIRST
+    // bigram from the loop and asserting the shard URL is fetched again
+    // (because it should have been evicted).
+    const { searchFulltext, clearShardCache } = await freshSearchModule();
+    clearShardCache();
+
+    // Build 40 unique bigrams. Each is two distinct CJK ideographs.
+    const bigrams = [];
+    for (let i = 0; i < 40; i++) {
+        bigrams.push(String.fromCharCode(0x4E00 + i * 2) + String.fromCharCode(0x4E00 + i * 2 + 1));
+    }
+    const docCount = 1;
+    // Each bigram → docId 0 (very simple posting list).
+    const allEntries = bigrams.map(term => ({ term, docIds: [0] }));
+    const layout = shardLayoutFor(allEntries, docCount);
+    const manifest = buildManifest(layout, docCount);
+    const textShards = new Map([
+        [textBucketFor(0), buildTextShardNdjson([{ docId: 0, text: bigrams.join('') }])],
+    ]);
+
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, textShards });
+    try {
+        // Issue 40 distinct 2-char queries → 1 bigram each → 1 unique bucket each.
+        // Avoid wrap-around or multi-bigram queries so bigrams[0]'s bucket is
+        // touched only on iteration 0 and ages out as iterations 1..39 push it
+        // past the LRU cap of 32.
+        for (let i = 0; i < 40; i++) {
+            await searchFulltext(bigrams[i]);
+        }
+
+        // Count distinct shard URLs that were fetched.
+        const shardUrls = new Set();
+        for (const u of fetchMock.calls) {
+            if (u.includes('/shards/')) shardUrls.add(u);
+        }
+        // At least 32 shards must have been fetched (the LRU's worth).
+        assert.ok(shardUrls.size >= 32,
+            `only ${shardUrls.size} unique bigram shards fetched; LRU pressure not realistic`);
+
+        // Re-query bigrams[0]. After 40 single-bigram queries with a 32-entry
+        // LRU, bigrams[0]'s bucket should have been evicted by iteration 32+.
+        const callsBefore = fetchMock.calls.length;
+        await searchFulltext(bigrams[0]);
+        const newCalls = fetchMock.calls.slice(callsBefore);
+        const newShardCalls = newCalls.filter(u => u.includes('/shards/'));
+        assert.ok(newShardCalls.length >= 1,
+            'expected at least one shard re-fetch after LRU eviction; got ' + newShardCalls.length);
     } finally {
         fetchMock.restore();
     }

@@ -117,3 +117,74 @@ test('containsCjk: empty/null/undefined return false', () => {
 test('containsCjk: punctuation alone is not CJK', () => {
     assert.equal(containsCjk('。、「」'), false);
 });
+
+// ---------- Surrogate pair / Ext-B (latent C# parity bug) ----------
+
+test('normalizeString: BMP emoji surrogate pair — high surrogate kept, low stripped (parity bug)', () => {
+    // 😀 U+1F600 = high D83D + low DE00. Per the C# parity bug preserved in JS,
+    // every code unit in 0xDB00..0xDFFF is in the strip set, so the LOW surrogate
+    // (DE00) is dropped while the high surrogate (D83D) is kept (it's < 0xDB00).
+    // This test documents the latent behavior so a future C# Ext-B fix can flip
+    // the assertion intentionally.
+    const result = normalizeString('😀');
+    assert.equal(result.length, 1, 'one orphan high surrogate remains');
+    assert.equal(result.charCodeAt(0), 0xD83D, 'high surrogate (D83D) preserved');
+});
+
+test('normalizeString: Ext-B ideograph U+20000 — high surrogate kept, low stripped (parity bug)', () => {
+    // U+20000 = high D840 + low DC00. Same parity bug: low surrogate stripped.
+    const extB = '𠀀';
+    const result = normalizeString(extB);
+    assert.equal(result.length, 1);
+    assert.equal(result.charCodeAt(0), 0xD840);
+});
+
+test('normalizeString: lone low surrogate alone is fully stripped', () => {
+    // A bare 0xDC00 (no preceding high surrogate) is in 0xDB00..0xDFFF so dropped.
+    assert.equal(normalizeString('\uDC00'), '');
+    // Mid-string lone low surrogate: surrounding chars survive.
+    assert.equal(normalizeString('a\uDC00b'), 'ab');
+});
+
+test('isCjk: lone surrogate code units return false', () => {
+    assert.equal(isCjk(0xD800), false);
+    assert.equal(isCjk(0xDC00), false);
+    assert.equal(isCjk(0xDFFF), false);
+});
+
+// ---------- Long string stress (>10K chars) ----------
+
+test('normalize: 10K-char input takes the array-buffer fast path (no concat blowup)', () => {
+    // Mix of CJK + spaces. Should be fast and produce the right length.
+    const block = '無門。關門'; // 5 chars; 1 stripped (period) → 4 net chars per block
+    const repeat = 2500;       // 12500 input chars, 10000 output chars
+    const input = block.repeat(repeat);
+    const t0 = Date.now();
+    const out = normalize(input);
+    const ms = Date.now() - t0;
+    assert.equal(out.normalized.length, 4 * repeat, `expected ${4 * repeat} got ${out.normalized.length}`);
+    assert.equal(out.rawIndexByNormalizedIndex.length, 4 * repeat);
+    assert.ok(ms < 500, `normalize took ${ms}ms (>500ms; perf regression?)`);
+});
+
+test('normalize: rawIndexByNormalizedIndex is monotonically increasing on long input', () => {
+    const input = '無門。關門'.repeat(100); // long enough to exercise array-join branch
+    const out = normalize(input);
+    const map = out.rawIndexByNormalizedIndex;
+    for (let i = 1; i < map.length; i++) {
+        assert.ok(map[i] > map[i - 1], `non-monotonic at ${i}: ${map[i - 1]} -> ${map[i]}`);
+    }
+});
+
+// ---------- Concat-vs-array threshold (length===64 boundary) ----------
+
+test('normalize: 64-char input (concat fast path) and 65-char (array-buffer path) match', () => {
+    // Build a string of exactly 64 chars and 65 chars; both must produce
+    // identical normalized output relative to the input.
+    const s64 = '甲乙'.repeat(32);   // length 64, all CJK, no strip
+    const s65 = s64 + '丙';          // length 65
+    assert.equal(s64.length, 64);
+    assert.equal(s65.length, 65);
+    assert.equal(normalizeString(s64), s64);
+    assert.equal(normalizeString(s65), s65);
+});
