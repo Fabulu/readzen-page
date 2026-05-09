@@ -30,8 +30,11 @@ function setAutoOpenEnabled(on) {
 }
 
 function getTheme() {
-    try { return localStorage.getItem(THEME_PREF_KEY) || 'dark'; }
-    catch { return 'dark'; }
+    try {
+        const stored = localStorage.getItem(THEME_PREF_KEY);
+        if (stored) return stored;
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    } catch { return 'dark'; }
 }
 
 function applyTheme(theme) {
