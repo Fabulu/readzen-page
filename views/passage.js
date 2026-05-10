@@ -1162,10 +1162,16 @@ function mountLicenseChip(host, translationWork, route) {
     const shortLabel = shortenLicense(license) || 'License';
     const author = route && route.translator ? route.translator : '';
 
+    // Defense-in-depth: only honor http(s) URLs. A community translation
+    // could ship `<licence target="javascript:…">` — drop to a span chip
+    // rather than execute on click.
+    const safeUrl = (typeof licenseUrl === 'string' && /^https?:\/\//i.test(licenseUrl))
+        ? licenseUrl : '';
+
     let chip;
-    if (licenseUrl) {
+    if (safeUrl) {
         chip = document.createElement('a');
-        chip.href = licenseUrl;
+        chip.href = safeUrl;
         chip.target = '_blank';
         chip.rel = 'noopener noreferrer';
     } else {
@@ -1191,12 +1197,14 @@ function shortenLicense(s) {
     // Already short — pass through.
     if (t.length <= 20) return t;
     const lower = t.toLowerCase();
-    // Common Creative Commons mappings.
+    // Common Creative Commons mappings. Order matters: most-specific first
+    // so e.g. "Attribution-NonCommercial-ShareAlike 4.0" matches CC-BY-NC-SA
+    // before the looser "Attribution-ShareAlike" pattern.
     const ccPatterns = [
-        { re: /attribution[\s-]+sharealike[\s-]*([0-9.]+)/i, out: (m) => `CC-BY-SA ${m[1]}` },
         { re: /attribution[\s-]+noncommercial[\s-]+sharealike[\s-]*([0-9.]+)/i, out: (m) => `CC-BY-NC-SA ${m[1]}` },
         { re: /attribution[\s-]+noncommercial[\s-]+noderivatives?[\s-]*([0-9.]+)/i, out: (m) => `CC-BY-NC-ND ${m[1]}` },
         { re: /attribution[\s-]+noncommercial[\s-]*([0-9.]+)/i, out: (m) => `CC-BY-NC ${m[1]}` },
+        { re: /attribution[\s-]+sharealike[\s-]*([0-9.]+)/i, out: (m) => `CC-BY-SA ${m[1]}` },
         { re: /attribution[\s-]+noderivatives?[\s-]*([0-9.]+)/i, out: (m) => `CC-BY-ND ${m[1]}` },
         { re: /attribution[\s-]*([0-9.]+)/i, out: (m) => `CC-BY ${m[1]}` }
     ];
@@ -1496,8 +1504,15 @@ function mountFindBar(mount, ctx) {
     prevBtn.addEventListener('click', () => jumpTo(active < 0 ? 0 : active - 1));
     closeBtn.addEventListener('click', () => close());
 
-    // Capture-phase Ctrl+F / Cmd+F.
+    // Capture-phase Ctrl+F / Cmd+F. Self-removes when the mount has been
+    // detached from the document (e.g. user routed to a different view) so
+    // we don't accumulate stale handlers and break the browser-native Find
+    // on subsequent views.
     const handler = (ev) => {
+        if (!document.body.contains(mount)) {
+            document.removeEventListener('keydown', handler, true);
+            return;
+        }
         const isFind = (ev.ctrlKey || ev.metaKey) && (ev.key === 'f' || ev.key === 'F');
         if (!isFind) return;
         ev.preventDefault();

@@ -256,11 +256,32 @@ export async function render(route, mount, shell) {
             ftLabel.innerHTML = label;
         }
 
+        // Capture the set of currently-open group keys BEFORE clobbering
+        // innerHTML — we restore them after re-render so the user's
+        // expanded groups don't flicker shut on each streaming batch.
+        var openKeys = new Set();
+        var existing = ftContainer.querySelectorAll('.search-group[open]');
+        for (var i = 0; i < existing.length; i++) {
+            var k = existing[i].getAttribute('data-group-key');
+            if (k) openKeys.add(k);
+        }
+
         var ftHtml = '';
         for (var g = 0; g < groupArr.length; g++) {
             ftHtml += buildSearchGroup(groupArr[g], query);
         }
         ftContainer.innerHTML = ftHtml;
+
+        // Re-apply open state to the same groups (matched by data-group-key,
+        // not position — streaming reorder may have shuffled the top result).
+        if (openKeys.size > 0) {
+            var groupsAfter = ftContainer.querySelectorAll('.search-group');
+            for (var j = 0; j < groupsAfter.length; j++) {
+                var gk = groupsAfter[j].getAttribute('data-group-key');
+                if (gk && openKeys.has(gk)) groupsAfter[j].setAttribute('open', '');
+            }
+        }
+
         wireGroupExpanders(ftContainer, query);
         maybeAutoExpandFirstGroup(ftContainer);
     }
@@ -268,15 +289,18 @@ export async function render(route, mount, shell) {
     /** Auto-open the first FT group on initial render so the user lands on
      *  KWICs without an extra click. Gated by `_autoExpandedThisQuery` so
      *  re-streaming during incremental updates doesn't reopen what the user
-     *  just manually closed. */
+     *  just manually closed. The flag is reset per-query in doSearch. */
     function maybeAutoExpandFirstGroup(ftContainer) {
         if (_autoExpandedThisQuery) return;
         var first = ftContainer.querySelector('.search-group');
         if (!first) return;
+        // Only set the flag once we successfully open. Otherwise an empty
+        // first batch would burn the auto-expand for the rest of the query.
+        if (first.hasAttribute('open')) {
+            _autoExpandedThisQuery = true;
+            return;
+        }
         _autoExpandedThisQuery = true;
-        // Setting `open` on a <details> fires the toggle event natively, which
-        // is exactly what wireGroupExpanders listens for (lazy KWIC fetch).
-        // Setting it via attribute matches what the user clicking would do.
         first.setAttribute('open', '');
     }
 
@@ -595,9 +619,11 @@ export async function render(route, mount, shell) {
         // empty 0-height layout artifact). Stash the bigram pre-excerpt so we
         // can render it INSIDE .search-group-body on first expand.
         var stashExcerpt = group.excerpt ? ' data-initial-excerpt="' + escapeHtml(group.excerpt) + '"' : '';
+        var groupKey = group.fileId + '|' + (group.side || '') + '|' + (group.translator || '');
         return '<details class="search-group" data-file-id="' + escapeHtml(group.fileId) +
             '" data-side="' + escapeHtml(group.side || '') +
-            '" data-translator="' + escapeHtml(group.translator || '') + '">' +
+            '" data-translator="' + escapeHtml(group.translator || '') +
+            '" data-group-key="' + escapeHtml(groupKey) + '">' +
             '<summary>' +
                 idCell +
                 '<span class="search-group-title">' +
