@@ -246,6 +246,16 @@ export async function render(route, mount, shell) {
         const titleText = sourceWork.titleZh || sourceWork.titleEn || route.workId;
         mountBookmarkButton(mount, route.workId, titleText, route);
         trackScrollProgress(mount, route.workId, titleText, route);
+
+        // In-reader Find (Ctrl+F): single-page ranged view, so allLines === sourceLines.
+        mountFindBar(mount, {
+            getPanel: () => document.querySelector('#source-body'),
+            getAllLines: () => sourceLines,
+            getPageSize: () => sourceLines.length || 1,
+            getCurrentPage: () => 1,
+            goToPage: () => {},
+            originalSearchTerm: rangeSearchTerm
+        });
     } catch (error) {
         const detail = (error && error.message) || 'Unknown error while loading preview data.';
         shell.showError('Preview failed to load', detail, buildZenUri(route));
@@ -408,6 +418,21 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
     } else if (searchTerm) {
         scrollToFirstHighlight(document.querySelector('#preview-grid'));
     }
+
+    mountFindBar(mount, {
+        getPanel: () => document.querySelector('#source-body'),
+        getAllLines: () => allSourceLines,
+        getPageSize: () => PAGE,
+        getCurrentPage: () => currentPage,
+        goToPage: (p) => {
+            if (p >= 1 && p <= totalPages && p !== currentPage) {
+                currentPage = p;
+                renderPage(currentPage);
+            }
+        },
+        showAll,
+        originalSearchTerm: searchTerm
+    });
 }
 
 /**
@@ -519,6 +544,21 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
     } else if (searchTerm2) {
         scrollToFirstHighlight(document.querySelector('#firstn-source-body'));
     }
+
+    mountFindBar(mount, {
+        getPanel: () => document.querySelector('#firstn-source-body'),
+        getAllLines: () => allLines,
+        getPageSize: () => PAGE,
+        getCurrentPage: () => currentPage,
+        goToPage: (p) => {
+            if (p >= 1 && p <= totalPages && p !== currentPage) {
+                currentPage = p;
+                renderPage(currentPage);
+            }
+        },
+        showAll,
+        originalSearchTerm: searchTerm2
+    });
 }
 
 /**
@@ -1114,6 +1154,281 @@ function buildPageButtons(current, total) {
     }
     btns.push(`<span class="page-info">${current} of ${total}</span>`);
     return btns.join('');
+}
+
+// ━━ In-reader Find (Ctrl+F) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/**
+ * Mount a per-passage Find bar (Ctrl+F / Cmd+F) onto `mount`. The bar reuses
+ * the passage's pagination so matches across pages are reachable.
+ *
+ * @param {HTMLElement} mount  Root passage container; the find bar is appended
+ *                             here and key handlers are scoped to `document`.
+ * @param {Object} ctx
+ * @param {() => HTMLElement} ctx.getPanel        Source body element (live).
+ * @param {() => Array} ctx.getAllLines           All paginated lines.
+ * @param {() => number} ctx.getPageSize          Lines per page.
+ * @param {() => number} ctx.getCurrentPage       1-based current page.
+ * @param {(p: number) => void} ctx.goToPage      Switches to page `p` and re-renders.
+ * @param {boolean} [ctx.showAll]                 True when no pagination is in effect.
+ * @param {string} [ctx.originalSearchTerm]       The ?q= term (for muted coexistence).
+ */
+function mountFindBar(mount, ctx) {
+    // Idempotent: tear down any prior bar on this mount.
+    const existing = mount.querySelector('.find-bar');
+    if (existing) existing.remove();
+    if (mount._findKeyHandler) {
+        document.removeEventListener('keydown', mount._findKeyHandler, true);
+        mount._findKeyHandler = null;
+    }
+
+    const bar = document.createElement('div');
+    bar.className = 'find-bar';
+    bar.hidden = true;
+    bar.innerHTML = `
+        <input class="find-input" type="search" placeholder="Find in passage…" aria-label="Find in passage" />
+        <span class="find-counter" aria-live="polite">0 / 0</span>
+        <button class="find-prev" type="button" title="Previous match (Shift+Enter)" aria-label="Previous match">‹</button>
+        <button class="find-next" type="button" title="Next match (Enter)" aria-label="Next match">›</button>
+        <button class="find-close" type="button" title="Close (Esc)" aria-label="Close find bar">×</button>
+    `;
+    mount.appendChild(bar);
+
+    const input = bar.querySelector('.find-input');
+    const counter = bar.querySelector('.find-counter');
+    const prevBtn = bar.querySelector('.find-prev');
+    const nextBtn = bar.querySelector('.find-next');
+    const closeBtn = bar.querySelector('.find-close');
+
+    /** Cached match list. Each match: { page, lineId, line, occurrence }. */
+    let matches = [];
+    let active = -1;
+    let currentTerm = '';
+    let lastFocusedBeforeOpen = null;
+
+    function rebuildMatches(term) {
+        matches = [];
+        active = -1;
+        currentTerm = term || '';
+        if (!currentTerm) {
+            counter.textContent = '0 / 0';
+            return;
+        }
+        const lower = currentTerm.toLowerCase();
+        const allLines = ctx.getAllLines() || [];
+        const pageSize = Math.max(1, ctx.getPageSize() | 0);
+        for (let i = 0; i < allLines.length; i += 1) {
+            const line = allLines[i];
+            if (!line || !line.text) continue;
+            const text = line.text.toLowerCase();
+            let from = 0;
+            let occ = 0;
+            while (true) {
+                const idx = text.indexOf(lower, from);
+                if (idx < 0) break;
+                matches.push({
+                    page: ctx.showAll ? 1 : (Math.floor(i / pageSize) + 1),
+                    lineId: line.id,
+                    occurrence: occ
+                });
+                occ += 1;
+                from = idx + Math.max(1, lower.length);
+            }
+        }
+        updateCounter();
+    }
+
+    function updateCounter() {
+        const n = matches.length;
+        counter.textContent = `${n === 0 ? 0 : active + 1} / ${n}`;
+        prevBtn.disabled = n === 0;
+        nextBtn.disabled = n === 0;
+    }
+
+    /** Apply find-highlight marks to the currently rendered panel. */
+    function paintMarks() {
+        const panel = ctx.getPanel();
+        if (!panel) return;
+        clearMarks(panel);
+        if (!currentTerm) return;
+        panel.classList.add('find-active');
+        const re = buildFindRegex(currentTerm);
+        if (!re) return;
+        const lineSpans = panel.querySelectorAll('.line-text');
+        lineSpans.forEach((span) => {
+            wrapMatchesInTextNodes(span, re);
+        });
+    }
+
+    function clearMarks(panel) {
+        if (!panel) return;
+        panel.classList.remove('find-active');
+        const marks = panel.querySelectorAll('mark.find-highlight, mark.find-highlight--active');
+        marks.forEach((m) => {
+            const parent = m.parentNode;
+            if (!parent) return;
+            while (m.firstChild) parent.insertBefore(m.firstChild, m);
+            parent.removeChild(m);
+            parent.normalize && parent.normalize();
+        });
+    }
+
+    /**
+     * Walk text nodes inside `el` and wrap regex matches in <mark>. We only
+     * touch text nodes so existing structure (spans, sups for apparatus, etc.)
+     * is preserved — this is the same pattern that makes highlightTextInHtml
+     * safe for our renderLinesHtml output but applied imperatively after the
+     * DOM exists.
+     */
+    function wrapMatchesInTextNodes(el, re) {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+        const targets = [];
+        let node = walker.nextNode();
+        while (node) {
+            if (node.nodeValue && re.test(node.nodeValue)) targets.push(node);
+            re.lastIndex = 0;
+            node = walker.nextNode();
+        }
+        for (const text of targets) {
+            const value = text.nodeValue;
+            const frag = document.createDocumentFragment();
+            let last = 0;
+            re.lastIndex = 0;
+            let m;
+            while ((m = re.exec(value)) !== null) {
+                if (m.index > last) frag.appendChild(document.createTextNode(value.slice(last, m.index)));
+                const mark = document.createElement('mark');
+                mark.className = 'find-highlight';
+                mark.textContent = m[0];
+                frag.appendChild(mark);
+                last = m.index + m[0].length;
+                if (m[0].length === 0) re.lastIndex += 1; // safety
+            }
+            if (last < value.length) frag.appendChild(document.createTextNode(value.slice(last)));
+            text.parentNode.replaceChild(frag, text);
+        }
+    }
+
+    function buildFindRegex(term) {
+        if (!term) return null;
+        const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(escaped, 'gi');
+    }
+
+    /** Locate the DOM mark for the active match index and pulse it. */
+    function focusActiveMatch() {
+        if (active < 0 || active >= matches.length) return;
+        const target = matches[active];
+        const panel = ctx.getPanel();
+        if (!panel) return;
+        // Find the row for the match's line.
+        const row = panel.querySelector(`.line-row[data-line-id="${CSS.escape(target.lineId)}"]`);
+        if (!row) return;
+        const marksInRow = row.querySelectorAll('mark.find-highlight, mark.find-highlight--active');
+        // Remove any prior active class on this panel.
+        panel.querySelectorAll('mark.find-highlight--active').forEach((m) => {
+            m.classList.remove('find-highlight--active');
+            m.classList.add('find-highlight');
+        });
+        const mark = marksInRow[target.occurrence] || marksInRow[0];
+        if (!mark) {
+            // Fall back to scrolling the row into view.
+            row.classList.add('scroll-target');
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => row.classList.remove('scroll-target'), 2000);
+            return;
+        }
+        mark.classList.remove('find-highlight');
+        mark.classList.add('find-highlight--active');
+        mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    /** Move active to `idx`, switching pages if necessary. */
+    function jumpTo(idx) {
+        if (!matches.length) return;
+        const wrapped = ((idx % matches.length) + matches.length) % matches.length;
+        active = wrapped;
+        const target = matches[active];
+        if (!ctx.showAll && target.page !== ctx.getCurrentPage()) {
+            ctx.goToPage(target.page);
+            // The renderPage callback re-paints the source body synchronously
+            // and we then need to re-apply marks on the new page, scheduled
+            // after the existing rAF in renderPage runs.
+            requestAnimationFrame(() => {
+                paintMarks();
+                updateCounter();
+                focusActiveMatch();
+            });
+        } else {
+            paintMarks();
+            updateCounter();
+            focusActiveMatch();
+        }
+    }
+
+    function open() {
+        bar.hidden = false;
+        lastFocusedBeforeOpen = document.activeElement;
+        // Pre-fill from existing original search term so the user can refine.
+        if (ctx.originalSearchTerm && !input.value) {
+            input.value = ctx.originalSearchTerm;
+            rebuildMatches(input.value);
+            paintMarks();
+            if (matches.length) jumpTo(0);
+        }
+        input.focus();
+        input.select();
+    }
+
+    function close() {
+        bar.hidden = true;
+        currentTerm = '';
+        matches = [];
+        active = -1;
+        const panel = ctx.getPanel();
+        if (panel) clearMarks(panel);
+        if (lastFocusedBeforeOpen && lastFocusedBeforeOpen.focus) {
+            try { lastFocusedBeforeOpen.focus(); } catch {}
+        }
+    }
+
+    // Wire input events.
+    let debounceTimer = null;
+    input.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            rebuildMatches(input.value);
+            paintMarks();
+            if (matches.length) jumpTo(0);
+            else updateCounter();
+        }, 120);
+    });
+
+    input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+            ev.preventDefault();
+            if (!matches.length) return;
+            jumpTo(active < 0 ? 0 : (ev.shiftKey ? active - 1 : active + 1));
+        } else if (ev.key === 'Escape') {
+            ev.preventDefault();
+            close();
+        }
+    });
+
+    nextBtn.addEventListener('click', () => jumpTo(active < 0 ? 0 : active + 1));
+    prevBtn.addEventListener('click', () => jumpTo(active < 0 ? 0 : active - 1));
+    closeBtn.addEventListener('click', () => close());
+
+    // Capture-phase Ctrl+F / Cmd+F.
+    const handler = (ev) => {
+        const isFind = (ev.ctrlKey || ev.metaKey) && (ev.key === 'f' || ev.key === 'F');
+        if (!isFind) return;
+        ev.preventDefault();
+        if (bar.hidden) open();
+        else { input.focus(); input.select(); }
+    };
+    document.addEventListener('keydown', handler, true);
+    mount._findKeyHandler = handler;
 }
 
 function buildPassageFooter() {
