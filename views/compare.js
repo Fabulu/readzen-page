@@ -23,6 +23,7 @@ import {
 import { buildZenUri } from '../lib/route.js';
 import * as cache from '../lib/cache.js';
 import { lookupTitle } from '../lib/titles.js';
+import { attachSelectionMirror } from '../lib/selection-sync.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -152,6 +153,19 @@ export async function render(route, mount, shell) {
         // Translation panes.
         fillTranslationPane('a', workA, sourceA, hasRange, startLine, endLine, workId, shell);
         fillTranslationPane('b', workB, sourceB, hasRange, startLine, endLine, workId, shell);
+
+        // Wave 2.1: mirror the user's drag-selection across all three columns
+        // so the parallel rows light up in both translation panes. Selecting
+        // in pane A also illuminates pane B and vice versa.
+        const origBodyEl = document.querySelector('#orig-body');
+        const bodyAEl = document.querySelector('#body-a');
+        const bodyBEl = document.querySelector('#body-b');
+        const panes = [origBodyEl, bodyAEl, bodyBEl]
+            .filter(Boolean)
+            .map(root => ({ root }));
+        if (panes.length >= 2) {
+            attachSelectionMirror(panes);
+        }
 
         shell.hideStatus();
         window.requestAnimationFrame(syncCompareRowHeights);

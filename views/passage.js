@@ -21,6 +21,7 @@ import { buildZenUri } from '../lib/route.js';
 import * as cache from '../lib/cache.js';
 import { lookupTitle } from '../lib/titles.js';
 import { attachInlineDict } from '../lib/inline-dict.js';
+import { attachSelectionMirror } from '../lib/selection-sync.js';
 import { addToList, removeFromList, isInList, setLastRead, resumeLastReadTracking } from '../lib/reading-lists.js';
 import { CITE_STYLES, buildCitation, getPreferredStyle, setPreferredStyle } from '../lib/citation.js';
 
@@ -410,12 +411,20 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
     if (!showAll) wirePageButtons(wrap.querySelector('#page-nav'));
 
     window.requestAnimationFrame(syncRowHeights);
-    attachInlineDict(document.querySelector('#source-body'));
-    insertApparatusMarkers(document.querySelector('#source-body'), sourceWork.apparatus);
-    attachApparatusPopup(document.querySelector('#source-body'), sourceWork.apparatus, sourceWork.witnessMap);
+    const sourceBody = document.querySelector('#source-body');
+    const translationBody = document.querySelector('#translation-body');
+    attachInlineDict(sourceBody);
+    insertApparatusMarkers(sourceBody, sourceWork.apparatus);
+    attachApparatusPopup(sourceBody, sourceWork.apparatus, sourceWork.witnessMap);
+
+    // Wave 2.1: dragging a selection in one pane lights up the parallel rows
+    // in the other. The mirror self-detaches when the panes leave the DOM.
+    if (sourceBody && translationBody) {
+        attachSelectionMirror([{ root: sourceBody }, { root: translationBody }]);
+    }
 
     if (scrollLineId) {
-        scrollToLineId(document.querySelector('#source-body'), scrollLineId);
+        scrollToLineId(sourceBody, scrollLineId);
     } else if (searchTerm) {
         scrollToFirstHighlight(document.querySelector('#preview-grid'));
     }
