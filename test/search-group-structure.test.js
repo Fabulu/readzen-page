@@ -72,11 +72,14 @@ test('buildSearchGroup: idCell wraps row-id + side-badge into one cell', () => {
 test('buildKwicRow: bilingual row renders two grid rows (CN label + EN label)', () => {
     // Lock in the bilingual two-row layout from commit a31fb4e. The bilingual
     // branch must emit BOTH a kwic-side-label--cn span AND a kwic-side-label--en span
-    // inside the same .kwic-row link.
+    // inside the same .kwic-row link. Multiple occurrences are allowed (one
+    // bilingual branch per state: aligned EN, missing-EN hint).
     const cnLabels = SEARCH_VIEW_SRC.match(/kwic-side-label--cn/g) || [];
     const enLabels = SEARCH_VIEW_SRC.match(/kwic-side-label--en/g) || [];
-    assert.equal(cnLabels.length, 1, 'exactly one kwic-side-label--cn template');
-    assert.equal(enLabels.length, 1, 'exactly one kwic-side-label--en template');
+    assert.ok(cnLabels.length >= 1, 'at least one kwic-side-label--cn template');
+    assert.ok(enLabels.length >= 1, 'at least one kwic-side-label--en template');
+    assert.equal(cnLabels.length, enLabels.length,
+        'CN and EN labels balanced across all bilingual branches');
 
     // The bilingual <a> wrapper should declare both .kwic-row and .kwic-row--bilingual.
     assert.ok(

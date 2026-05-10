@@ -147,9 +147,19 @@ export async function render(route, mount, shell) {
     // incremental updates must NOT reopen what the user just closed, so we
     // gate on this flag (reset at the top of every doSearch call).
     let _autoExpandedThisQuery = false;
+    // Per-search AbortController. A new doSearch aborts the previous one so
+    // its in-flight onProgress callbacks don't paint stale rows over the
+    // new query's results, and pending shard fetches stop wasting bandwidth.
+    let _activeSearchCtl = null;
 
     async function doSearch(query, page) {
         const trimmed = (query || '').trim();
+
+        // Cancel any prior search (its onProgress callbacks become no-ops
+        // and its pending fetches abort).
+        if (_activeSearchCtl) _activeSearchCtl.abort();
+        const ctl = new AbortController();
+        _activeSearchCtl = ctl;
 
         // Reset the auto-expand guard on each new search so the first FT
         // group of the new query auto-opens once.
@@ -173,24 +183,37 @@ export async function render(route, mount, shell) {
         // incrementally instead of waiting for the full search to complete.
         const streamingGroups = new Map();
         const onFulltextProgress = function (batch) {
+            // Drop callbacks from any prior search whose AbortController
+            // we already aborted. They'd paint stale rows otherwise.
+            if (ctl.signal.aborted) return;
             mergeIntoStreamingGroups(streamingGroups, batch);
             renderStreamingFulltext(streamingGroups, trimmed, /*finalized=*/ false);
         };
 
-        const results = await federatedSearch(trimmed, {
-            masters: mastersData,
-            titles: titles,
-            filters: {
-                translated: transParam,
-                zen: isZenOnly(),
-                corpus: corpusFilter
-            },
-            masterFilter: masterFilter,
-            translatedIds: translatedIds,
-            zenIds: zenIds,
-            onFulltextProgress: onFulltextProgress,
-        });
+        let results;
+        try {
+            results = await federatedSearch(trimmed, {
+                masters: mastersData,
+                titles: titles,
+                filters: {
+                    translated: transParam,
+                    zen: isZenOnly(),
+                    corpus: corpusFilter
+                },
+                masterFilter: masterFilter,
+                translatedIds: translatedIds,
+                zenIds: zenIds,
+                signal: ctl.signal,
+                onFulltextProgress: onFulltextProgress,
+            });
+        } catch (err) {
+            // Aborted by a newer search — leave the new query to render.
+            if (err && err.name === 'AbortError') return;
+            throw err;
+        }
 
+        // Final paint only if we're still the active search.
+        if (ctl.signal.aborted) return;
         renderFederatedResults(trimmed, results, page);
     }
 
@@ -759,8 +782,14 @@ export async function render(route, mount, shell) {
         }
         var href = '#/' + fileId + '/' + lbRange + '?q=' + encodeURIComponent(query);
         var enText = translatedMap ? (translatedMap.get(passage.startLb) || '') : '';
+        // Bilingual mode is "armed" for the whole group when translatedMap
+        // is non-null; if THIS passage didn't align (e.g. translator
+        // skipped that lb), still render a bilingual frame so rows line up
+        // visually, but show a per-row hint instead of silently dropping
+        // to a monolingual row that looks like an unrelated entry.
+        var bilingualMode = !!translatedMap;
 
-        if (enText) {
+        if (bilingualMode && enText) {
             // Bilingual paired row — CN top + EN bottom, both aligned by lb.
             // The EN row uses .kwic-side-en for the smaller-font, soft-tone
             // styling matching the desktop "Secondary" row treatment.
@@ -772,6 +801,21 @@ export async function render(route, mount, shell) {
                 '<span class="kwic-lb">' + escapeHtml(passage.lineId) + '</span>' +
                 '<span class="kwic-side-label kwic-side-label--en">EN</span>' +
                 '<span class="kwic-en">' + escapeHtml(enText) + '</span>' +
+            '</a>';
+        }
+
+        if (bilingualMode) {
+            // Translation file loaded but THIS passage's lb has no aligned
+            // line (translator skipped it). Keep the bilingual frame and
+            // place a quiet hint where the EN text would go.
+            return '<a class="kwic-row kwic-row--bilingual" href="' + escapeHtml(href) + '">' +
+                '<span class="kwic-side-label kwic-side-label--cn">CN</span>' +
+                '<span class="kwic-left">' + escapeHtml(passage.left) + '</span>' +
+                '<span class="kwic-match">' + escapeHtml(passage.match) + '</span>' +
+                '<span class="kwic-right">' + escapeHtml(passage.right) + '</span>' +
+                '<span class="kwic-lb">' + escapeHtml(passage.lineId) + '</span>' +
+                '<span class="kwic-side-label kwic-side-label--en">EN</span>' +
+                '<span class="kwic-en kwic-en--missing">(no aligned translation for this line)</span>' +
             '</a>';
         }
 

@@ -1436,14 +1436,15 @@ function mountFindBar(mount, ctx) {
         const target = matches[active];
         if (!ctx.showAll && target.page !== ctx.getCurrentPage()) {
             ctx.goToPage(target.page);
-            // The renderPage callback re-paints the source body synchronously
-            // and we then need to re-apply marks on the new page, scheduled
-            // after the existing rAF in renderPage runs.
-            requestAnimationFrame(() => {
+            // Double-rAF: the page's renderPage may schedule its own row-
+            // height sync inside an inner rAF. Wait two frames before we
+            // paint marks so we land on the settled DOM rather than a
+            // mid-reflow snapshot.
+            requestAnimationFrame(() => requestAnimationFrame(() => {
                 paintMarks();
                 updateCounter();
                 focusActiveMatch();
-            });
+            }));
         } else {
             paintMarks();
             updateCounter();
@@ -1467,11 +1468,16 @@ function mountFindBar(mount, ctx) {
 
     function close() {
         bar.hidden = true;
+        // Clear the input so a subsequent open() goes through the
+        // pre-fill-from-originalSearchTerm path (or starts blank), and
+        // rebuildMatches doesn't think we already searched for this term.
+        input.value = '';
         currentTerm = '';
         matches = [];
         active = -1;
         const panel = ctx.getPanel();
         if (panel) clearMarks(panel);
+        updateCounter();
         if (lastFocusedBeforeOpen && lastFocusedBeforeOpen.focus) {
             try { lastFocusedBeforeOpen.focus(); } catch {}
         }
