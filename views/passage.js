@@ -406,6 +406,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
 
     wireViewToggle(wrap);
     wireTranslatorSwitcher(wrap, route);
+    mountLicenseChip(wrap.querySelector('#translator-switcher'), translationWork, route);
     if (!showAll) wirePageButtons(wrap.querySelector('#page-nav'));
 
     window.requestAnimationFrame(syncRowHeights);
@@ -742,6 +743,10 @@ async function renderTranslation(route, _sourceLines, shell) {
             panel.hidden = false;
             meta.textContent = work.titleEn || work.titleZh || route.workId;
             body.innerHTML = renderLinesHtml(lines);
+
+            // Mount license chip into the translation panel head if data is present.
+            const head = panel.querySelector('.panel-head');
+            if (head) mountLicenseChip(head, work, route);
 
             if (shell) {
                 shell.setExtraLink('Translation XML', candidate.url);
@@ -1130,6 +1135,78 @@ function wireTranslatorSwitcher(container, route) {
         const translatorPart = user ? '/' + encodeURIComponent(user) : '';
         location.hash = base + rangePart + modePart + translatorPart;
     });
+}
+
+// ━━ License chip ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/**
+ * Mount a small `<a class="passage-license-chip">` into `host` describing the
+ * translation's license. Renders nothing when license metadata is absent —
+ * fail-open per spec, the data isn't yet on titles.jsonl for most works.
+ *
+ * @param {HTMLElement} host                The container to append the chip to.
+ * @param {Object} translationWork          parseTei result for the translation.
+ * @param {Object} route                    Active route (used for translator/author).
+ */
+function mountLicenseChip(host, translationWork, route) {
+    if (!host || !translationWork) return;
+    const license = (translationWork.license || '').trim();
+    const licenseUrl = (translationWork.licenseUrl || '').trim();
+
+    // Drop any prior chip on this host so re-renders don't stack.
+    const stale = host.querySelector('.passage-license-chip, .passage-license-chip--placeholder');
+    if (stale) stale.remove();
+
+    if (!license && !licenseUrl) return; // fail-open: no chip when no data
+
+    const shortLabel = shortenLicense(license) || 'License';
+    const author = route && route.translator ? route.translator : '';
+
+    let chip;
+    if (licenseUrl) {
+        chip = document.createElement('a');
+        chip.href = licenseUrl;
+        chip.target = '_blank';
+        chip.rel = 'noopener noreferrer';
+    } else {
+        chip = document.createElement('span');
+    }
+    chip.className = 'passage-license-chip';
+    chip.textContent = shortLabel;
+    const tooltipParts = [];
+    if (license) tooltipParts.push(license);
+    if (author) tooltipParts.push(`Translation by ${author}`);
+    if (tooltipParts.length) chip.title = tooltipParts.join(' · ');
+    host.appendChild(chip);
+}
+
+/**
+ * Compress a verbose license string ("Creative Commons Attribution-ShareAlike
+ * 4.0 International License") into a chip-friendly short form ("CC-BY-SA 4.0").
+ * Returns the input verbatim when it's already short.
+ */
+function shortenLicense(s) {
+    if (!s) return '';
+    const t = s.trim();
+    // Already short — pass through.
+    if (t.length <= 20) return t;
+    const lower = t.toLowerCase();
+    // Common Creative Commons mappings.
+    const ccPatterns = [
+        { re: /attribution[\s-]+sharealike[\s-]*([0-9.]+)/i, out: (m) => `CC-BY-SA ${m[1]}` },
+        { re: /attribution[\s-]+noncommercial[\s-]+sharealike[\s-]*([0-9.]+)/i, out: (m) => `CC-BY-NC-SA ${m[1]}` },
+        { re: /attribution[\s-]+noncommercial[\s-]+noderivatives?[\s-]*([0-9.]+)/i, out: (m) => `CC-BY-NC-ND ${m[1]}` },
+        { re: /attribution[\s-]+noncommercial[\s-]*([0-9.]+)/i, out: (m) => `CC-BY-NC ${m[1]}` },
+        { re: /attribution[\s-]+noderivatives?[\s-]*([0-9.]+)/i, out: (m) => `CC-BY-ND ${m[1]}` },
+        { re: /attribution[\s-]*([0-9.]+)/i, out: (m) => `CC-BY ${m[1]}` }
+    ];
+    for (const p of ccPatterns) {
+        const m = t.match(p.re);
+        if (m) return p.out(m);
+    }
+    if (lower.includes('cc0') || lower.includes('public domain')) return 'Public Domain';
+    // Last-ditch: take the first ~20 characters.
+    return t.slice(0, 20).trim() + '…';
 }
 
 // ━━ Show-more button + footer ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
