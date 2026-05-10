@@ -30,8 +30,8 @@ function bucketHexForBigram(bg) {
 }
 
 function textBucketFor(docId) {
-    // Match lib/bigram-search.js: hex padding to 2 chars.
-    return (docId % 256).toString(16).padStart(2, '0');
+    // Match lib/bigram-search.js: 4096 buckets, 3-hex padding.
+    return (docId % 4096).toString(16).padStart(3, '0');
 }
 
 function buildShardBytes(termsMap, docCount) {
@@ -104,7 +104,7 @@ function installFetchMock({
             const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
             return new Response(ab, { status: 200 });
         }
-        const textMatch = u.match(/\/text\/([0-9a-f]{2})\.bin$/);
+        const textMatch = u.match(/\/text\/([0-9a-f]{3})\.bin$/);
         if (textMatch) {
             const bucket = textMatch[1];
             const ndjson = textShards.get(bucket);

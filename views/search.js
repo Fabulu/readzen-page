@@ -159,6 +159,16 @@ export async function render(route, mount, shell) {
         var transParam = transVal === 'translated' ? 'true'
             : transVal === 'untranslated' ? 'false'
             : undefined;
+        // Streaming state: accumulated full-text groups across onProgress
+        // batches. Each verified text-shard's hits arrive here as soon as the
+        // shard fetch + indexOf finish, so the UI can paint rows
+        // incrementally instead of waiting for the full search to complete.
+        const streamingGroups = new Map();
+        const onFulltextProgress = function (batch) {
+            mergeIntoStreamingGroups(streamingGroups, batch);
+            renderStreamingFulltext(streamingGroups, trimmed, /*finalized=*/ false);
+        };
+
         const results = await federatedSearch(trimmed, {
             masters: mastersData,
             titles: titles,
@@ -169,10 +179,81 @@ export async function render(route, mount, shell) {
             },
             masterFilter: masterFilter,
             translatedIds: translatedIds,
-            zenIds: zenIds
+            zenIds: zenIds,
+            onFulltextProgress: onFulltextProgress,
         });
 
         renderFederatedResults(trimmed, results, page);
+    }
+
+    /** Merge one streaming batch of result rows into the running groups Map.
+     *  Key is `fileId|side|translator` so canonical CBETA, en-side, and per-
+     *  community-translator rows stay distinct (per Filter Wave A B10). */
+    function mergeIntoStreamingGroups(groups, batch) {
+        for (var k = 0; k < batch.length; k++) {
+            var r = batch[k];
+            var meta = r.meta || {};
+            var fid = meta.file_id || '';
+            var sd  = meta.side || '';
+            var tr  = meta.translator || '';
+            if (!fid) continue;
+            var key = fid + '|' + sd + '|' + tr;
+            if (!groups.has(key)) {
+                groups.set(key, {
+                    fileId: fid,
+                    side: sd,
+                    translator: tr,
+                    url: r.url || '',
+                    title: meta.title || fid,
+                    titleEn: meta.title_en || '',
+                    excerpt: r.excerpt || '',
+                    hitCount: r.hitCount || 0,
+                });
+            } else {
+                groups.get(key).hitCount += r.hitCount || 0;
+            }
+        }
+    }
+
+    /** Render the full-text section from the running groups Map. Called from
+     *  both the per-shard onProgress callback and the final await. */
+    function renderStreamingFulltext(groups, query, finalized) {
+        var ftContainer = mount.querySelector('#ft-results');
+        var ftLabel = mount.querySelector('#ft-section-label');
+        if (!ftContainer) return;
+
+        var groupArr = Array.from(groups.values());
+        // Sort by hitCount desc so the most relevant matches surface first
+        // even mid-stream. (Order may shuffle as more shards land.)
+        groupArr.sort(function (a, b) { return (b.hitCount || 0) - (a.hitCount || 0); });
+
+        if (groupArr.length === 0 && finalized) {
+            ftContainer.innerHTML = '<p class="muted" style="padding:0.5rem 1rem;">No full-text matches.</p>';
+            if (ftLabel) {
+                var spinner = ftLabel.querySelector('#ft-loading');
+                if (spinner) spinner.remove();
+                ftLabel.textContent = 'Full-Text Matches (0)';
+            }
+            return;
+        }
+        if (groupArr.length === 0) return;
+
+        if (ftLabel) {
+            // Show the running count plus a still-searching dot when not finalized.
+            var label = 'Full-Text Matches (' + groupArr.length + ' text' +
+                (groupArr.length === 1 ? '' : 's') + ')';
+            if (!finalized) {
+                label += ' <span class="ft-loading-spinner" id="ft-loading" aria-label="Searching"></span>';
+            }
+            ftLabel.innerHTML = label;
+        }
+
+        var ftHtml = '';
+        for (var g = 0; g < groupArr.length; g++) {
+            ftHtml += buildSearchGroup(groupArr[g], query);
+        }
+        ftContainer.innerHTML = ftHtml;
+        wireGroupExpanders(ftContainer, query);
     }
 
     /** Browse all titles with filters (no query). */

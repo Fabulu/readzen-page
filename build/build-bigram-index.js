@@ -57,7 +57,7 @@ const SHARDS_DIR = join(BIGRAM_DIR, 'shards');
 const TEXT_DIR = join(OUTPUT_ROOT, 'text');
 
 const SHARD_COUNT = 4096;          // bigram shards (FNV-1a32 mod 4096)
-const TEXT_SHARD_COUNT = 256;      // text shards (docId mod 256)
+const TEXT_SHARD_COUNT = 4096;     // text shards (docId mod 4096) — smaller per-shard fetches
 const MAX_DOC_COUNT = 65535;       // uint16 docId limit
 const HASH_HEX_LEN = 6;            // first 6 hex of sha-256 of shard bytes
 
@@ -495,22 +495,30 @@ function writeDocList(docs) {
 
 // === Per-doc text shards ===
 //
-// Each shard at data/search/text/{XX}.bin is a UTF-8 NDJSON file with one
+// Each shard at data/search/text/{XXX}.bin is a UTF-8 NDJSON file with one
 // {docId, text} record per line. text is the *normalized* text (the same
-// form used for bigram emission). Bucket by docId mod 256.
+// form used for bigram emission). Bucket by docId mod 4096 (3-hex name).
 //
 // The verification step in lib/bigram-search.js fetches the shard for each
 // candidate docId and runs text.indexOf(normalizedQuery) to enumerate true
 // hit positions (bigrams are necessary, not sufficient).
+//
+// 4096 buckets keeps each shard small (~50-200 KB) so verification fetches
+// are cheap over HTTP/2 and stream as they arrive.
 
 function writeTextShards(docs) {
+    // Pre-clear the text shard directory so a rebuild with a different bucket
+    // count doesn't leave stale files behind (Cloudflare would upload them).
+    if (existsSync(TEXT_DIR)) {
+        rmSync(TEXT_DIR, { recursive: true, force: true });
+    }
     ensureDir(TEXT_DIR);
 
-    // Group docs by docId % 256. Use streams to avoid building 256 huge
-    // strings in memory simultaneously.
+    // Group docs by docId % TEXT_SHARD_COUNT. Use streams to avoid building
+    // many huge strings in memory simultaneously.
     const streams = new Array(TEXT_SHARD_COUNT);
     for (let i = 0; i < TEXT_SHARD_COUNT; i++) {
-        const xx = i.toString(16).padStart(2, '0');
+        const xx = i.toString(16).padStart(3, '0');
         streams[i] = createWriteStream(join(TEXT_DIR, `${xx}.bin`), { encoding: 'utf-8' });
     }
 
