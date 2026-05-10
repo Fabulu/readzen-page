@@ -143,9 +143,17 @@ export async function render(route, mount, shell) {
     // ── Current search state ──
     let lastResults = [];
     let currentPage = 1;
+    // Auto-expand first FT group once per query. Re-streaming during
+    // incremental updates must NOT reopen what the user just closed, so we
+    // gate on this flag (reset at the top of every doSearch call).
+    let _autoExpandedThisQuery = false;
 
     async function doSearch(query, page) {
         const trimmed = (query || '').trim();
+
+        // Reset the auto-expand guard on each new search so the first FT
+        // group of the new query auto-opens once.
+        _autoExpandedThisQuery = false;
 
         // Empty query: show all titles (existing browse behavior)
         if (!trimmed) {
@@ -254,6 +262,22 @@ export async function render(route, mount, shell) {
         }
         ftContainer.innerHTML = ftHtml;
         wireGroupExpanders(ftContainer, query);
+        maybeAutoExpandFirstGroup(ftContainer);
+    }
+
+    /** Auto-open the first FT group on initial render so the user lands on
+     *  KWICs without an extra click. Gated by `_autoExpandedThisQuery` so
+     *  re-streaming during incremental updates doesn't reopen what the user
+     *  just manually closed. */
+    function maybeAutoExpandFirstGroup(ftContainer) {
+        if (_autoExpandedThisQuery) return;
+        var first = ftContainer.querySelector('.search-group');
+        if (!first) return;
+        _autoExpandedThisQuery = true;
+        // Setting `open` on a <details> fires the toggle event natively, which
+        // is exactly what wireGroupExpanders listens for (lazy KWIC fetch).
+        // Setting it via attribute matches what the user clicking would do.
+        first.setAttribute('open', '');
     }
 
     /** Browse all titles with filters (no query). */
@@ -517,6 +541,7 @@ export async function render(route, mount, shell) {
 
             // Wire expand handlers on all groups
             wireGroupExpanders(ftContainer, query);
+            maybeAutoExpandFirstGroup(ftContainer);
 
             maybeShowSupportPrompt(body);
         }).catch(function() {
