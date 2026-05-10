@@ -629,7 +629,13 @@ export async function render(route, mount, shell) {
                 groupBody.dataset.loaded = 'true';
 
                 var fileId = details.dataset.fileId;
-                loadAndSearchXml(fileId, query).then(function(result) {
+                // Bilingual KWIC: only when this is a source-side (CJK) hit
+                // AND the corpus has an authoritative translation on file.
+                // For 'en'/'community' groups the user is already viewing the
+                // English side, so monolingual is correct.
+                var sideAttr = details.dataset.side || '';
+                var bilingual = !sideAttr && translatedIds && translatedIds.has(fileId);
+                loadAndSearchXml(fileId, query, { includeTranslation: bilingual }).then(function(result) {
                     if (!result || result.passages.length === 0) {
                         groupBody.innerHTML = '<p class="muted" style="padding:0.5rem 1rem 0.5rem 10.1rem;">No passage-level matches found. <a href="#/' + escapeHtml(fileId) + '?q=' + encodeURIComponent(query) + '">Open full text \u2192</a></p>';
                         return;
@@ -672,16 +678,22 @@ export async function render(route, mount, shell) {
                     // Render KWIC rows — show first 5, "show more" for rest
                     var MAX_KWIC = 5;
                     var passages = result.passages;
-                    var kwicHtml = excerptHeader;
+                    var translated = result.translatedPassages || null;
+                    // If we asked for translations but got nothing aligned, drop a
+                    // faint hint so the user understands why the EN row is absent.
+                    var noAlignmentHint = (bilingual && (!translated || translated.size === 0))
+                        ? '<div class="kwic-no-alignment">(no translation aligned)</div>'
+                        : '';
+                    var kwicHtml = excerptHeader + noAlignmentHint;
 
                     for (var i = 0; i < Math.min(passages.length, MAX_KWIC); i++) {
-                        kwicHtml += buildKwicRow(passages[i], fileId, query);
+                        kwicHtml += buildKwicRow(passages[i], fileId, query, translated);
                     }
 
                     if (passages.length > MAX_KWIC) {
                         kwicHtml += '<div class="kwic-hidden" style="display:none;">';
                         for (var j = MAX_KWIC; j < passages.length; j++) {
-                            kwicHtml += buildKwicRow(passages[j], fileId, query);
+                            kwicHtml += buildKwicRow(passages[j], fileId, query, translated);
                         }
                         kwicHtml += '</div>';
                         kwicHtml += '<button class="search-show-more kwic-show-more">Show ' + (passages.length - MAX_KWIC) + ' more match' + (passages.length - MAX_KWIC === 1 ? '' : 'es') + '\u2026</button>';
@@ -710,13 +722,32 @@ export async function render(route, mount, shell) {
         });
     }
 
-    /** Build a single KWIC row linking to a specific passage. */
-    function buildKwicRow(passage, fileId, query) {
+    /** Build a single KWIC row linking to a specific passage.
+     *  When `translatedMap` is non-null AND has an aligned EN entry for this
+     *  passage's startLb, render two stacked rows ([CN] + [EN]) inside a
+     *  single .kwic-pair link so the click-to-open behaviour stays unified. */
+    function buildKwicRow(passage, fileId, query, translatedMap) {
         var lbRange = passage.startLb;
         if (passage.endLb && passage.endLb !== passage.startLb) {
             lbRange = passage.startLb + '-' + passage.endLb;
         }
         var href = '#/' + fileId + '/' + lbRange + '?q=' + encodeURIComponent(query);
+        var enText = translatedMap ? (translatedMap.get(passage.startLb) || '') : '';
+
+        if (enText) {
+            // Bilingual paired row — CN top + EN bottom, both aligned by lb.
+            // The EN row uses .kwic-side-en for the smaller-font, soft-tone
+            // styling matching the desktop "Secondary" row treatment.
+            return '<a class="kwic-row kwic-row--bilingual" href="' + escapeHtml(href) + '">' +
+                '<span class="kwic-side-label kwic-side-label--cn">CN</span>' +
+                '<span class="kwic-left">' + escapeHtml(passage.left) + '</span>' +
+                '<span class="kwic-match">' + escapeHtml(passage.match) + '</span>' +
+                '<span class="kwic-right">' + escapeHtml(passage.right) + '</span>' +
+                '<span class="kwic-lb">' + escapeHtml(passage.lineId) + '</span>' +
+                '<span class="kwic-side-label kwic-side-label--en">EN</span>' +
+                '<span class="kwic-en">' + escapeHtml(enText) + '</span>' +
+            '</a>';
+        }
 
         return '<a class="kwic-row" href="' + escapeHtml(href) + '">' +
             '<span class="kwic-left">' + escapeHtml(passage.left) + '</span>' +
