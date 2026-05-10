@@ -10,6 +10,7 @@ import { escapeHtml } from './lib/format.js';
 import { mountShell } from './views/shell.js';
 import * as landing from './views/landing.js';
 import * as passage from './views/passage.js';
+import { disposeAllFindBarHandlers } from './views/passage.js';
 import * as dictionary from './views/dictionary.js';
 import * as termbase from './views/termbase.js';
 import * as master from './views/master.js';
@@ -20,12 +21,14 @@ import * as scholar from './views/scholar.js';
 import * as scholarGraph from './views/scholar-graph.js';
 import * as search from './views/search.js';
 import * as compare from './views/compare.js';
+import * as sharedList from './views/shared-list.js';
 import { dismissInlineDict } from './lib/inline-dict.js';
 import { initKeyboard, dismissAllPopups } from './lib/keyboard.js';
+import { detachAllMirrors } from './lib/selection-sync.js';
 
 // Lookup views share a common contract: instant render, no app-first race.
 // They're dispatched before the placeholder path in `init` below.
-const LOOKUP_VIEWS = [dictionary, termbase, master, mastersBrowse, lineageGraph, tags, scholarGraph, scholar, search];
+const LOOKUP_VIEWS = [dictionary, termbase, master, mastersBrowse, lineageGraph, tags, scholarGraph, scholar, search, sharedList];
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 
@@ -158,6 +161,8 @@ try {
 // same tab get a fresh view.
 window.addEventListener('hashchange', () => {
     dismissAllPopups();
+    detachAllMirrors();
+    disposeAllFindBarHandlers();
     window.scrollTo(0, 0);
     init();
 });

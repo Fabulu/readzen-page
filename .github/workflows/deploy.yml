@@ -78,6 +78,23 @@ jobs:
           fi
           echo "Bigram index OK: $(find data/search -type f | wc -l) files"
 
+      - name: Restore SEO cache
+        uses: actions/cache@v4
+        with:
+          path: data/seo-cache
+          # Cache key is derived from the SEO inputs so changes bust the cache
+          # automatically. Falls back to any prior key on partial mismatch.
+          key: seo-cache-${{ hashFiles('corpus/CbetaZenTranslations/titles.jsonl', 'corpus/OpenZenTranslations/titles.jsonl', 'corpus/CbetaZenTranslations/masters.json', 'build/generate-seo-pages.js') }}
+          restore-keys: |
+            seo-cache-
+
+      - name: Regenerate SEO pages (cache-aware)
+        run: |
+          export CBETA_TITLES=corpus/CbetaZenTranslations/titles.jsonl
+          export OPENZEN_TITLES=corpus/OpenZenTranslations/titles.jsonl
+          export MASTERS_JSON=corpus/CbetaZenTranslations/masters.json
+          node build/generate-seo-pages.js
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:

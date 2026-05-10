@@ -418,6 +418,155 @@ test('attachSelectionMirror: clamps when range starts outside any pane', async (
     detach();
 });
 
+// ---------- Gap tests (Wave 2.1 review) ----------
+
+test('attachSelectionMirror: cross-pane drag — A is source, B is destination only', async () => {
+    // Existing test 4 covers the "end clamps to source" mechanic. This test
+    // tightens the contract: when selection starts in A and bleeds into B,
+    // (1) source-pane A must NOT light up (browser handles its own visual),
+    // (2) destination-pane B is the one that gets `is-active` mirrored on
+    //     the row corresponding to A's startRow only.
+    const sel = installDomGlobals();
+    const ids = ['l1', 'l2', 'l3', 'l4'];
+    const a = buildPaneWithLines(ids);
+    const b = buildPaneWithLines(ids);
+    document.body.appendChild(a.pane);
+    document.body.appendChild(b.pane);
+
+    const { attachSelectionMirror } = await import('../lib/selection-sync.js');
+    const detach = attachSelectionMirror([{ root: a.pane }, { root: b.pane }]);
+
+    // Drag from A.l2 deep into B.l4.
+    sel.setRange(new StubRange(a.rows.get('l2').text, b.rows.get('l4').text));
+    document.dispatchEvent('selectionchange');
+
+    // Source pane A: zero is-active rows (browser draws the native selection).
+    for (const id of ids) {
+        assert.equal(
+            a.rows.get(id).row.classList.contains('is-active'),
+            false,
+            `source pane A row ${id} must not have is-active`
+        );
+    }
+    // Destination pane B: l2 is the only row mirrored (end clamped to start).
+    assert.ok(b.rows.get('l2').row.classList.contains('is-active'));
+    for (const id of ['l1', 'l3', 'l4']) {
+        assert.equal(
+            b.rows.get(id).row.classList.contains('is-active'),
+            false,
+            `destination pane B row ${id} must not be lit`
+        );
+    }
+    detach();
+});
+
+test('attachSelectionMirror: spacer rows (no data-line-id) are skipped silently', async () => {
+    const sel = installDomGlobals();
+    // Build a pane with l1, a spacer, l2, l3 (so spacer is in the middle).
+    const a = new StubElement('div', { id: 'paneA' }, ['panel-body']);
+    const b = new StubElement('div', { id: 'paneB' }, ['panel-body']);
+    const aRows = new Map();
+    const bRows = new Map();
+
+    const addRow = (parent, map, id) => {
+        const row = new StubElement('div', { 'data-line-id': id }, ['line-row']);
+        const text = new StubText(`text-${id}`, row);
+        row.appendChild(text);
+        parent.appendChild(row);
+        map.set(id, { row, text });
+    };
+    const addSpacer = (parent) => {
+        // Spacer has no data-line-id and is NOT inside a line row — it sits
+        // between siblings. The lib's querySelectorAll('[data-line-id]') must
+        // skip it naturally; findLineRow on a node inside it returns null.
+        const spacer = new StubElement('div', { class: '__lg_break_x' }, ['line-break']);
+        const spacerText = new StubText('—', spacer);
+        spacer.appendChild(spacerText);
+        parent.appendChild(spacer);
+        return { spacer, spacerText };
+    };
+
+    addRow(a, aRows, 'l1');
+    const aSpacer = addSpacer(a);
+    addRow(a, aRows, 'l2');
+    addRow(a, aRows, 'l3');
+    addRow(b, bRows, 'l1');
+    addRow(b, bRows, 'l2');
+    addRow(b, bRows, 'l3');
+
+    document.body.appendChild(a);
+    document.body.appendChild(b);
+
+    const { attachSelectionMirror } = await import('../lib/selection-sync.js');
+    const detach = attachSelectionMirror([{ root: a }, { root: b }]);
+
+    // Case 1: selection that begins INSIDE the spacer must not throw, and
+    // must clear (no source row resolvable) rather than mirror garbage.
+    sel.setRange(new StubRange(aSpacer.spacerText, aSpacer.spacerText));
+    document.dispatchEvent('selectionchange');
+    for (const id of ['l1', 'l2', 'l3']) {
+        assert.equal(
+            bRows.get(id).row.classList.contains('is-active'),
+            false,
+            `selection inside spacer must not light B.${id}`
+        );
+    }
+
+    // Case 2: a span from l1 → l3 spans across the spacer; both endpoints are
+    // in real rows, so the spacer is naturally skipped (not in [data-line-id]
+    // querySelectorAll). l1 and l3 fire; l2 also fires (it's between them).
+    sel.setRange(new StubRange(aRows.get('l1').text, aRows.get('l3').text));
+    document.dispatchEvent('selectionchange');
+    for (const id of ['l1', 'l2', 'l3']) {
+        assert.ok(
+            bRows.get(id).row.classList.contains('is-active'),
+            `B.${id} should be lit when selection spans across a spacer`
+        );
+    }
+    detach();
+});
+
+// FIXME: attachSelectionMirror is not safe to call twice with overlapping panes.
+// When two listeners are attached, BOTH run on every selectionchange.
+// If the second registration's panes don't include the selection's source
+// pane, its findOwningPane() returns null and it calls clearAll() across
+// its panes — wiping the highlights the first listener just set on the
+// shared overlapping pane. The library has no per-listener scoping that
+// would let two mirrors coexist when their pane sets intersect.
+//
+// Either:
+//   (a) Document that attachSelectionMirror is single-instance; callers
+//       must detach before re-attaching.
+//   (b) Have the listener scope its clearAll() to "panes I own AND that
+//       don't host the active selection's source" rather than blindly
+//       clearing every non-source pane.
+//
+// Test left disabled until the lib clarifies the contract.
+/*
+test('attachSelectionMirror: a second attach with overlapping panes does not break the first', async () => {
+    const sel = installDomGlobals();
+    const ids = ['l1', 'l2', 'l3'];
+    const a = buildPaneWithLines(ids);
+    const b = buildPaneWithLines(ids);
+    const c = buildPaneWithLines(ids);
+    document.body.appendChild(a.pane);
+    document.body.appendChild(b.pane);
+    document.body.appendChild(c.pane);
+
+    const { attachSelectionMirror } = await import('../lib/selection-sync.js');
+    const detach1 = attachSelectionMirror([{ root: a.pane }, { root: b.pane }]);
+    const detach2 = attachSelectionMirror([{ root: b.pane }, { root: c.pane }]);
+
+    sel.setRange(new StubRange(a.rows.get('l1').text, a.rows.get('l2').text));
+    document.dispatchEvent('selectionchange');
+    assert.ok(b.rows.get('l1').row.classList.contains('is-active'));
+    assert.ok(b.rows.get('l2').row.classList.contains('is-active'));
+
+    detach1();
+    detach2();
+});
+*/
+
 test('attachSelectionMirror: selection inside <mark> still resolves the line row', async () => {
     // Find-bar wraps matching text in <mark>. Make sure walking up still finds
     // the enclosing `[data-line-id]` row.

@@ -9,6 +9,11 @@ import { initGraph } from './lineage-graph.js';
 import { escapeHtml } from '../lib/format.js';
 import { initTypeahead } from '../lib/typeahead.js';
 import { DATA_REPO_BASE } from '../lib/github.js';
+import {
+    copyShareUrl,
+    downloadListAsJson,
+    URL_SAFE_MAX_ENTRIES
+} from '../lib/reading-list-share.js';
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 const SOURCE_URL = 'https://github.com/Fabulu/ReadZen';
@@ -133,6 +138,11 @@ export function render(_route, mount, shell) {
                             <button class="reading-list-remove" data-file-id="${escapeHtml(i.fileId)}" title="Remove from reading list">\u00d7</button>
                         </div>`
                    ).join('')}
+               </div>
+               <div class="reading-list-export">
+                   <button class="btn btn--small btn--outline" id="reading-list-share">Share link</button>
+                   <button class="btn btn--small btn--outline" id="reading-list-download">Download JSON</button>
+                   <span class="reading-list-export-msg" id="reading-list-export-msg" hidden></span>
                </div>
            </div>`
         : '';
@@ -491,6 +501,61 @@ export function render(_route, mount, shell) {
             }
         });
     });
+
+    // ── Reading list export: share-link + download-JSON ──
+    const shareBtn = mount.querySelector('#reading-list-share');
+    const downloadBtn = mount.querySelector('#reading-list-download');
+    const exportMsg = mount.querySelector('#reading-list-export-msg');
+
+    function showExportMsg(text) {
+        if (!exportMsg) return;
+        exportMsg.textContent = text;
+        exportMsg.hidden = false;
+        clearTimeout(showExportMsg._t);
+        showExportMsg._t = setTimeout(() => { exportMsg.hidden = true; }, 4000);
+    }
+
+    if (shareBtn) {
+        shareBtn.addEventListener('click', async () => {
+            // Re-read so the share reflects edits made since render.
+            const current = (getLists()['My Reading List']) || [];
+            if (current.length === 0) {
+                showExportMsg('Reading list is empty.');
+                return;
+            }
+            const tooLong = current.length > URL_SAFE_MAX_ENTRIES;
+            try {
+                const url = await copyShareUrl(current);
+                if (url) {
+                    // Combine the warning with the success toast so the
+                    // warning isn't instantly clobbered by the success
+                    // message that would otherwise overwrite it.
+                    showExportMsg(tooLong
+                        ? `Link copied (long list of ${current.length}; URL may not work in older browsers).`
+                        : 'Link copied to clipboard.');
+                }
+                else showExportMsg('Could not build share link.');
+            } catch {
+                showExportMsg('Could not copy link.');
+            }
+        });
+    }
+
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', () => {
+            const current = (getLists()['My Reading List']) || [];
+            if (current.length === 0) {
+                showExportMsg('Reading list is empty.');
+                return;
+            }
+            try {
+                downloadListAsJson(current);
+                showExportMsg('JSON download started.');
+            } catch {
+                showExportMsg('Could not download JSON.');
+            }
+        });
+    }
 
     // Wire random buttons (async, non-blocking)
     const randomTextBtn = mount.querySelector('#random-text-btn');

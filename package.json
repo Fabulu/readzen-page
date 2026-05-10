@@ -6,8 +6,10 @@
   "scripts": {
     "test": "node --test test/",
     "build": "node build/build-dict-shards.js",
-    "build:search": "node --max-old-space-size=4096 --expose-gc build/build-bigram-index.js && node build/build-english-jsonl.js",
-    "deploy": "npm run build"
+    "build:seo": "node build/generate-seo-pages.js",
+    "build:seo:force": "node build/generate-seo-pages.js --force",
+    "build:search": "node --max-old-space-size=4096 --expose-gc build/build-bigram-index.js && node build/build-english-jsonl.js && npm run build:seo",
+    "deploy": "npm run build && npm run build:search && node -e \"console.log('Build complete. Deploy with: npx wrangler pages deploy . --project-name=readzen --branch=main')\""
   },
   "dependencies": {}
 }

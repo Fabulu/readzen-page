@@ -7,21 +7,89 @@
 // 3. sitemap.xml
 // 4. robots.txt
 //
-// Usage: node build/generate-seo-pages.js
+// Usage:
+//   node build/generate-seo-pages.js             # cache-aware, skips if inputs unchanged
+//   FORCE=1 node build/generate-seo-pages.js     # force regenerate
+//
+// Env vars (override default corpus paths, mirror build-bigram-index.js):
+//   CBETA_TITLES, OPENZEN_TITLES, MASTERS_JSON
+//
+// Cache file:
+//   data/seo-cache/_inputs.sha256                # JSON {hash, generatedAt, inputs}
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { createReadStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const BASE = 'https://readzen.pages.dev';
 
-const CBETA_TITLES = resolve(__dirname, '../../CbetaZenTranslations/titles.jsonl');
-const OPEN_TITLES = resolve(__dirname, '../../OpenZenTranslations/titles.jsonl');
-const MASTERS = resolve(__dirname, '../../CbetaZenTranslations/masters.json');
+// Inputs (env-overridable for CI / non-default checkout layouts).
+const CBETA_TITLES = process.env.CBETA_TITLES
+    || resolve(__dirname, '../../CbetaZenTranslations/titles.jsonl');
+const OPEN_TITLES = process.env.OPENZEN_TITLES
+    || resolve(__dirname, '../../OpenZenTranslations/titles.jsonl');
+const MASTERS = process.env.MASTERS_JSON
+    || resolve(__dirname, '../../CbetaZenTranslations/masters.json');
+
+// Cache location.
+const CACHE_DIR = resolve(ROOT, 'data', 'seo-cache');
+const CACHE_FILE = resolve(CACHE_DIR, '_inputs.sha256');
+const SCRIPT_FILE = fileURLToPath(import.meta.url);
+
+/**
+ * Compute a stable hash of the inputs that influence SEO output.
+ * Includes the script's own source so any logic change forces a re-run.
+ *
+ * Exported (via top-level export below) for unit testing.
+ */
+export function computeInputsHash(paths) {
+    const hash = createHash('sha256');
+    // Sort to guarantee a stable ordering regardless of caller.
+    const sorted = [...paths].sort();
+    for (const p of sorted) {
+        hash.update('|FILE:');
+        hash.update(p);
+        hash.update('|');
+        if (existsSync(p)) {
+            const st = statSync(p);
+            // Hash the file bytes for stability across mtime-only touches.
+            // Files here are small (titles.jsonl ~few MB, masters.json <1 MB);
+            // keep it simple over streaming.
+            const bytes = readFileSync(p);
+            hash.update(`SIZE:${st.size}|`);
+            hash.update(bytes);
+        } else {
+            hash.update('MISSING');
+        }
+    }
+    return hash.digest('hex');
+}
+
+/** Load the previous cache entry, or null if absent / corrupt. */
+function readCache() {
+    if (!existsSync(CACHE_FILE)) return null;
+    try {
+        return JSON.parse(readFileSync(CACHE_FILE, 'utf8'));
+    } catch {
+        return null;
+    }
+}
+
+/** Persist a cache entry. */
+function writeCache(hash) {
+    mkdirSync(CACHE_DIR, { recursive: true });
+    const payload = {
+        hash,
+        generatedAt: new Date().toISOString(),
+        inputs: { CBETA_TITLES, OPEN_TITLES, MASTERS, SCRIPT: SCRIPT_FILE },
+    };
+    writeFileSync(CACHE_FILE, JSON.stringify(payload, null, 2), 'utf8');
+}
 
 function esc(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -119,6 +187,19 @@ function buildMasterNoscript(m) {
 }
 
 async function main() {
+    // --- Cache check (short-circuit if inputs are unchanged) ---
+    const force = process.env.FORCE === '1' || process.argv.includes('--force');
+    const inputPaths = [CBETA_TITLES, OPEN_TITLES, MASTERS, SCRIPT_FILE];
+    const currentHash = computeInputsHash(inputPaths);
+    if (!force) {
+        const cache = readCache();
+        if (cache && cache.hash === currentHash) {
+            console.log(`SEO cache hit - skipping (hash=${currentHash.slice(0, 12)}, generated ${cache.generatedAt})`);
+            console.log(`  Run with FORCE=1 to regenerate anyway.`);
+            return;
+        }
+    }
+
     const allRoutes = ['']; // homepage
     let textCount = 0;
     let masterCount = 0;
@@ -274,6 +355,14 @@ td a { color: #6EAFF8; }
 
     console.log(`Generated: ${textCount} texts + ${masterCount} masters (rich bios) + ${statics.length} static + crawlable master index + sitemap.xml + robots.txt`);
     console.log(`Sitemap entries: ${allRoutes.length}`);
+
+    // --- Persist cache ---
+    writeCache(currentHash);
+    console.log(`SEO cache updated: data/seo-cache/_inputs.sha256 (hash=${currentHash.slice(0, 12)})`);
 }
 
-main().catch(err => { console.error(err); process.exitCode = 1; });
+// Only auto-run when invoked as a script (not when imported by tests).
+const isMain = process.argv[1] && resolve(process.argv[1]) === SCRIPT_FILE;
+if (isMain) {
+    main().catch(err => { console.error(err); process.exitCode = 1; });
+}

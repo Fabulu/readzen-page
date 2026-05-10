@@ -3461,6 +3461,91 @@ a.master-appearance-title:hover {
 .dict-grammar-fn { margin: 0.15rem 0; line-height: 1.35; }
 .dict-grammar-ex { color: var(--muted); font-style: italic; font-size: 0.66rem; }
 
+/* ── Mobile drawer mode (touch / coarse pointer) ───────────── */
+/* Phones and tablets get a slide-up sheet instead of a click-positioned
+   popup. The drawer uses the same theme tokens as the rest of the UI so
+   it picks up the user's light/dark choice automatically. */
+@media (max-width: 640px), (pointer: coarse) {
+  .dict-popup--drawer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    max-width: 100%;
+    max-height: 70vh;
+    margin: 0;
+    border-radius: 16px 16px 0 0;
+    border: 1px solid var(--border-soft, #333);
+    border-bottom: none;
+    background: var(--bg, #0b0907);
+    color: var(--text-soft, #cbbfa9);
+    padding: 1.25rem 1rem 1.5rem;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+    overflow-y: auto;
+    z-index: 10001;
+    /* Prevent rubber-band scroll bleeding through to the page behind. */
+    overscroll-behavior: contain;
+    animation: dict-drawer-slide-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .dict-drawer-handle {
+    width: 40px;
+    height: 4px;
+    margin: 0 auto 0.75rem;
+    border-radius: 2px;
+    background: var(--border-soft, #333);
+    opacity: 0.6;
+  }
+
+  .dict-drawer-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.6rem;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-soft, #cbbfa9);
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  .dict-drawer-close:hover,
+  .dict-drawer-close:focus-visible {
+    color: var(--accent, #d4ab58);
+    background: var(--paper-strong);
+    outline: none;
+  }
+
+  .dict-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 10000;
+    animation: dict-drawer-backdrop-in 160ms ease-out;
+  }
+}
+
+@keyframes dict-drawer-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes dict-drawer-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dict-popup--drawer,
+  .dict-drawer-backdrop {
+    animation: none;
+  }
+}
+
 /* ━━ Explore Masters (landing page) ━━ */
 
 .explore-masters {
@@ -3999,6 +4084,64 @@ a.master-appearance-title:hover {
 }
 
 .reading-list-upsell a { color: var(--accent); }
+
+.reading-list-export {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+}
+
+.reading-list-export-msg {
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+/* ━━ Shared reading list view ━━ */
+
+.shared-list {
+    margin: 1rem 0 2rem 0;
+}
+
+.shared-list-banner {
+    background: var(--paper);
+    border: 1px solid var(--border-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 0.7rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.shared-list-banner-title {
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 0.2rem 0;
+}
+
+.shared-list-banner-sub {
+    color: var(--muted);
+    font-size: 0.88rem;
+    margin: 0;
+}
+
+.shared-list-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 1rem;
+}
+
+.shared-list-saved {
+    color: var(--accent);
+    font-size: 0.9rem;
+    margin-top: 0.6rem;
+}
+
+.shared-list-empty {
+    color: var(--muted);
+    font-size: 0.9rem;
+}
 
 /* ━━ Bookmark Button ━━ */
 

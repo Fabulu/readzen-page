@@ -24,8 +24,23 @@ import { attachInlineDict } from '../lib/inline-dict.js';
 import { attachSelectionMirror } from '../lib/selection-sync.js';
 import { addToList, removeFromList, isInList, setLastRead, resumeLastReadTracking } from '../lib/reading-lists.js';
 import { CITE_STYLES, buildCitation, getPreferredStyle, setPreferredStyle } from '../lib/citation.js';
+import { registerFindNavigator } from '../lib/keyboard.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+// Active find-bar global keydown listeners. The mountFindBar handler
+// self-removes on the next keystroke after the mount detaches, but if the
+// user navigates without typing the listener leaks until then. The router
+// calls disposeAllFindBarHandlers() on every hashchange to plug that.
+const _findBarDisposers = new Set();
+
+/** Tear down every globally-registered find-bar keydown handler. */
+export function disposeAllFindBarHandlers() {
+    for (const d of Array.from(_findBarDisposers)) {
+        try { d(); } catch {}
+    }
+    _findBarDisposers.clear();
+}
 
 /**
  * Build a short apparatus summary string like " · 12 textual variants, 3 witnesses".
@@ -1526,6 +1541,7 @@ function mountFindBar(mount, ctx) {
     const handler = (ev) => {
         if (!document.body.contains(mount)) {
             document.removeEventListener('keydown', handler, true);
+            if (typeof disposeNav === 'function') disposeNav();
             return;
         }
         const isFind = (ev.ctrlKey || ev.metaKey) && (ev.key === 'f' || ev.key === 'F');
@@ -1536,6 +1552,34 @@ function mountFindBar(mount, ctx) {
     };
     document.addEventListener('keydown', handler, true);
     mount._findKeyHandler = handler;
+
+    // Register a find navigator so global vim-style bindings (/, n, N, Esc)
+    // can drive this find bar from anywhere on the page.
+    const disposeNav = registerFindNavigator({
+        isOpen: () => !bar.hidden,
+        open,
+        close,
+        findNext: () => {
+            if (!matches.length) return;
+            jumpTo(active < 0 ? 0 : active + 1);
+        },
+        findPrev: () => {
+            if (!matches.length) return;
+            jumpTo(active < 0 ? 0 : active - 1);
+        }
+    });
+
+    // Track this mount's tear-down so the router can flush all find-bar
+    // handlers on a hashchange even when the user never types again.
+    const dispose = () => {
+        document.removeEventListener('keydown', handler, true);
+        if (typeof disposeNav === 'function') {
+            try { disposeNav(); } catch {}
+        }
+        if (mount._findKeyHandler === handler) mount._findKeyHandler = null;
+        _findBarDisposers.delete(dispose);
+    };
+    _findBarDisposers.add(dispose);
 }
 
 function buildPassageFooter() {
