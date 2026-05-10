@@ -194,7 +194,11 @@ test('parseTei: missing <body> throws', () => {
     assert.throws(() => parseTei(xml), /missing a <body>/);
 });
 
-test('parseTei: pb elements are skipped without erroring', () => {
+test('parseTei: pb elements emit a spacer line and do not error', () => {
+    // <pb> (page break) creates a synthetic `__pb_break_*` spacer entry in
+    // lineOrder so the renderer can show a visual page break. Real CBETA
+    // line-id entries are unchanged, so consumers that only care about
+    // citable lines should filter spacers via the `__` prefix.
     const xml = wrapTei(`
         <p>
             <lb n="0001a01"/>text<pb n="2"/>
@@ -202,7 +206,10 @@ test('parseTei: pb elements are skipped without erroring', () => {
         </p>
     `);
     const parsed = parseTei(xml);
-    assert.equal(parsed.lineOrder.length, 2);
+    const realLines = parsed.lineOrder.filter(id => !id.startsWith('__'));
+    assert.equal(realLines.length, 2, 'pb does not consume real lb entries');
+    assert.ok(parsed.lineOrder.some(id => id.startsWith('__pb_break_')),
+        'pb produces a spacer entry for the renderer');
 });
 
 test('parseTei: <g> elements contribute their text content', () => {

@@ -185,12 +185,17 @@ test('scholar: legacy empty-slot form preserves user position', () => {
     assert.equal(r.user, 'Fabulu');
 });
 
-test('scholar: full positional form', () => {
-    const r = parseRoute('scholar/myCollection/passageId/Fabulu');
+test('scholar: new canonical user-first form', () => {
+    // Since commit 9169b70 the canonical scholar URL is
+    // #/scholar/{user}/{collectionName}[/{passage}]. The legacy positional
+    // form #/scholar/{coll}/{passage}/{user} is only recognised when one
+    // of the legacy disambiguators triggers (GUID-like collection id,
+    // empty middle slot, or ?user= query param).
+    const r = parseRoute('scholar/Fabulu/myCollection/0001a01');
     assert.equal(r.kind, 'scholar');
-    assert.equal(r.collectionId, 'myCollection');
-    assert.equal(r.passageId, 'passageId');
     assert.equal(r.user, 'Fabulu');
+    assert.equal(r.collectionId, 'myCollection');
+    assert.equal(r.passageId, '0001a01');
 });
 
 // ---------- Tags routes ----------
