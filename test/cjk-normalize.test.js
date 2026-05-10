@@ -87,13 +87,38 @@ test('rawIndexFromNormalizedPos: null normalized text returns 0', () => {
 
 // ---------- isCjk ----------
 
-test('isCjk: BMP CJK Unified range only', () => {
+test('isCjk: BMP CJK Unified range', () => {
     assert.equal(isCjk(0x4E00), true);  // 一
     assert.equal(isCjk(0x9FFF), true);
-    assert.equal(isCjk(0x4DFF), false); // just below
-    assert.equal(isCjk(0xA000), false); // just above
-    assert.equal(isCjk(0x3400), false); // Ext-A: NOT widened per spec
-    assert.equal(isCjk(0x20000), false); // Ext-B
+    assert.equal(isCjk(0x4DFF), false); // gap between Ext-A (..4DBF) and Unified (4E00..)
+    assert.equal(isCjk(0xA000), false); // just above Unified
+    assert.equal(isCjk(0x20000), false); // Ext-B (supplementary, not BMP)
+});
+
+test('isCjk: Extension A range U+3400..U+4DBF', () => {
+    assert.equal(isCjk(0x3400), true);
+    assert.equal(isCjk(0x4DBF), true);
+    assert.equal(isCjk(0x33FF), false); // just below
+    assert.equal(isCjk(0x4DC0), false); // just above (Yijing hexagrams)
+});
+
+test('isCjk: CJK Compatibility range U+F900..U+FAFF', () => {
+    assert.equal(isCjk(0xF900), true);
+    assert.equal(isCjk(0xFAFF), true);
+    assert.equal(isCjk(0xF8FF), false); // just below (PUA)
+    assert.equal(isCjk(0xFB00), false); // just above (Alphabetic Presentation Forms)
+});
+
+test('isCjk: adjacent Ext-A pair both qualify (bigram producible)', () => {
+    // Per build/build-bigram-index.js, a bigram is emitted when isCjk(prev) &&
+    // isCjk(curr). Two adjacent Ext-A chars (㐂 U+3402, 㐃 U+3403) must both
+    // pass; under the old BMP-only check they did not, producing 0 bigrams.
+    const s = '㐂㐃'; // length 2 string
+    let bigrams = 0;
+    for (let i = 1; i < s.length; i++) {
+        if (isCjk(s.charCodeAt(i - 1)) && isCjk(s.charCodeAt(i))) bigrams++;
+    }
+    assert.equal(bigrams, 1);
 });
 
 // ---------- containsCjk ----------

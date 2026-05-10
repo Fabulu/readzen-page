@@ -320,8 +320,9 @@ function buildBigramIndex(zhDocs) {
         // Per-doc set: dedupe bigrams within a single doc.
         const seen = new Set();
 
-        // Walk adjacent code-unit pairs. Both code units must satisfy
-        // `isCjk()` (BMP CJK + Ext A).
+        // Walk adjacent code-unit pairs. Both code units must be CJK
+        // ideographs (Unified BMP, Extension A, or Compatibility) per
+        // cjk-normalize.isCjk.
         const len = text.length;
         let prevCu = text.charCodeAt(0);
         let prevIsCjk = isCjk(prevCu);
