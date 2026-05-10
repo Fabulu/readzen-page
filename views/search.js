@@ -549,8 +549,10 @@ export async function render(route, mount, shell) {
         var fHref = '#/' + group.fileId + qsep + sideQs;
         var hits = group.hitCount || 0;
         var countLabel = hits > 0 ? hits + ' match' + (hits === 1 ? '' : 'es') : '';
-        var excerptHtml = group.excerpt ? sanitizeExcerpt(group.excerpt) : '';
-        // Side badge: [CN] for source, [EN] for canonical, [EN by X] for community.
+        // Side badge text: [CN] for source, [EN] for canonical, [EN by X] for community.
+        // Density v2: badge collapsed INTO the row-id pill so the summary has
+        // exactly 3 grid children (id+badge / title / meta) — also fixes the
+        // latent grid-arity bug where summary had 4 items in a 3-col grid.
         var badgeText = '';
         if (group.side === 'community' && group.translator) {
             badgeText = 'EN by ' + group.translator;
@@ -559,25 +561,30 @@ export async function render(route, mount, shell) {
         } else {
             badgeText = 'CN';
         }
-        var sideBadge = '<span class="search-row-badge search-row-badge--side">' +
-            escapeHtml(badgeText) + '</span>';
+        var idCell =
+            '<span class="search-row-id-cell">' +
+                '<span class="search-row-id">' + escapeHtml(group.fileId) + '</span>' +
+                '<span class="search-row-badge search-row-badge--side">' + escapeHtml(badgeText) + '</span>' +
+            '</span>';
+        // Density v2: excerpt no longer rendered in summary (was creating an
+        // empty 0-height layout artifact). Stash the bigram pre-excerpt so we
+        // can render it INSIDE .search-group-body on first expand.
+        var stashExcerpt = group.excerpt ? ' data-initial-excerpt="' + escapeHtml(group.excerpt) + '"' : '';
         return '<details class="search-group" data-file-id="' + escapeHtml(group.fileId) +
             '" data-side="' + escapeHtml(group.side || '') +
             '" data-translator="' + escapeHtml(group.translator || '') + '">' +
             '<summary>' +
-                '<span class="search-row-id">' + escapeHtml(group.fileId) + '</span>' +
-                sideBadge +
+                idCell +
                 '<span class="search-group-title">' +
                     '<span class="search-group-zh">' + escapeHtml(group.title) + '</span>' +
                     (group.titleEn ? '<span class="search-group-en">' + escapeHtml(group.titleEn) + '</span>' : '') +
-                    '<span class="search-group-excerpt">' + excerptHtml + '</span>' +
                 '</span>' +
                 '<span class="search-group-meta">' +
                     (countLabel ? '<span class="search-group-count">' + escapeHtml(countLabel) + '</span>' : '') +
                     '<a class="search-group-open" href="' + escapeHtml(fHref) + '" onclick="event.stopPropagation();" title="Open the full text">Open →</a>' +
                 '</span>' +
             '</summary>' +
-            '<div class="search-group-body" data-loaded="false">' +
+            '<div class="search-group-body" data-loaded="false"' + stashExcerpt + '>' +
                 '<div class="search-group-loading">Loading passages\u2026</div>' +
             '</div>' +
         '</details>';
@@ -619,20 +626,28 @@ export async function render(route, mount, shell) {
                         }
                     }
 
-                    // Lazy excerpt injection: if the summary has no excerpt yet
-                    // (the bigram backend always emits empty), build one from the
-                    // first passage so the user sees context the moment they expand.
-                    var excerptEl = details.querySelector('.search-group-excerpt');
-                    if (excerptEl && !excerptEl.innerHTML && result.passages.length > 0) {
+                    // Density v2: render the lazy excerpt INSIDE the body
+                    // (above the KWIC rows) instead of inside the summary —
+                    // this avoids the empty 0-height layout artifact and
+                    // keeps the collapsed row tight.
+                    var excerptInline = '';
+                    var stashedExcerpt = groupBody.dataset.initialExcerpt;
+                    if (stashedExcerpt) {
+                        excerptInline = sanitizeExcerpt(stashedExcerpt);
+                    } else if (result.passages.length > 0) {
                         var p0 = result.passages[0];
-                        var inline = (p0.left || '') + '<mark>' + (p0.match || '') + '</mark>' + (p0.right || '');
-                        excerptEl.innerHTML = sanitizeExcerpt(inline);
+                        excerptInline = sanitizeExcerpt(
+                            (p0.left || '') + '<mark>' + (p0.match || '') + '</mark>' + (p0.right || '')
+                        );
                     }
+                    var excerptHeader = excerptInline
+                        ? '<div class="search-group-excerpt">' + excerptInline + '</div>'
+                        : '';
 
                     // Render KWIC rows — show first 5, "show more" for rest
                     var MAX_KWIC = 5;
                     var passages = result.passages;
-                    var kwicHtml = '';
+                    var kwicHtml = excerptHeader;
 
                     for (var i = 0; i < Math.min(passages.length, MAX_KWIC); i++) {
                         kwicHtml += buildKwicRow(passages[i], fileId, query);
