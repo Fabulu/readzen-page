@@ -8,6 +8,7 @@
 // tab, this view simply never finishes loading — which is fine.
 
 import { escapeHtml, sliceLines, sliceFirstN, renderLinesHtml } from '../lib/format.js';
+import { loadSegmentMap } from '../lib/segment-map.js';
 import { highlightTextInHtml, scrollToFirstHighlight, scrollToLineId, findPageForTerm, findPageForLineId } from '../lib/highlight.js';
 import { parseTei } from '../lib/tei.js';
 import {
@@ -158,7 +159,17 @@ export async function render(route, mount, shell) {
     }
 
     try {
-        const sourceWork = await loadXml(srcUrl);
+        // Load source XML + segment map in parallel. The segment map is
+        // optional (graceful empty Map on 404) and keyed by lb-ID so
+        // renderLinesHtml can apply per-line CSS classes like .line-row--verse.
+        // Passed EXPLICITLY to the render helpers below: they are top-level
+        // functions, not closures over render(), so a `var` here is invisible
+        // to them (strict-mode ReferenceError — broke the rangeless and
+        // first-N paths).
+        const [sourceWork, segmentMap] = await Promise.all([
+            loadXml(srcUrl),
+            loadSegmentMap(route.workId)
+        ]);
 
         if (isRangeless) {
             // CBETA's source <head> elements (the table of contents) can't
@@ -195,13 +206,13 @@ export async function render(route, mount, shell) {
 
             if (translationWork) {
                 // Translated works: side-by-side paginated view.
-                renderRangelessBilingual(sourceWork, translationWork, route, mount);
+                renderRangelessBilingual(sourceWork, translationWork, route, mount, segmentMap);
             } else {
                 // Untranslated works: show the full text paginated.
                 // No TOC-only view — clicking individual headings one by one
                 // is a terrible reading experience for koan collections and
                 // recorded sayings with hundreds of sections.
-                renderFirstNLines(sourceWork, 30, route, mount, true);
+                renderFirstNLines(sourceWork, 30, route, mount, true, segmentMap);
             }
             shell.hideStatus();
             if (!(route.q || route.scroll)) window.scrollTo(0, 0);
@@ -226,7 +237,7 @@ export async function render(route, mount, shell) {
 
         document.querySelector('#source-meta').textContent = (sourceWork.titleZh || route.workId) + apparatusSummary(sourceWork.apparatus);
         const rangeSearchTerm = route.q || route.highlight || '';
-        let sourceHtml = renderLinesHtml(sourceLines);
+        let sourceHtml = renderLinesHtml(sourceLines, segmentMap);
         if (rangeSearchTerm) sourceHtml = highlightTextInHtml(sourceHtml, rangeSearchTerm);
         document.querySelector('#source-body').innerHTML = sourceHtml;
         attachInlineDict(document.querySelector('#source-body'));
@@ -289,7 +300,7 @@ export async function render(route, mount, shell) {
  * Small works (<200 lines) render in full; larger works paginate with
  * prev/next + page number buttons.
  */
-function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
+function renderRangelessBilingual(sourceWork, translationWork, route, mount, segmentMap) {
     const PAGE = 50;
     const allSourceLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
     const totalLines = allSourceLines.length;
@@ -331,7 +342,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
 
     function renderPage(page) {
         const lines = pageSlice(page);
-        let srcHtml = renderLinesHtml(lines);
+        let srcHtml = renderLinesHtml(lines, segmentMap);
         let trnHtml = renderLinesHtml(pairTranslation(lines));
         if (searchTerm) {
             srcHtml = highlightTextInHtml(srcHtml, searchTerm);
@@ -385,7 +396,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
 
     const wrap = document.querySelector('#outline-wrap') || mount;
     const initLines = pageSlice(currentPage);
-    let initSrcHtml = renderLinesHtml(initLines);
+    let initSrcHtml = renderLinesHtml(initLines, segmentMap);
     let initTrnHtml = renderLinesHtml(pairTranslation(initLines));
     if (searchTerm) {
         initSrcHtml = highlightTextInHtml(initSrcHtml, searchTerm);
@@ -465,7 +476,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount) {
  * small works (<200), otherwise paginates in chunks of 50 with a "Show more"
  * button.
  */
-function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
+function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, segmentMap) {
     const PAGE = 50;
     const allLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
     const totalLines = allLines.length;
@@ -497,7 +508,7 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
     }
 
     function renderPage(page) {
-        let html = renderLinesHtml(pageSlice(page));
+        let html = renderLinesHtml(pageSlice(page), segmentMap);
         if (searchTerm2) html = highlightTextInHtml(html, searchTerm2);
         const body = document.querySelector('#firstn-source-body');
         body.innerHTML = html;
@@ -544,7 +555,7 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation) {
     }
 
     const wrap = document.querySelector('#outline-wrap') || mount;
-    let initHtml = renderLinesHtml(pageSlice(currentPage));
+    let initHtml = renderLinesHtml(pageSlice(currentPage), segmentMap);
     if (searchTerm2) initHtml = highlightTextInHtml(initHtml, searchTerm2);
     wrap.innerHTML = `
         <article class="panel outline-panel">
