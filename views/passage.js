@@ -1213,6 +1213,12 @@ function wireFlowScrollSync(srcBody, trnBody) {
     if (srcBody._flowSyncWired) return;
     srcBody._flowSyncWired = true;
     let lock = false;
+    // Pane-relative Y that is immune to intermediate positioned ancestors:
+    // merged mode wraps anchors in position:relative .merged-seg blocks, which
+    // makes offsetTop segment-relative and silently breaks the mapping.
+    function paneTop(el, pane) {
+        return el.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop;
+    }
     function topVisibleRow(pane) {
         const rows = pane.querySelectorAll('[data-line-id]'); // rows OR merged inline spans
         if (!rows.length) return null;
@@ -1220,7 +1226,7 @@ function wireFlowScrollSync(srcBody, trnBody) {
         const target = pane.scrollTop + 4;
         while (lo <= hi) {
             const mid = (lo + hi) >> 1;
-            if (rows[mid].offsetTop <= target) { best = mid; lo = mid + 1; }
+            if (paneTop(rows[mid], pane) <= target) { best = mid; lo = mid + 1; }
             else hi = mid - 1;
         }
         return rows[best];
@@ -1233,7 +1239,7 @@ function wireFlowScrollSync(srcBody, trnBody) {
             const id = row && row.dataset.lineId;
             if (id) {
                 const peer = to.querySelector('[data-line-id="' + CSS.escape(id) + '"]');
-                if (peer) to.scrollTop = peer.offsetTop;
+                if (peer) to.scrollTop = paneTop(peer, to);
             }
             setTimeout(() => { lock = false; }, 60);
         });
