@@ -2032,10 +2032,20 @@ mark.find-highlight--active {
 /* Native dropdown popup: without explicit option colors the OS renders the
    list light while the text stays theme-light -> white-on-white (same fix as
    .masters-filter-select). */
+.align-mode-ctl select,
+.page-size-ctl select {
+    /* The popup CHROME follows the select's own color-scheme; option colors
+       alone leave the list frame white in dark theme. */
+    color-scheme: dark;
+}
+:root[data-theme="light"] .align-mode-ctl select,
+:root[data-theme="light"] .page-size-ctl select {
+    color-scheme: light;
+}
 .align-mode-ctl select option,
 .page-size-ctl select option {
-    background: var(--paper-strong, #1c1812);
-    color: var(--text);
+    background: #1c1812;
+    color: #e8ddc8;
 }
 :root[data-theme="light"] .align-mode-ctl select {
     background: #fff;
@@ -2043,7 +2053,7 @@ mark.find-highlight--active {
 :root[data-theme="light"] .align-mode-ctl select option,
 :root[data-theme="light"] .page-size-ctl select option {
     background: #fff;
-    color: var(--text);
+    color: #2b2317;
 }
 
 /* Stacked (narrow) layouts: split the viewport between the two flow panes. */
