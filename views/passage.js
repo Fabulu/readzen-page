@@ -7,7 +7,7 @@
 // link via an iframe before calling `render`. If the app takes over the OS
 // tab, this view simply never finishes loading — which is fine.
 
-import { escapeHtml, sliceLines, sliceFirstN, renderLinesHtml } from '../lib/format.js';
+import { escapeHtml, sliceLines, sliceFirstN, renderLinesHtml, renderMergedHtml } from '../lib/format.js';
 import { loadSegmentMap } from '../lib/segment-map.js';
 import { highlightTextInHtml, scrollToFirstHighlight, scrollToLineId, findPageForTerm, findPageForLineId } from '../lib/highlight.js';
 import { parseTei } from '../lib/tei.js';
@@ -347,11 +347,26 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
     const titleEn = translationWork.titleEn || sourceWork.titleEn || '';
 
     const viewPref = readViewPref();
-    // Bilingual alignment mode (reader-prefs): flow | blocks | lines | interleaved.
+    // Bilingual alignment mode (reader-prefs). Merged modes need a segment map;
+    // without one they fall back to their nearest line-layout sibling.
     const alignMode = getBilingualMode();
+    const canMerge = segmentMap && segmentMap.size > 0;
+    const effMode = (alignMode === 'merged-stacked' && !canMerge) ? 'interleaved'
+        : (alignMode === 'merged-flow' && !canMerge) ? 'flow'
+        : alignMode;
 
     function buildBodiesHtml(lines) {
-        if (alignMode === 'interleaved') {
+        if (effMode === 'merged-stacked') {
+            return { srcHtml: renderMergedHtml(lines, segmentMap, pairTranslation(lines), { stacked: true }), trnHtml: '' };
+        }
+        if (effMode === 'merged-flow') {
+            const trn = pairTranslation(lines);
+            return {
+                srcHtml: renderMergedHtml(lines, segmentMap, null, { side: 'zh' }),
+                trnHtml: renderMergedHtml(lines, segmentMap, trn, { side: 'en' }),
+            };
+        }
+        if (effMode === 'interleaved') {
             // Single column: each ZH line immediately followed by its EN line.
             const trn = pairTranslation(lines);
             let html = '';
@@ -373,14 +388,14 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
     function applyAlignMode() {
         const srcBody = document.querySelector('#source-body');
         const trnBody = document.querySelector('#translation-body');
-        if (alignMode === 'flow') {
+        if (effMode === 'flow' || effMode === 'merged-flow') {
             if (srcBody && trnBody) wireFlowScrollSync(srcBody, trnBody);
             setActiveRowSync(null);
-        } else if (alignMode === 'blocks') {
+        } else if (effMode === 'blocks') {
             setActiveRowSync(() => syncSegmentBlocks(segmentMap));
             window.requestAnimationFrame(() => syncSegmentBlocks(segmentMap));
             wireRowSyncStability();
-        } else if (alignMode === 'lines') {
+        } else if (effMode === 'lines') {
             setActiveRowSync(syncRowHeights);
             window.requestAnimationFrame(syncRowHeights);
             wireRowSyncStability();
@@ -457,11 +472,11 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
         initSrcHtml = highlightTextInHtml(initSrcHtml, searchTerm);
         initTrnHtml = highlightTextInHtml(initTrnHtml, searchTerm);
     }
-    const gridClass = alignMode === 'flow' ? 'preview-grid preview-grid--flow'
-        : alignMode === 'interleaved' ? 'preview-grid preview-grid--inter'
+    const gridClass = (effMode === 'flow' || effMode === 'merged-flow') ? 'preview-grid preview-grid--flow'
+        : (effMode === 'interleaved' || effMode === 'merged-stacked') ? 'preview-grid preview-grid--inter'
         : 'preview-grid';
     wrap.innerHTML = `
-        ${alignMode === 'interleaved' ? '' : buildViewToggle(viewPref)}
+        ${(effMode === 'interleaved' || effMode === 'merged-stacked') ? '' : buildViewToggle(viewPref)}
         ${buildAlignSelect(alignMode)}
         ${buildTranslatorSwitcher(route)}
         <div class="${gridClass}" id="preview-grid">
@@ -475,7 +490,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
                     ${initSrcHtml}
                 </div>
             </article>
-            <article class="panel" id="translation-panel" ${viewPref === 'zh' || alignMode === 'interleaved' ? 'hidden' : ''}>
+            <article class="panel" id="translation-panel" ${viewPref === 'zh' || effMode === 'interleaved' || effMode === 'merged-stacked' ? 'hidden' : ''}>
                 <div class="panel-head">
                     <p class="panel-label">Translation</p>
                     <p class="panel-meta">${escapeHtml(titleEn || 'Community translation')}</p>
@@ -1199,7 +1214,7 @@ function wireFlowScrollSync(srcBody, trnBody) {
     srcBody._flowSyncWired = true;
     let lock = false;
     function topVisibleRow(pane) {
-        const rows = pane.querySelectorAll('.line-row[data-line-id]');
+        const rows = pane.querySelectorAll('[data-line-id]'); // rows OR merged inline spans
         if (!rows.length) return null;
         let lo = 0, hi = rows.length - 1, best = 0;
         const target = pane.scrollTop + 4;
@@ -1229,15 +1244,14 @@ function wireFlowScrollSync(srcBody, trnBody) {
 
 /** Alignment-mode selector (bilingual texts; persisted in reader-prefs). */
 function buildAlignSelect(mode) {
-    const opts = [
-        ['flow', 'Synced panes (natural flow)'],
-        ['blocks', 'Aligned blocks'],
-        ['lines', 'Aligned lines'],
-        ['interleaved', 'Interleaved'],
-    ].map(([v, label]) =>
-        '<option value="' + v + '"' + (v === mode ? ' selected' : '') + '>' + label + '</option>'
-    ).join('');
-    return '<label class="align-mode-ctl">Layout <select id="align-mode-select">' + opts + '</select></label>';
+    const opt = (v, label) => '<option value="' + v + '"' + (v === mode ? ' selected' : '') + '>' + label + '</option>';
+    const lineGroup = opt('flow', 'Synced panes (natural flow)') + opt('blocks', 'Aligned blocks') +
+        opt('lines', 'Aligned lines') + opt('interleaved', 'Interleaved');
+    const mergedGroup = opt('merged-flow', 'Merged panes') + opt('merged-stacked', 'Merged, ZH then EN');
+    return '<label class="align-mode-ctl">Layout <select id="align-mode-select">' +
+        '<optgroup label="Line layouts">' + lineGroup + '</optgroup>' +
+        '<optgroup label="Merged reading (needs segment map)">' + mergedGroup + '</optgroup>' +
+        '</select></label>';
 }
 
 function wireAlignSelect(container, route) {

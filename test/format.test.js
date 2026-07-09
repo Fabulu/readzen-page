@@ -8,7 +8,8 @@ import {
     normalizeText,
     sliceLines,
     sliceFirstN,
-    renderLinesHtml
+    renderLinesHtml,
+    renderMergedHtml
 } from '../lib/format.js';
 
 // ---------- escapeHtml ----------
@@ -175,4 +176,60 @@ test('renderLinesHtml with lineLinks emits a copy button per real line', () => {
     assert.ok(html.includes('data-link-id="0001a01"'));
     // spacer rows get no button
     assert.strictEqual((html.match(/line-link/g) || []).length, 1);
+});
+
+// -- renderMergedHtml (merged reading layouts) --
+
+const M_LINES = [
+    { id: 'a1', text: '甲甲' }, { id: 'a2', text: '乙乙' },   // segment U1 (dialogue)
+    { id: '__pb_break_1', text: '' },                          // spacer - skipped
+    { id: 'b1', text: '丙丙' },                                // segment U2 (verse)
+];
+const M_TRN = [
+    { id: 'a1', text: 'first line' }, { id: 'a2', text: 'second line' },
+    { id: '__pb_break_1', text: '' },
+    { id: 'b1', text: '' },                                    // untranslated
+];
+const M_MAP = new Map([
+    ['a1', { unitId: 'U1', type: 'dialogue' }],
+    ['a2', { unitId: 'U1', type: 'dialogue' }],
+    ['b1', { unitId: 'U2', type: 'verse' }],
+]);
+
+test('renderMergedHtml groups consecutive lines by segment unit', () => {
+    const html = renderMergedHtml(M_LINES, M_MAP, null, { side: 'zh' });
+    assert.strictEqual((html.match(/class="merged-seg/g) || []).length, 2);
+    assert.ok(html.includes('merged-seg--dialogue'));
+    assert.ok(html.includes('merged-seg--verse'));
+    // both lines of U1 live in ONE paragraph, healed across the woodblock cut
+    const firstPara = html.split('</p>')[0];
+    assert.ok(firstPara.includes('甲甲') && firstPara.includes('乙乙'));
+});
+
+test('renderMergedHtml keeps per-line anchors as inline line-text spans', () => {
+    const html = renderMergedHtml(M_LINES, M_MAP, null, { side: 'zh' });
+    for (const id of ['a1', 'a2', 'b1']) {
+        assert.ok(html.includes('data-line-id="' + id + '"'), id);
+    }
+    assert.ok(html.includes('<span class="line-text"')); // highlight machinery target
+    assert.ok(!html.includes('__pb_break'));             // spacers dropped
+});
+
+test('renderMergedHtml stacked emits ZH then EN paragraphs per segment', () => {
+    const html = renderMergedHtml(M_LINES, M_MAP, M_TRN, { stacked: true });
+    assert.ok(html.indexOf('merged-text--zh') < html.indexOf('merged-text--en'));
+    assert.ok(html.includes('first line second line') || (html.includes('first line') && html.includes('second line')));
+});
+
+test('renderMergedHtml en side marks untranslated segments', () => {
+    const html = renderMergedHtml(M_LINES, M_MAP, M_TRN, { side: 'en' });
+    assert.ok(html.includes('merged-text--missing')); // U2 has no EN
+});
+
+test('renderMergedHtml escapes text and sanitizes type classes', () => {
+    const lines = [{ id: 'x1', text: '<b>evil</b>' }];
+    const map = new Map([['x1', { unitId: 'U9', type: 'bad"type<' }]]);
+    const html = renderMergedHtml(lines, map, null, { side: 'zh' });
+    assert.ok(!html.includes('<b>evil</b>'));
+    assert.ok(html.includes('merged-seg--badtype'));
 });

@@ -1996,6 +1996,46 @@ mark.find-highlight--active {
     overscroll-behavior: contain;
 }
 
+/* -- Merged reading (segment paragraphs; desktop-reading-layout style) -- */
+.merged-seg {
+    position: relative;
+    padding: 0.55rem 1.35rem;
+}
+.merged-text {
+    margin: 0;
+    line-height: 1.85;
+}
+.merged-text--zh {
+    font-size: 1.05rem;
+}
+.merged-text--en {
+    margin-top: 0.35rem;
+    color: var(--text-soft);
+    font-size: 0.94rem;
+    line-height: 1.7;
+}
+.merged-text--missing {
+    font-style: italic;
+    opacity: 0.55;
+}
+/* Type tint: whole paragraphs carry the semantic color (stronger than the
+   per-line whisper - a paragraph can afford it). */
+.merged-seg--verse { border-left: 3px solid rgba(150, 180, 220, 0.45); background: rgba(150, 180, 220, 0.05); }
+.merged-seg--verse .merged-text--zh { text-align: center; letter-spacing: 0.06em; }
+.merged-seg--dialogue { border-left: 3px solid rgba(212, 171, 88, 0.45); background: rgba(212, 171, 88, 0.04); }
+.merged-seg--commentary { border-left: 3px solid rgba(140, 200, 140, 0.4); background: rgba(140, 200, 140, 0.045); }
+/* Per-segment copy link mirrors the per-line one. */
+.merged-seg .line-link--seg {
+    top: 0.55rem;
+    transform: none;
+}
+.merged-seg:hover .line-link--seg { opacity: 1; }
+/* Arrival highlight works on the inline span. */
+.merged-text .line-text.scroll-target {
+    background: var(--accent-soft);
+    box-shadow: inset 0 -2px 0 rgba(212, 171, 88, 0.85);
+}
+
 /* Interleaved: single column; English rows read as glossed continuation. */
 .preview-grid--inter {
     grid-template-columns: 1fr;
