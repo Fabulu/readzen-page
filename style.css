@@ -1117,6 +1117,7 @@ code, .mono { font-family: var(--mono); }
 /* Per-line copy-link: invisible until the row is hovered/focused; absolutely
    positioned so it never affects row height (cross-pane sync) or text flow. */
 .line-link {
+    user-select: none; /* keep the button glyph out of copied text */
     position: absolute;
     right: 0.3rem;
     top: 50%;
@@ -2046,12 +2047,12 @@ mark.find-highlight--active {
 .line-row {
     position: relative; /* anchors the per-line copy-link button */
     display: grid;
-    /* line-id column floors at 5rem (fits CBETA "0292c23" with breathing room
-       and aligns with .outline-row's juan column). OpenZen synthetic IDs
-       ("wm32.case01.wumen.l05", up to ~22 chars) extend the column up to
-       max-content. Gap kept tight (0.5rem) to keep ID visually subordinate
-       to text. */
-    grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr);
+    /* FIXED-width id column: each .line-row is its own grid, so the previous
+       minmax(5rem, max-content) sized the column PER ROW - OpenZen's variable-
+       length synthetic ids ("wm32.case01.wumen.l05") made every line's text
+       start at a different x (ragged, unreadable). Fixed width aligns all
+       rows; long ids ellipsize and show in full on hover (title attr). */
+    grid-template-columns: 5.5rem minmax(0, 1fr);
     gap: 0.5rem;
     align-items: start;
     padding: 0.12rem 1.35rem; /* was 0.4rem - reading flow: rows read continuously */
@@ -2064,6 +2065,10 @@ mark.find-highlight--active {
 
 .line-id {
     opacity: 0.42; /* subordinate at rest; hover/active/current restore full presence */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: none; /* selecting text must not drag ids into the clipboard */
     color: rgba(212, 171, 88, 0.58);
     font-family: var(--mono);
     font-size: 0.72rem;
