@@ -359,16 +359,17 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
     // semantics attach heading lines to the FOLLOWING body unit, so without
     // this the merged paragraphs swallow case titles and chapter boundaries.
     const headingIds = new Set((sourceWork.headings || []).map((h) => h.lineId).filter(Boolean));
+    const bylineIds = new Set((sourceWork.bylines || []).map((b) => b.lineId).filter(Boolean));
 
     function buildBodiesHtml(lines) {
         if (effMode === 'merged-stacked') {
-            return { srcHtml: renderMergedHtml(lines, segmentMap, pairTranslation(lines), { stacked: true, headingIds }), trnHtml: '' };
+            return { srcHtml: renderMergedHtml(lines, segmentMap, pairTranslation(lines), { stacked: true, headingIds, bylineIds }), trnHtml: '' };
         }
         if (effMode === 'merged-flow') {
             const trn = pairTranslation(lines);
             return {
-                srcHtml: renderMergedHtml(lines, segmentMap, null, { side: 'zh', headingIds }),
-                trnHtml: renderMergedHtml(lines, segmentMap, trn, { side: 'en', headingIds }),
+                srcHtml: renderMergedHtml(lines, segmentMap, null, { side: 'zh', headingIds, bylineIds }),
+                trnHtml: renderMergedHtml(lines, segmentMap, trn, { side: 'en', headingIds, bylineIds }),
             };
         }
         if (effMode === 'interleaved') {

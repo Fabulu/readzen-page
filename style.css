@@ -2040,6 +2040,18 @@ mark.find-highlight--active {
    per-line whisper - a paragraph can afford it). */
 .merged-seg--verse { border-left: 3px solid rgba(150, 180, 220, 0.45); background: rgba(150, 180, 220, 0.05); }
 .merged-seg--verse .merged-text--zh { text-align: center; letter-spacing: 0.06em; }
+/* Verse lines stay LINES: display:block per line-span restores the poem's
+   line breaks that the separator-less join would erase (Xinxinming = one
+   748-char wall otherwise). Anchors/highlights unaffected. */
+.merged-seg--verse .line-text { display: block; }
+/* Editorial attributions broken out of the flow - quiet, not heading-gold. */
+.merged-byline {
+    padding: 0.15rem 1.35rem 0.4rem;
+    color: var(--text-soft);
+    font-size: 0.86rem;
+    font-style: italic;
+    text-align: right;
+}
 .merged-seg--dialogue { border-left: 3px solid rgba(212, 171, 88, 0.45); background: rgba(212, 171, 88, 0.04); }
 .merged-seg--commentary { border-left: 3px solid rgba(140, 200, 140, 0.4); background: rgba(140, 200, 140, 0.045); }
 /* Per-segment copy link mirrors the per-line one. */

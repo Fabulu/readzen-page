@@ -253,3 +253,16 @@ test('renderMergedHtml breaks headings out of the running paragraph', () => {
     // heading precedes the paragraph
     assert.ok(html.indexOf('merged-head') < html.indexOf('<p'));
 });
+
+test('renderMergedHtml breaks bylines out as quiet attribution blocks', () => {
+    const lines = [
+        { id: 'b0', text: '參學比丘彌衍宗紹編' },  // byline (glued into U1 by the map)
+        { id: 'a1', text: '正文開始' },
+    ];
+    const map = new Map([['b0', { unitId: 'U1', type: 'prose' }], ['a1', { unitId: 'U1', type: 'prose' }]]);
+    const html = renderMergedHtml(lines, map, null, { side: 'zh', bylineIds: new Set(['b0']) });
+    assert.ok(html.includes('class="merged-byline"'));
+    const para = html.slice(html.indexOf('<p'));
+    assert.ok(!para.includes('宗紹編'));
+    assert.ok(para.includes('正文開始'));
+});

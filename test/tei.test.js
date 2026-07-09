@@ -224,3 +224,18 @@ test('parseTei: <g> elements contribute their text content', () => {
     assert.ok(text.includes('pre'));
     assert.ok(text.includes('post'));
 });
+
+test('parseTei: cb:jhead becomes a heading; byline collected separately', () => {
+    const xml = `<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:cb="http://www.cbeta.org/ns/1.0">
+<teiHeader><fileDesc><titleStmt><title>t</title></titleStmt></fileDesc></teiHeader>
+<text><body>
+<cb:jhead>無門關</cb:jhead>
+<lb n="0001a01" ed="T"/><byline cb:type="Editor">宗紹編</byline>
+<p><lb n="0001a02" ed="T"/>正文</p>
+</body></text></TEI>`;
+    const parsed = parseTei(xml);
+    assert.ok(parsed.headings.some((h) => h.text.includes('無門關')), 'jhead in headings[]');
+    assert.ok(Array.isArray(parsed.bylines), 'bylines array exists');
+    assert.ok(parsed.bylines.some((b) => b.text.includes('宗紹編')), 'byline collected');
+});
