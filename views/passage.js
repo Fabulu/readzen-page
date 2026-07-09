@@ -29,6 +29,13 @@ import { registerFindNavigator } from '../lib/keyboard.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+// Same per-module constant as landing.js / shell.js / app.js. The
+// translation-not-available notice referenced this WITHOUT declaring it since
+// 2026-04-18 — a strict-mode ReferenceError that let the notice's own crash
+// replace an already-rendered passage with "Preview failed to load" for every
+// ranged view of an untranslated text.
+const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
+
 // Active find-bar global keydown listeners. The mountFindBar handler
 // self-removes on the next keystroke after the mount detaches, but if the
 // user navigates without typing the listener leaks until then. The router
