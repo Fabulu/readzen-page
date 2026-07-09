@@ -10,6 +10,7 @@ import { loadAllTitlesAsArray, getWorkId } from '../lib/titles.js';
 import { federatedSearch, loadAndSearchXml } from '../lib/search.js';
 import { verifyDocPhrase, getManifestInfo } from '../lib/bigram-search.js';
 import { normalizeString, isCjk } from '../lib/cjk-normalize.js';
+import { getRecentSearches, addRecentSearch } from '../lib/search-history.js';
 import { loadMasters } from './master.js';
 
 const TITLES_URL = DATA_REPO_BASE + 'titles.jsonl';
@@ -293,7 +294,8 @@ export async function render(route, mount, shell) {
         groupArr.sort(function (a, b) { return (b.hitCount || 0) - (a.hitCount || 0); });
 
         if (groupArr.length === 0 && finalized) {
-            ftContainer.innerHTML = '<p class="muted" style="padding:0.5rem 1rem;">No full-text matches.</p>';
+            ftContainer.innerHTML = '<p class="muted" style="padding:0.5rem 1rem;">No full-text matches.</p>' +
+                buildEmptyStateHelp(query);
             if (ftLabel) {
                 var spinner = ftLabel.querySelector('#ft-loading');
                 if (spinner) spinner.remove();
@@ -485,6 +487,27 @@ export async function render(route, mount, shell) {
     }
 
     /** Browse all titles with filters (no query). */
+    /** Zero-result recovery: when a filter is active, offer to search everything. */
+    function buildEmptyStateHelp(q) {
+        var filterActive = getTransFilter() !== 'all' || isZenOnly() || !!corpusFilter;
+        if (!q || !q.trim() || !filterActive) return '';
+        return '<p class="muted search-empty-help" style="padding:0 1rem 0.5rem;">' +
+            'Filters are limiting this search. ' +
+            '<button type="button" class="btn btn--small" id="search-all-instead">Search all texts</button></p>';
+    }
+
+    /** Recent-searches chip row for the empty-query browse state. */
+    function buildRecentChips() {
+        var recent = getRecentSearches();
+        if (!recent.length) return '';
+        var chips = recent.map(function(q) {
+            return '<button type="button" class="btn btn--small search-recent-chip" data-q="' +
+                escapeHtml(q) + '">' + escapeHtml(q) + '</button>';
+        }).join(' ');
+        return '<div class="search-recent-row" style="padding:0.35rem 1rem 0.6rem;">' +
+            '<span class="muted" style="font-size:0.82rem;margin-right:0.4rem;">Recent:</span>' + chips + '</div>';
+    }
+
     function doBrowseAll(page) {
         const transFilter = getTransFilter();
 
@@ -528,7 +551,7 @@ export async function render(route, mount, shell) {
         const start = (currentPage - 1) * PAGE_SIZE;
         const pageItems = lastResults.slice(start, start + PAGE_SIZE);
 
-        body.innerHTML = pageItems.map(function(t) {
+        body.innerHTML = buildRecentChips() + pageItems.map(function(t) {
             var zh = (t.zh || t.Zh || '').toString();
             var en = (t.en || t.En || '').toString();
             var enShort = (t.enShort || t.EnShort || '').toString();
@@ -1092,15 +1115,60 @@ export async function render(route, mount, shell) {
         }
     }
 
-    form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        var q = input.value;
+    function syncHashAndSearch(q) {
         var corpusParam = cf ? '&corpus=' + encodeURIComponent(cf) : '';
-        var newHash = '#/search' + (q ? '?q=' + encodeURIComponent(q) + corpusParam : '');
+        var newHash = '#/search' + (q.trim() ? '?q=' + encodeURIComponent(q) + corpusParam : '');
         if (window.location.hash !== newHash) {
+            // replaceState keeps the URL shareable without firing hashchange
+            // (which would re-render the view and steal input focus) and
+            // without one history entry per keystroke.
             window.history.replaceState(null, '', newHash);
         }
         doSearch(q, 1);
+    }
+
+    // Search-as-you-type: a v3 query costs ~25ms and a few hundred KB, so
+    // waiting for Enter is a v2-era relic. Debounced; doSearch's per-query
+    // AbortController already cancels superseded searches mid-flight, and
+    // streaming results paint incrementally.
+    var typeTimer = null;
+    var lastRan = initialQuery;
+    input.addEventListener('input', function() {
+        clearTimeout(typeTimer);
+        typeTimer = setTimeout(function() {
+            var q = input.value;
+            if (q === lastRan) return;
+            lastRan = q;
+            syncHashAndSearch(q);
+        }, 250);
+    });
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        clearTimeout(typeTimer); // Enter supersedes a pending debounce tick
+        lastRan = input.value;
+        addRecentSearch(input.value);
+        syncHashAndSearch(input.value);
+    });
+
+    // Delegated: recent-search chips, filter-recovery button, and recording a
+    // query as "worth remembering" when a result actually gets clicked.
+    body.addEventListener('click', function(e) {
+        var chip = e.target.closest ? e.target.closest('.search-recent-chip') : null;
+        if (chip) {
+            input.value = chip.dataset.q || '';
+            lastRan = input.value;
+            syncHashAndSearch(input.value);
+            return;
+        }
+        if (e.target.id === 'search-all-instead') {
+            filterRadios.forEach(function(r) { r.checked = r.value === 'all'; });
+            if (zenCheckbox) zenCheckbox.checked = false;
+            doSearch(input.value, 1);
+            return;
+        }
+        var resultLink = e.target.closest ? e.target.closest('a.search-group-open, .search-group summary, a.title-row') : null;
+        if (resultLink && input.value.trim()) addRecentSearch(input.value);
     });
 
     // Re-run search when filter changes
