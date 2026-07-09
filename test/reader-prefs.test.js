@@ -8,7 +8,8 @@ globalThis.localStorage = {
     removeItem: (k) => store.delete(k),
 };
 
-const { getPageSize, setPageSize, PAGE_SIZE_OPTIONS, DEFAULT_PAGE_SIZE } =
+const { getPageSize, setPageSize, PAGE_SIZE_OPTIONS, DEFAULT_PAGE_SIZE,
+    getBilingualMode, setBilingualMode, BILINGUAL_MODES, DEFAULT_BILINGUAL_MODE } =
     await import('../lib/reader-prefs.js');
 
 test('page size: defaults, persists, whitelists', () => {
@@ -31,4 +32,19 @@ test('page size: corrupt storage falls back to default', () => {
 test('option list shape', () => {
     assert.ok(PAGE_SIZE_OPTIONS.includes(DEFAULT_PAGE_SIZE));
     assert.strictEqual(PAGE_SIZE_OPTIONS[PAGE_SIZE_OPTIONS.length - 1], 'all');
+});
+
+test('bilingual mode: defaults to flow, persists, whitelists', () => {
+    assert.strictEqual(DEFAULT_BILINGUAL_MODE, 'flow');
+    assert.strictEqual(getBilingualMode(), 'flow');
+    setBilingualMode('interleaved');
+    assert.strictEqual(getBilingualMode(), 'interleaved');
+    setBilingualMode('nonsense');
+    assert.strictEqual(getBilingualMode(), 'interleaved');
+    for (const m of BILINGUAL_MODES) { setBilingualMode(m); assert.strictEqual(getBilingualMode(), m); }
+});
+
+test('bilingual mode: corrupt storage falls back to flow', () => {
+    localStorage.setItem('zl:bilingual-mode', '42');
+    assert.strictEqual(getBilingualMode(), 'flow');
 });

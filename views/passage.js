@@ -26,7 +26,7 @@ import { attachSelectionMirror } from '../lib/selection-sync.js';
 import { addToList, removeFromList, isInList, setLastRead, resumeLastReadTracking } from '../lib/reading-lists.js';
 import { CITE_STYLES, buildCitation, getPreferredStyle, setPreferredStyle } from '../lib/citation.js';
 import { registerFindNavigator } from '../lib/keyboard.js';
-import { getPageSize, PAGE_SIZE_OPTIONS } from '../lib/reader-prefs.js';
+import { getPageSize, PAGE_SIZE_OPTIONS, getBilingualMode, setBilingualMode } from '../lib/reader-prefs.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -347,6 +347,45 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
     const titleEn = translationWork.titleEn || sourceWork.titleEn || '';
 
     const viewPref = readViewPref();
+    // Bilingual alignment mode (reader-prefs): flow | blocks | lines | interleaved.
+    const alignMode = getBilingualMode();
+
+    function buildBodiesHtml(lines) {
+        if (alignMode === 'interleaved') {
+            // Single column: each ZH line immediately followed by its EN line.
+            const trn = pairTranslation(lines);
+            let html = '';
+            for (let i = 0; i < lines.length; i++) {
+                html += renderLinesHtml([lines[i]], segmentMap, { lineLinks: true });
+                const t = trn[i];
+                if (t && t.text && !String(t.id).startsWith('__')) {
+                    html += renderLinesHtml([t], undefined, { rowClass: 'line-row--inter-en' });
+                }
+            }
+            return { srcHtml: html, trnHtml: '' };
+        }
+        return {
+            srcHtml: renderLinesHtml(lines, segmentMap, { lineLinks: true }),
+            trnHtml: renderLinesHtml(pairTranslation(lines), undefined, { lineLinks: true }),
+        };
+    }
+
+    function applyAlignMode() {
+        const srcBody = document.querySelector('#source-body');
+        const trnBody = document.querySelector('#translation-body');
+        if (alignMode === 'flow') {
+            if (srcBody && trnBody) wireFlowScrollSync(srcBody, trnBody);
+            setActiveRowSync(null);
+        } else if (alignMode === 'blocks') {
+            setActiveRowSync(() => syncSegmentBlocks(segmentMap));
+            window.requestAnimationFrame(() => syncSegmentBlocks(segmentMap));
+            wireRowSyncStability();
+        } else if (alignMode === 'lines') {
+            setActiveRowSync(syncRowHeights);
+            window.requestAnimationFrame(syncRowHeights);
+            wireRowSyncStability();
+        } // interleaved: nothing to sync
+    }
 
     function pageSlice(page) {
         if (showAll) return allSourceLines;
@@ -356,20 +395,19 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
 
     function renderPage(page) {
         const lines = pageSlice(page);
-        let srcHtml = renderLinesHtml(lines, segmentMap, { lineLinks: true });
-        let trnHtml = renderLinesHtml(pairTranslation(lines), undefined, { lineLinks: true });
+        let { srcHtml, trnHtml } = buildBodiesHtml(lines);
         if (searchTerm) {
             srcHtml = highlightTextInHtml(srcHtml, searchTerm);
             trnHtml = highlightTextInHtml(trnHtml, searchTerm);
         }
         const srcBody = document.querySelector('#source-body');
         srcBody.innerHTML = srcHtml;
-        document.querySelector('#translation-body').innerHTML = trnHtml;
+        const trnBody = document.querySelector('#translation-body');
+        if (trnBody) trnBody.innerHTML = trnHtml;
         attachInlineDict(srcBody);
         insertApparatusMarkers(srcBody, sourceWork.apparatus);
         attachApparatusPopup(srcBody, sourceWork.apparatus, sourceWork.witnessMap);
-        window.requestAnimationFrame(syncRowHeights);
-        wireRowSyncStability();
+        applyAlignMode();
         updatePaginationUI();
         if (scrollLineId && page === findPageForLineId(allSourceLines, scrollLineId, PAGE)) {
             scrollToLineId(srcBody, scrollLineId);
@@ -414,16 +452,19 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
 
     const wrap = document.querySelector('#outline-wrap') || mount;
     const initLines = pageSlice(currentPage);
-    let initSrcHtml = renderLinesHtml(initLines, segmentMap, { lineLinks: true });
-    let initTrnHtml = renderLinesHtml(pairTranslation(initLines), undefined, { lineLinks: true });
+    let { srcHtml: initSrcHtml, trnHtml: initTrnHtml } = buildBodiesHtml(initLines);
     if (searchTerm) {
         initSrcHtml = highlightTextInHtml(initSrcHtml, searchTerm);
         initTrnHtml = highlightTextInHtml(initTrnHtml, searchTerm);
     }
+    const gridClass = alignMode === 'flow' ? 'preview-grid preview-grid--flow'
+        : alignMode === 'interleaved' ? 'preview-grid preview-grid--inter'
+        : 'preview-grid';
     wrap.innerHTML = `
-        ${buildViewToggle(viewPref)}
+        ${alignMode === 'interleaved' ? '' : buildViewToggle(viewPref)}
+        ${buildAlignSelect(alignMode)}
         ${buildTranslatorSwitcher(route)}
-        <div class="preview-grid" id="preview-grid">
+        <div class="${gridClass}" id="preview-grid">
             <article class="panel" id="source-panel" ${viewPref === 'en' ? 'hidden' : ''}>
                 <div class="panel-head">
                     <p class="panel-label">Chinese Source</p>
@@ -434,7 +475,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
                     ${initSrcHtml}
                 </div>
             </article>
-            <article class="panel" id="translation-panel" ${viewPref === 'zh' ? 'hidden' : ''}>
+            <article class="panel" id="translation-panel" ${viewPref === 'zh' || alignMode === 'interleaved' ? 'hidden' : ''}>
                 <div class="panel-head">
                     <p class="panel-label">Translation</p>
                     <p class="panel-meta">${escapeHtml(titleEn || 'Community translation')}</p>
@@ -450,12 +491,13 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
     `;
 
     wireViewToggle(wrap);
+    wireAlignSelect(wrap, route);
     wireTranslatorSwitcher(wrap, route);
     mountLicenseChip(wrap.querySelector('#translator-switcher'), translationWork, route);
     if (!showAll) wirePageButtons(wrap.querySelector('#page-nav'));
     wirePageSizeSelect(wrap, route);
 
-    window.requestAnimationFrame(syncRowHeights);
+    applyAlignMode();
     const sourceBody = document.querySelector('#source-body');
     const translationBody = document.querySelector('#translation-body');
     attachInlineDict(sourceBody);
@@ -928,7 +970,9 @@ function mountBookmarkButton(mount, fileId, title, route) {
 function trackScrollProgress(mount, fileId, title, route) {
     const rawRoute = route && route.rawRoute ? route.rawRoute : fileId;
     let ticking = false;
-    window.addEventListener('scroll', () => {
+    // Capture phase on document: catches BOTH window scrolling and the inner
+    // pane scrolling of flow mode, so resume-position works in every layout.
+    document.addEventListener('scroll', () => {
         if (ticking) return;
         ticking = true;
         window.requestAnimationFrame(() => {
@@ -944,7 +988,7 @@ function trackScrollProgress(mount, fileId, title, route) {
             setLastRead(fileId, title, pct, rawRoute, topLineId);
             ticking = false;
         });
-    });
+    }, true);
 }
 
 /** Build the passage toolbar fragment with Copy and Cite buttons. */
@@ -1089,17 +1133,134 @@ function syncRowHeights() {
 // with every row. Re-sync when fonts finish loading and on (debounced)
 // viewport resize. Wired once per session.
 let _rowSyncStabilityWired = false;
+let _activeRowSync = syncRowHeights; // the current mode's sync fn (null = no syncing)
+function setActiveRowSync(fn) { _activeRowSync = fn; }
+function runActiveRowSync() { if (_activeRowSync) _activeRowSync(); }
 function wireRowSyncStability() {
     if (_rowSyncStabilityWired) return;
     _rowSyncStabilityWired = true;
     if (document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(() => window.requestAnimationFrame(syncRowHeights));
+        document.fonts.ready.then(() => window.requestAnimationFrame(runActiveRowSync));
     }
     let t = null;
     window.addEventListener('resize', () => {
         clearTimeout(t);
-        t = setTimeout(() => window.requestAnimationFrame(syncRowHeights), 150);
+        t = setTimeout(() => window.requestAnimationFrame(runActiveRowSync), 150);
     });
+}
+
+/**
+ * Segment-block alignment: pad at BLOCK boundaries (consecutive rows whose
+ * lb maps to the same segment unit) instead of every line, so each language
+ * flows at its natural density within a thought and only thought-starts
+ * align. Texts without a segment map degrade to per-line sync.
+ */
+function syncSegmentBlocks(segmentMap) {
+    if (!segmentMap || segmentMap.size === 0) { syncRowHeights(); return; }
+    const src = document.querySelectorAll('#source-body .line-row');
+    const trn = document.querySelectorAll('#translation-body .line-row');
+    const count = Math.min(src.length, trn.length);
+    if (!count) return;
+
+    for (let i = 0; i < count; i++) {
+        src[i].style.minHeight = ''; trn[i].style.minHeight = '';
+        src[i].style.marginBottom = ''; trn[i].style.marginBottom = '';
+    }
+
+    // Group row indices into blocks by segment unit of the SOURCE row.
+    const blocks = [];
+    let start = 0;
+    let key = null;
+    for (let i = 0; i < count; i++) {
+        const id = src[i].dataset.lineId || '';
+        const seg = segmentMap.get(id);
+        const k = seg && seg.unitId ? seg.unitId : 'solo:' + i;
+        if (i === 0) { key = k; continue; }
+        if (k !== key) { blocks.push([start, i - 1]); start = i; key = k; }
+    }
+    blocks.push([start, count - 1]);
+
+    for (const [a, b] of blocks) {
+        let hs = 0, ht = 0;
+        for (let i = a; i <= b; i++) { hs += src[i].offsetHeight; ht += trn[i].offsetHeight; }
+        const diff = hs - ht;
+        if (diff > 0) trn[b].style.marginBottom = diff + 'px';
+        else if (diff < 0) src[b].style.marginBottom = (-diff) + 'px';
+    }
+}
+
+/**
+ * Flow mode: the panes scroll independently (each language at natural
+ * density); scrolling one keeps the peer's viewport on the same line id.
+ * Line ids are shared between panes, so mapping is direct id equality.
+ */
+function wireFlowScrollSync(srcBody, trnBody) {
+    if (srcBody._flowSyncWired) return;
+    srcBody._flowSyncWired = true;
+    let lock = false;
+    function topVisibleRow(pane) {
+        const rows = pane.querySelectorAll('.line-row[data-line-id]');
+        if (!rows.length) return null;
+        let lo = 0, hi = rows.length - 1, best = 0;
+        const target = pane.scrollTop + 4;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (rows[mid].offsetTop <= target) { best = mid; lo = mid + 1; }
+            else hi = mid - 1;
+        }
+        return rows[best];
+    }
+    function sync(from, to) {
+        if (lock) return;
+        lock = true;
+        window.requestAnimationFrame(() => {
+            const row = topVisibleRow(from);
+            const id = row && row.dataset.lineId;
+            if (id) {
+                const peer = to.querySelector('[data-line-id="' + CSS.escape(id) + '"]');
+                if (peer) to.scrollTop = peer.offsetTop;
+            }
+            setTimeout(() => { lock = false; }, 60);
+        });
+    }
+    srcBody.addEventListener('scroll', () => sync(srcBody, trnBody));
+    trnBody.addEventListener('scroll', () => sync(trnBody, srcBody));
+}
+
+/** Alignment-mode selector (bilingual texts; persisted in reader-prefs). */
+function buildAlignSelect(mode) {
+    const opts = [
+        ['flow', 'Synced panes (natural flow)'],
+        ['blocks', 'Aligned blocks'],
+        ['lines', 'Aligned lines'],
+        ['interleaved', 'Interleaved'],
+    ].map(([v, label]) =>
+        '<option value="' + v + '"' + (v === mode ? ' selected' : '') + '>' + label + '</option>'
+    ).join('');
+    return '<label class="align-mode-ctl">Layout <select id="align-mode-select">' + opts + '</select></label>';
+}
+
+function wireAlignSelect(container, route) {
+    const sel = container.querySelector('#align-mode-select');
+    if (!sel) return;
+    sel.addEventListener('change', () => {
+        setBilingualMode(sel.value);
+        reRenderPreservingPosition(route);
+    });
+}
+
+/** Re-render the current work at the same reading position (quiet ?pos=). */
+function reRenderPreservingPosition(route) {
+    let topLineId = '';
+    const probe = document.elementFromPoint(Math.floor(window.innerWidth / 2), 110);
+    const row = probe && probe.closest ? probe.closest('.line-row') : null;
+    if (row && row.dataset.lineId) topLineId = row.dataset.lineId;
+    const base = '#/' + (route.rawRoute || route.workId).replace(/^\/+/, '');
+    const stripped = base.replace(/([?&])(pos|scroll)=[^&]*/g, '$1').replace(/[?&]+$/, '').replace(/\?&/, '?');
+    const glue = stripped.includes('?') ? '&' : '?';
+    const newHash = topLineId ? stripped + glue + 'pos=' + encodeURIComponent(topLineId) : stripped;
+    if (window.location.hash !== newHash) window.location.replace(newHash);
+    else window.location.reload();
 }
 
 // ━━ Bilingual view toggle ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1150,8 +1311,7 @@ function wireViewToggle(container) {
                 ? 'minmax(0, 1fr) minmax(0, 1fr)'
                 : '1fr';
         }
-        window.requestAnimationFrame(syncRowHeights);
-        wireRowSyncStability();
+        window.requestAnimationFrame(runActiveRowSync);
     });
 }
 
@@ -1362,19 +1522,7 @@ function wirePageSizeSelect(container, route) {
     sel.addEventListener('change', () => {
         import('../lib/reader-prefs.js').then(({ setPageSize }) => {
             setPageSize(sel.value);
-            // Re-render at the same reading position: capture the topmost
-            // visible line and navigate to a quiet ?pos= link. replace() fires
-            // hashchange only when the hash differs; reload() covers the rest.
-            let topLineId = '';
-            const probe = document.elementFromPoint(Math.floor(window.innerWidth / 2), 110);
-            const row = probe && probe.closest ? probe.closest('.line-row') : null;
-            if (row && row.dataset.lineId) topLineId = row.dataset.lineId;
-            const base = '#/' + (route.rawRoute || route.workId).replace(/^\/+/, '');
-            const stripped = base.replace(/([?&])(pos|scroll)=[^&]*/g, '$1').replace(/[?&]+$/, '').replace(/\?&/, '?');
-            const glue = stripped.includes('?') ? '&' : '?';
-            const newHash = topLineId ? stripped + glue + 'pos=' + encodeURIComponent(topLineId) : stripped;
-            if (window.location.hash !== newHash) window.location.replace(newHash);
-            else window.location.reload();
+            reRenderPreservingPosition(route);
         });
     });
 }
