@@ -1,3 +1,4 @@
+import { resolveKwicUrl } from '../lib/search.js';
 // test/search-routing.test.js
 //
 // Verifies the post-Wave-3 federatedSearch routing rewire in lib/search.js:
@@ -552,4 +553,24 @@ test('metaForDocId: parses side and translator query params from docs.txt entrie
     } finally {
         fetchMock.restore();
     }
+});
+
+// -- resolveKwicUrl: expand-time KWIC must search the document the hits live in --
+
+test('resolveKwicUrl: source side searches the Chinese source', () => {
+    assert.match(resolveKwicUrl('T48n2005', '', ''), /CbetaZenTexts.*T48n2005\.xml$/);
+});
+
+test('resolveKwicUrl: en side searches the authoritative translation', () => {
+    assert.match(resolveKwicUrl('T48n2005', 'en', ''), /CbetaZenTranslations.*T48n2005\.xml$/);
+});
+
+test('resolveKwicUrl: community side searches that translator file', () => {
+    const url = resolveKwicUrl('T48n2005', 'community', 'Fabulu');
+    assert.match(url, /community/);
+    assert.match(url, /Fabulu/);
+});
+
+test('resolveKwicUrl: community without translator falls back to authoritative EN', () => {
+    assert.match(resolveKwicUrl('T48n2005', 'community', ''), /CbetaZenTranslations.*T48n2005\.xml$/);
 });

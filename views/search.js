@@ -894,13 +894,23 @@ export async function render(route, mount, shell) {
                 var fileId = details.dataset.fileId;
                 // Bilingual KWIC: only when this is a source-side (CJK) hit
                 // AND the corpus has an authoritative translation on file.
-                // For 'en'/'community' groups the user is already viewing the
-                // English side, so monolingual is correct.
+                // For 'en'/'community' groups the KWIC must search the ENGLISH
+                // document the hits actually live in (side passed through) \u2014
+                // searching the Chinese source for a latin query always found
+                // zero passages ("No passage-level matches found").
                 var sideAttr = details.dataset.side || '';
+                var translatorAttr = details.dataset.translator || '';
                 var bilingual = !sideAttr && translatedIds && translatedIds.has(fileId);
-                loadAndSearchXml(fileId, query, { includeTranslation: bilingual }).then(function(result) {
+                loadAndSearchXml(fileId, query, {
+                    includeTranslation: bilingual,
+                    side: sideAttr,
+                    translator: translatorAttr
+                }).then(function(result) {
                     if (!result || result.passages.length === 0) {
-                        groupBody.innerHTML = '<p class="muted" style="padding:0.5rem 1rem 0.5rem 10.1rem;">No passage-level matches found. <a href="#/' + escapeHtml(fileId) + '?q=' + encodeURIComponent(query) + '">Open full text \u2192</a></p>';
+                        var sideQ = sideAttr === 'community' && translatorAttr
+                            ? '&side=community&translator=' + encodeURIComponent(translatorAttr)
+                            : (sideAttr === 'en' ? '&side=en' : '');
+                        groupBody.innerHTML = '<p class="muted" style="padding:0.5rem 1rem 0.5rem 10.1rem;">No passage-level matches found. <a href="#/' + escapeHtml(fileId) + '?q=' + encodeURIComponent(query) + sideQ + '">Open full text \u2192</a></p>';
                         return;
                     }
 
