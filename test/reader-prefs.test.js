@@ -34,9 +34,9 @@ test('option list shape', () => {
     assert.strictEqual(PAGE_SIZE_OPTIONS[PAGE_SIZE_OPTIONS.length - 1], 'all');
 });
 
-test('bilingual mode: defaults to flow, persists, whitelists', () => {
-    assert.strictEqual(DEFAULT_BILINGUAL_MODE, 'flow');
-    assert.strictEqual(getBilingualMode(), 'flow');
+test('bilingual mode: defaults to merged-flow, persists, whitelists', () => {
+    assert.strictEqual(DEFAULT_BILINGUAL_MODE, 'merged-flow');
+    assert.strictEqual(getBilingualMode(), 'merged-flow');
     setBilingualMode('interleaved');
     assert.strictEqual(getBilingualMode(), 'interleaved');
     setBilingualMode('nonsense');
@@ -44,7 +44,7 @@ test('bilingual mode: defaults to flow, persists, whitelists', () => {
     for (const m of BILINGUAL_MODES) { setBilingualMode(m); assert.strictEqual(getBilingualMode(), m); }
 });
 
-test('bilingual mode: corrupt storage falls back to flow', () => {
+test('bilingual mode: corrupt storage falls back to the default', () => {
     localStorage.setItem('zl:bilingual-mode', '42');
-    assert.strictEqual(getBilingualMode(), 'flow');
+    assert.strictEqual(getBilingualMode(), 'merged-flow');
 });
