@@ -8,6 +8,8 @@ import { DATA_REPO_BASE, OPEN_DATA_REPO_BASE, loadTranslatedFileIds } from '../l
 import { inferCorpusForRelPath } from '../lib/corpus.js';
 import { loadAllTitlesAsArray, getWorkId } from '../lib/titles.js';
 import { federatedSearch, loadAndSearchXml } from '../lib/search.js';
+import { verifyDocPhrase, getManifestInfo } from '../lib/bigram-search.js';
+import { normalizeString, isCjk } from '../lib/cjk-normalize.js';
 import { loadMasters } from './master.js';
 
 const TITLES_URL = DATA_REPO_BASE + 'titles.jsonl';
@@ -151,6 +153,21 @@ export async function render(route, mount, shell) {
     // its in-flight onProgress callbacks don't paint stale rows over the
     // new query's results, and pending shard fetches stop wasting bandwidth.
     let _activeSearchCtl = null;
+    // Per-query full-text stats (from onFulltextStats): {indexVersion,
+    // builtAt, candidateCount, returnedCount, truncated, cap, latinIgnored}.
+    // Read by both the streaming and final full-text renderers.
+    let _ftStats = null;
+    // Verify-on-demand state (audit #1, display half). One text-shard
+    // verification per displayed docId per query, memoized so streaming
+    // re-renders never re-fetch. Map<docId, exactCount|Promise<exactCount|null>>.
+    // A could-not-verify (null) resolution is removed from the map so a later
+    // re-render can retry instead of sticking with a failed lookup.
+    let _ftVerify = new Map();
+    // docIds whose verification came back 0 — their groups are removed from
+    // the DOM and skipped by later re-renders.
+    let _ftDeadDocs = new Set();
+    // AbortSignal of the current search, used by verifyDocPhrase calls.
+    let _ftSignal = null;
 
     async function doSearch(query, page) {
         const trimmed = (query || '').trim();
@@ -164,6 +181,11 @@ export async function render(route, mount, shell) {
         // Reset the auto-expand guard on each new search so the first FT
         // group of the new query auto-opens once.
         _autoExpandedThisQuery = false;
+        // Reset per-query full-text stats + verification memos.
+        _ftStats = null;
+        _ftVerify = new Map();
+        _ftDeadDocs = new Set();
+        _ftSignal = ctl.signal;
 
         // Empty query: show all titles (existing browse behavior)
         if (!trimmed) {
@@ -189,6 +211,11 @@ export async function render(route, mount, shell) {
             mergeIntoStreamingGroups(streamingGroups, batch);
             renderStreamingFulltext(streamingGroups, trimmed, /*finalized=*/ false);
         };
+        // Fires once per query with candidate/truncation/latin-ignored info.
+        const onFulltextStats = function (stats) {
+            if (ctl.signal.aborted) return;
+            _ftStats = stats;
+        };
 
         let results;
         try {
@@ -205,6 +232,7 @@ export async function render(route, mount, shell) {
                 zenIds: zenIds,
                 signal: ctl.signal,
                 onFulltextProgress: onFulltextProgress,
+                onFulltextStats: onFulltextStats,
             });
         } catch (err) {
             // Aborted by a newer search — leave the new query to render.
@@ -239,6 +267,9 @@ export async function render(route, mount, shell) {
                     titleEn: meta.title_en || '',
                     excerpt: r.excerpt || '',
                     hitCount: r.hitCount || 0,
+                    // Group key (fileId|side|translator) maps 1:1 to a docId,
+                    // so the first row's docId identifies the whole group.
+                    docId: (typeof r.docId === 'number' ? r.docId : -1),
                 });
             } else {
                 groups.get(key).hitCount += r.hitCount || 0;
@@ -253,7 +284,10 @@ export async function render(route, mount, shell) {
         var ftLabel = mount.querySelector('#ft-section-label');
         if (!ftContainer) return;
 
-        var groupArr = Array.from(groups.values());
+        var groupArr = Array.from(groups.values()).filter(function (g) {
+            // Skip groups whose displayed-row verification came back 0.
+            return !(typeof g.docId === 'number' && g.docId >= 0 && _ftDeadDocs.has(g.docId));
+        });
         // Sort by hitCount desc so the most relevant matches surface first
         // even mid-stream. (Order may shuffle as more shards land.)
         groupArr.sort(function (a, b) { return (b.hitCount || 0) - (a.hitCount || 0); });
@@ -273,6 +307,11 @@ export async function render(route, mount, shell) {
             // Show the running count plus a still-searching dot when not finalized.
             var label = 'Full-Text Matches (' + groupArr.length + ' text' +
                 (groupArr.length === 1 ? '' : 's') + ')';
+            // Audit #2: surface silent truncation (VERIFICATION_CAP) in the label.
+            if (_ftStats && _ftStats.truncated) {
+                label += ' — showing top ' + _ftStats.cap + ' of ' +
+                    _ftStats.candidateCount + ' matching texts';
+            }
             if (!finalized) {
                 label += ' <span class="ft-loading-spinner" id="ft-loading" aria-label="Searching"></span>';
             }
@@ -294,6 +333,7 @@ export async function render(route, mount, shell) {
             ftHtml += buildSearchGroup(groupArr[g], query);
         }
         ftContainer.innerHTML = ftHtml;
+        appendLatinIgnoredNotice(ftContainer);
 
         // Re-apply open state to the same groups (matched by data-group-key,
         // not position — streaming reorder may have shuffled the top result).
@@ -307,6 +347,123 @@ export async function render(route, mount, shell) {
 
         wireGroupExpanders(ftContainer, query);
         maybeAutoExpandFirstGroup(ftContainer);
+        verifyDisplayedGroups(ftContainer, query);
+    }
+
+    /** Audit #3 surface: when the query mixed latin with CJK, the backend
+     *  matched on the CJK runs and reports the ignored remainder via
+     *  onFulltextStats.latinIgnored. Show a one-line muted notice after the
+     *  group list so the zero/partial results aren't silently confusing. */
+    function appendLatinIgnoredNotice(ftContainer) {
+        if (!_ftStats || !_ftStats.latinIgnored) return;
+        var notice = document.createElement('p');
+        notice.className = 'search-ft-notice muted';
+        notice.textContent = 'Non-Chinese text “' + _ftStats.latinIgnored +
+            '” was ignored; matched on the Chinese terms.';
+        ftContainer.appendChild(notice);
+    }
+
+    /** Extract maximal CJK runs from the normalized query (same 3-range BMP
+     *  predicate the bigram backend uses via lib/cjk-normalize.js#isCjk). */
+    function cjkRunsOf(query) {
+        var normalized = normalizeString(query == null ? '' : String(query));
+        var runs = [];
+        var cur = '';
+        for (var i = 0; i < normalized.length; i++) {
+            if (isCjk(normalized.charCodeAt(i))) {
+                cur += normalized[i];
+            } else if (cur) {
+                runs.push(cur);
+                cur = '';
+            }
+        }
+        if (cur) runs.push(cur);
+        return runs;
+    }
+
+    /** Verify-on-demand (audit #1, display half): exact-count the TOP 10
+     *  rendered groups via one text-shard fetch per docId per query.
+     *  Skipped entirely for single-term-exact queries (exactly one 2-char or
+     *  1-char CJK run) — their index tf IS the exact count — and for queries
+     *  with no CJK content (latin rows carry no docId and verifyDocPhrase
+     *  would report 0 for them). Results are memoized in _ftVerify so
+     *  streaming re-renders re-apply without re-fetching. */
+    function verifyDisplayedGroups(ftContainer, query) {
+        var runs = cjkRunsOf(query);
+        if (runs.length === 0) return;
+        if (runs.length === 1 && runs[0].length <= 2) return; // exact from index
+        var verifyMap = _ftVerify;
+        var deadSet = _ftDeadDocs;
+        var signal = _ftSignal;
+        var groups = ftContainer.querySelectorAll('.search-group');
+        var top = Math.min(groups.length, 10);
+        for (var i = 0; i < top; i++) {
+            verifyOneGroup(groups[i], query, verifyMap, deadSet, signal);
+        }
+    }
+
+    function verifyOneGroup(details, query, verifyMap, deadSet, signal) {
+        var docId = parseInt(details.getAttribute('data-doc-id') || '', 10);
+        if (isNaN(docId) || docId < 0) return;
+        var known = verifyMap.get(docId);
+        if (typeof known === 'number') {
+            applyVerifiedCount(details, docId, known, deadSet);
+            return;
+        }
+        if (known) {
+            // Verification already in flight from an earlier render of this
+            // query — re-apply to THIS render's element when it resolves.
+            known.then(function (count) {
+                if (typeof count === 'number') {
+                    applyVerifiedCount(details, docId, count, deadSet);
+                }
+            }).catch(function () { /* abort/network: keep index estimate */ });
+            return;
+        }
+        var p = verifyDocPhrase(docId, query, { signal: signal }).then(function (count) {
+            if (count == null) {
+                // Could-not-verify (text shard fetch failed / doc absent /
+                // aborted) is NOT a verified zero: keep the index estimate,
+                // and clear the memo so a later re-render may retry.
+                verifyMap.delete(docId);
+                return null;
+            }
+            verifyMap.set(docId, count);
+            applyVerifiedCount(details, docId, count, deadSet);
+            return count;
+        });
+        // Memoize the promise immediately so concurrent re-renders never
+        // trigger a second text-shard fetch for the same docId.
+        verifyMap.set(docId, p);
+        p.catch(function () { /* abort/network: swallow silently */ });
+    }
+
+    /** Apply an exact verified count to a rendered group: 0 (a GENUINE
+     *  scanned-the-text zero — verifyDocPhrase returns null, never 0, when
+     *  it could not verify) → remove the group and mark its docId dead
+     *  (later re-renders skip it); >0 → replace the index estimate in
+     *  .search-group-count. */
+    function applyVerifiedCount(details, docId, count, deadSet) {
+        if (count == null) return; // could-not-verify: keep index estimate
+        if (count === 0) {
+            deadSet.add(docId);
+            if (details.parentNode) details.parentNode.removeChild(details);
+            return;
+        }
+        if (!details.parentNode) return; // stale element from a clobbered render
+        var label = count + ' match' + (count === 1 ? '' : 'es');
+        var countEl = details.querySelector('.search-group-count');
+        if (countEl) {
+            countEl.textContent = label;
+        } else {
+            var metaEl = details.querySelector('.search-group-meta');
+            if (metaEl) {
+                var badge = document.createElement('span');
+                badge.className = 'search-group-count';
+                badge.textContent = label;
+                metaEl.insertBefore(badge, metaEl.firstChild);
+            }
+        }
     }
 
     /** Auto-open the first FT group on initial render so the user lands on
@@ -512,6 +669,17 @@ export async function render(route, mount, shell) {
         // Update header
         titleEl.textContent = 'Results for \u201c' + query + '\u201d';
         subEl.textContent = '';
+        // Audit #6: surface index staleness. Fire-and-forget \u2014 must never
+        // block or fail the search (manifest is cached after first query).
+        getManifestInfo().then(function (info) {
+            if (!info || !info.builtAt) return;
+            var prev = subEl.querySelector('.search-index-built');
+            if (prev) prev.remove();
+            var stamp = document.createElement('span');
+            stamp.className = 'search-index-built muted';
+            stamp.textContent = 'Index built ' + String(info.builtAt).slice(0, 10);
+            subEl.appendChild(stamp);
+        }).catch(function () { /* staleness line is best-effort */ });
         navEl.hidden = true;
 
         body.innerHTML = html;
@@ -524,8 +692,14 @@ export async function render(route, mount, shell) {
         // Wire title pagination clicks
         wireTitlePageClicks(query);
 
-        // Load full-text results async — grouped by book with expandable KWIC
+        // Load full-text results async — grouped by book with expandable KWIC.
+        // Capture this render's search signal: doSearch aborts the previous
+        // controller BEFORE resetting per-query state, so `aborted` reliably
+        // marks this handler stale (a newer query owns the DOM and the
+        // _ftVerify/_ftDeadDocs maps by then).
+        var searchSignal = _ftSignal;
         results.fulltext.then(function(ftResults) {
+            if (searchSignal && searchSignal.aborted) return;
             var ftContainer = mount.querySelector('#ft-results');
             var ftLabel = mount.querySelector('#ft-section-label');
             if (!ftContainer) return;
@@ -553,6 +727,9 @@ export async function render(route, mount, shell) {
                 var sd  = meta.side || '';
                 var tr  = meta.translator || '';
                 if (!fid) continue;
+                // Skip groups already verified to zero exact matches during
+                // the streaming phase (group key maps 1:1 to a docId).
+                if (typeof r.docId === 'number' && _ftDeadDocs.has(r.docId)) continue;
                 var key = fid + '|' + sd + '|' + tr;
                 if (!groups.has(key)) {
                     groups.set(key, {
@@ -563,7 +740,8 @@ export async function render(route, mount, shell) {
                         title: meta.title || fid,
                         titleEn: meta.title_en || '',
                         excerpt: r.excerpt || '',
-                        hitCount: r.hitCount || 0
+                        hitCount: r.hitCount || 0,
+                        docId: (typeof r.docId === 'number' ? r.docId : -1)
                     });
                 } else {
                     // Accumulate hit counts from duplicate entries.
@@ -575,7 +753,13 @@ export async function render(route, mount, shell) {
             var groupArr = Array.from(groups.values());
 
             if (ftLabel) {
-                ftLabel.innerHTML = 'Full-Text Matches (' + groupArr.length + ' text' + (groupArr.length === 1 ? '' : 's') + ')';
+                var finalLabel = 'Full-Text Matches (' + groupArr.length + ' text' + (groupArr.length === 1 ? '' : 's') + ')';
+                // Audit #2: surface silent truncation (VERIFICATION_CAP).
+                if (_ftStats && _ftStats.truncated) {
+                    finalLabel += ' \u2014 showing top ' + _ftStats.cap + ' of ' +
+                        _ftStats.candidateCount + ' matching texts';
+                }
+                ftLabel.innerHTML = finalLabel;
             }
 
             // Render every grouped book \u2014 the bigram backend already bounds the
@@ -585,10 +769,12 @@ export async function render(route, mount, shell) {
                 ftHtml += buildSearchGroup(groupArr[g], query);
             }
             ftContainer.innerHTML = ftHtml;
+            appendLatinIgnoredNotice(ftContainer);
 
             // Wire expand handlers on all groups
             wireGroupExpanders(ftContainer, query);
             maybeAutoExpandFirstGroup(ftContainer);
+            verifyDisplayedGroups(ftContainer, query);
 
             maybeShowSupportPrompt(body);
         }).catch(function() {
@@ -643,10 +829,15 @@ export async function render(route, mount, shell) {
         // can render it INSIDE .search-group-body on first expand.
         var stashExcerpt = group.excerpt ? ' data-initial-excerpt="' + escapeHtml(group.excerpt) + '"' : '';
         var groupKey = group.fileId + '|' + (group.side || '') + '|' + (group.translator || '');
+        // docId enables verify-on-demand (verifyDocPhrase) for displayed rows;
+        // absent for rows without one (e.g. latin-corpus results).
+        var docIdAttr = (typeof group.docId === 'number' && group.docId >= 0)
+            ? ' data-doc-id="' + group.docId + '"'
+            : '';
         return '<details class="search-group" data-file-id="' + escapeHtml(group.fileId) +
             '" data-side="' + escapeHtml(group.side || '') +
             '" data-translator="' + escapeHtml(group.translator || '') +
-            '" data-group-key="' + escapeHtml(groupKey) + '">' +
+            '" data-group-key="' + escapeHtml(groupKey) + '"' + docIdAttr + '>' +
             '<summary>' +
                 idCell +
                 '<span class="search-group-title">' +

@@ -10,10 +10,12 @@
 // lib/cache.js, two LRU shard maps, single-flight docs.txt promise). We
 // reset everything between tests by:
 //   - cache.clear() to drop the manifest sessionStorage entry
-//   - clearShardCache() to drop the in-memory bigram + text shard caches
+//   - the module's own _resetForTests() export (docs list, LRU caches,
+//     manifest refetch flag, verification-cap override)
 //   - swap globalThis.fetch + globalThis.AbortController per test
-//   - reload the module via dynamic import with a cache-busting query so the
-//     _docsListPromise resets when fileIdForDocId tests need a fresh corpus.
+//
+// Fixture builders + fetch mock live in test/_search-fixtures.js (shared
+// with test/search-routing.test.js).
 //
 // Notes on environment:
 //   - sessionStorage is absent in Node; lib/cache.js wraps every call in
@@ -23,167 +25,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { encodePostingList, encodeShard } from '../lib/bigram-codec.js';
-import { fnv1a32 } from '../lib/fnv.js';
+import { encodeShard } from '../lib/bigram-codec.js';
 import * as cache from '../lib/cache.js';
+import * as bigramModule from '../lib/bigram-search.js';
+import {
+    bucketHexForBigram,
+    textBucketFor,
+    shardLayoutFor,
+    shardLayoutForV3,
+    buildManifest,
+    buildTextShardNdjson,
+    textShardsForDocs,
+    v3EntriesForDocs,
+    installFetchMock,
+} from './_search-fixtures.js';
 
-// --- helpers ---
-
-/** Build a single shard from a {term: sortedDocIds[]} map. */
-function buildShardBytes(termsMap, docCount) {
-    const termList = [];
-    for (const [term, docIds] of Object.entries(termsMap)) {
-        const sorted = [...docIds].sort((a, b) => a - b);
-        // Dedupe (encoder rejects dupes).
-        const unique = sorted.filter((v, i) => i === 0 || v !== sorted[i - 1]);
-        termList.push({
-            term,
-            postings: encodePostingList(unique),
-            count: unique.length,
-        });
-    }
-    return encodeShard(termList, docCount);
-}
-
-/** Build a manifest mapping every bigram in the layout to its bucket+content-hash. */
-function buildManifest(shardLayout, docCount) {
-    // shardLayout: Map<bucketHex4, Uint8Array>. We assign each non-empty bucket a
-    // deterministic 6-hex content hash placeholder ('aaaaaa', 'bbbbbb', ...).
-    const shards = {};
-    let i = 0;
-    const palette = ['aaaaaa', 'bbbbbb', 'cccccc', 'dddddd', 'eeeeee', 'ffffff', '111111', '222222'];
-    for (const hex of shardLayout.keys()) {
-        shards[hex] = palette[i % palette.length];
-        i++;
-    }
-    return { shardCount: 4096, docCount, shards };
-}
-
-/** NDJSON-encode docs into a text-shard string. */
-function buildTextShardNdjson(docs) {
-    return docs.map((d) => JSON.stringify({ docId: d.docId, text: d.text })).join('\n');
-}
-
-/** Bucket id (0..4095) for a bigram, padded to 4 hex. */
-function bucketHexForBigram(bg) {
-    const b = fnv1a32(bg) % 4096;
-    return b.toString(16).padStart(4, '0');
-}
-
-/** Place each {term, docIds} entry into its FNV bucket. */
-function shardLayoutFor(entries, docCount) {
-    // Group by bucket.
-    const byBucket = new Map(); // hex4 -> { [term]: docIds[] }
-    for (const { term, docIds } of entries) {
-        const hex = bucketHexForBigram(term);
-        if (!byBucket.has(hex)) byBucket.set(hex, {});
-        byBucket.get(hex)[term] = docIds;
-    }
-    // Encode each bucket.
-    const out = new Map();
-    for (const [hex, terms] of byBucket.entries()) {
-        out.set(hex, buildShardBytes(terms, docCount));
-    }
-    return out;
-}
-
-/**
- * Install a fetch mock that serves manifest, docs.txt, bigram shards, and
- * text shards from in-memory fixtures. Tracks calls so tests can inspect
- * fetch counts.
- *
- * @returns Object with `restore()` and `calls` (array of url strings).
- */
-function installFetchMock({
-    manifest = null,
-    docsTxt = '',
-    shardLayout = new Map(),     // hex4 -> Uint8Array
-    textShards = new Map(),      // bucketStr ('00'..'ff') -> ndjson string
-    delayMs = 0,
-    delayPredicate = null,       // optional (url) => bool; if set, only delay matching URLs
-} = {}) {
-    const calls = [];
-    const original = globalThis.fetch;
-
-    globalThis.fetch = async (url, init) => {
-        calls.push(String(url));
-        const shouldDelay = delayMs > 0 && (!delayPredicate || delayPredicate(String(url)));
-        if (shouldDelay) {
-            await new Promise((res, rej) => {
-                const t = setTimeout(res, delayMs);
-                if (init && init.signal) {
-                    if (init.signal.aborted) {
-                        clearTimeout(t);
-                        const e = new Error('aborted');
-                        e.name = 'AbortError';
-                        rej(e);
-                        return;
-                    }
-                    init.signal.addEventListener('abort', () => {
-                        clearTimeout(t);
-                        const e = new Error('aborted');
-                        e.name = 'AbortError';
-                        rej(e);
-                    });
-                }
-            });
-        }
-        if (init && init.signal && init.signal.aborted) {
-            const e = new Error('aborted');
-            e.name = 'AbortError';
-            throw e;
-        }
-        const u = String(url);
-        if (u.endsWith('/manifest.json')) {
-            if (manifest == null) return new Response(null, { status: 404 });
-            return new Response(JSON.stringify(manifest), { status: 200 });
-        }
-        if (u.endsWith('/docs.txt')) {
-            return new Response(docsTxt, { status: 200 });
-        }
-        // Bigram shard:  /data/search/bigram/shards/XX/YY-<hash>.bin
-        const bigramMatch = u.match(/\/shards\/([0-9a-f]{2})\/([0-9a-f]{2})-[0-9a-f]+\.bin$/);
-        if (bigramMatch) {
-            const hex = bigramMatch[1] + bigramMatch[2];
-            const bytes = shardLayout.get(hex);
-            if (!bytes) return new Response(null, { status: 404 });
-            // Wrap the ArrayBuffer slice corresponding to the Uint8Array.
-            const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-            return new Response(ab, { status: 200 });
-        }
-        // Text shard: /data/search/text/{bucket}.bin (NDJSON, 3-hex bucket)
-        const textMatch = u.match(/\/text\/([0-9a-f]{3})\.bin$/);
-        if (textMatch) {
-            const bucket = textMatch[1];
-            const ndjson = textShards.get(bucket);
-            if (ndjson == null) return new Response(null, { status: 404 });
-            return new Response(ndjson, { status: 200 });
-        }
-        return new Response(null, { status: 404 });
-    };
-
-    return {
-        calls,
-        restore() {
-            globalThis.fetch = original;
-        },
-    };
-}
-
-/** Reset all module-level state so the next test sees a clean import. */
+/** Reset all module-level state so the next test sees a clean module. */
 async function freshSearchModule() {
     // Clear cache.js (drops manifest from memory + sessionStorage).
     cache.clear();
-    // Bump query to bust the ESM module cache so _docsListPromise + LRU maps reset.
-    const stamp = Date.now() + ':' + Math.random().toString(36).slice(2);
-    const mod = await import(`../lib/bigram-search.js?ts=${stamp}`);
-    return mod;
-}
-
-/** Bucket a docId into a text-shard bucket ('00'..'ff') the same way bigram-search.js does. */
-function textBucketFor(docId) {
-    // Match the runtime: 4096 buckets, 3-hex padding.
-    return (docId % 4096).toString(16).padStart(3, '0');
+    // Reset bigram-search's module-level state (docs list promise, LRU maps,
+    // manifest refetch-once flag, verification-cap override).
+    bigramModule._resetForTests();
+    return bigramModule;
 }
 
 // =====================================================================
@@ -270,15 +134,32 @@ test('searchFulltext: non-CJK query short-circuits to empty (no fetch)', async (
     }
 });
 
-test('searchFulltext: query shorter than 2 chars short-circuits to empty', async () => {
+test('searchFulltext: empty/null/undefined query short-circuits to empty (no fetch)', async () => {
     const { searchFulltext } = await freshSearchModule();
     const fetchMock = installFetchMock({});
     try {
         assert.deepEqual(await searchFulltext(''), []);
-        assert.deepEqual(await searchFulltext('無'), []);
         assert.deepEqual(await searchFulltext(null), []);
         assert.deepEqual(await searchFulltext(undefined), []);
         assert.equal(fetchMock.calls.length, 0);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('searchFulltext: single CJK char on an index WITHOUT unigramShards returns [] after only the manifest fetch', async () => {
+    // Unigram capability is gated on manifest.unigramShards. A v2 manifest
+    // (no unigramShards key) cannot serve a 1-char query: the runtime must
+    // consult the manifest (one fetch) and return [] with NO shard and NO
+    // text-shard fetches.
+    const { searchFulltext } = await freshSearchModule();
+    const manifest = { shardCount: 4096, docCount: 1, shards: {} };
+    const fetchMock = installFetchMock({ manifest });
+    try {
+        assert.deepEqual(await searchFulltext('無'), []);
+        assert.equal(fetchMock.calls.length, 1, 'exactly one fetch');
+        assert.ok(fetchMock.calls[0].endsWith('/manifest.json'),
+            `only permitted fetch is the manifest, got: ${fetchMock.calls[0]}`);
     } finally {
         fetchMock.restore();
     }
@@ -885,4 +766,668 @@ test('LRU eviction: more than BIGRAM_SHARD_LRU_MAX (32) buckets drops the oldest
     } finally {
         fetchMock.restore();
     }
+});
+
+// =====================================================================
+// 10. V3 fast path: tf ranking with ZERO text-shard fetches (audit #1)
+// =====================================================================
+
+test('searchFulltext v3: 2-char query ranks by indexed tf with ZERO text fetches', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const docCount = 3;
+    const layout = shardLayoutForV3(
+        [{ term: '無門', docIds: [0, 1, 2], tfs: [5, 2, 9] }],
+        docCount
+    );
+    const manifest = buildManifest(layout, docCount, { version: 3 });
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout });
+    try {
+        const results = await searchFulltext('無門');
+        assert.equal(results.length, 3);
+        // hitCount === indexed tf, sorted hitCount desc.
+        assert.deepEqual(
+            results.map((r) => ({ docId: r.docId, hitCount: r.hitCount })),
+            [
+                { docId: 2, hitCount: 9 },
+                { docId: 0, hitCount: 5 },
+                { docId: 1, hitCount: 2 },
+            ]
+        );
+        const textFetches = fetchMock.calls.filter((u) => u.includes('/text/'));
+        assert.equal(textFetches.length, 0, 'v3 ranking must not fetch text shards');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('searchFulltext v3: multi-bigram query — hitCount = min over bigram tfs, sorted desc then docId asc, zero text fetches', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    // Query 無門關 -> bigrams [無門, 門關]. Per-doc min over the two tfs:
+    //   doc 0: min(3, 1) = 1
+    //   doc 1: min(2, 2) = 2
+    //   doc 2: min(5, 4) = 4
+    //   doc 3: min(2, 7) = 2   (ties doc 1 -> docId asc breaks the tie)
+    const docCount = 4;
+    const layout = shardLayoutForV3(
+        [
+            { term: '無門', docIds: [0, 1, 2, 3], tfs: [3, 2, 5, 2] },
+            { term: '門關', docIds: [0, 1, 2, 3], tfs: [1, 2, 4, 7] },
+        ],
+        docCount
+    );
+    const manifest = buildManifest(layout, docCount, { version: 3 });
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout });
+    try {
+        const results = await searchFulltext('無門關');
+        assert.deepEqual(
+            results.map((r) => ({ docId: r.docId, hitCount: r.hitCount })),
+            [
+                { docId: 2, hitCount: 4 },
+                { docId: 1, hitCount: 2 },
+                { docId: 3, hitCount: 2 }, // equal hitCount: docId ascending
+                { docId: 0, hitCount: 1 },
+            ],
+            'sorted by hitCount desc, then docId asc'
+        );
+        const textFetches = fetchMock.calls.filter((u) => u.includes('/text/'));
+        assert.equal(textFetches.length, 0, 'v3 multi-bigram ranking must not fetch text shards');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// =====================================================================
+// 11. Unigram path (audit #4): 1-char queries via manifest.unigramShards
+// =====================================================================
+
+test('searchFulltext v3: single CJK char with unigramShards → exactly one unigram-shard fetch, ranked, zero text fetches', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const docCount = 2;
+    const unigramLayout = shardLayoutForV3(
+        [{ term: '佛', docIds: [0, 1], tfs: [2, 7] }],
+        docCount
+    );
+    const manifest = buildManifest(new Map(), docCount, { version: 3, unigramLayout });
+    const fetchMock = installFetchMock({ manifest, unigramLayout });
+    try {
+        const results = await searchFulltext('佛');
+        assert.deepEqual(
+            results.map((r) => ({ docId: r.docId, hitCount: r.hitCount })),
+            [
+                { docId: 1, hitCount: 7 },
+                { docId: 0, hitCount: 2 },
+            ]
+        );
+        const unigramFetches = fetchMock.calls.filter((u) => u.includes('/unigram/'));
+        assert.equal(unigramFetches.length, 1, 'exactly one unigram shard fetch');
+        const textFetches = fetchMock.calls.filter((u) => u.includes('/text/'));
+        assert.equal(textFetches.length, 0, 'no text fetches for unigram query');
+        const bigramFetches = fetchMock.calls.filter((u) => u.includes('/shards/'));
+        assert.equal(bigramFetches.length, 0, 'no bigram shard fetches for a 1-char query');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('searchFulltext v3: unigram run combines with bigram runs (mixed-length runs)', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    // Query '無門x佛' -> runs [無門, 佛] (the 'x' separates the runs; a SPACE
+    // would not — normalization strips whitespace, fusing '無門 佛' into the
+    // single run '無門佛'). hitCount = tf(無門) + tf(佛) per doc; AND
+    // semantics: only docs in both posting lists survive.
+    const docCount = 3;
+    const layout = shardLayoutForV3(
+        [{ term: '無門', docIds: [0, 1], tfs: [3, 1] }],
+        docCount
+    );
+    const unigramLayout = shardLayoutForV3(
+        [{ term: '佛', docIds: [1, 2], tfs: [4, 9] }],
+        docCount
+    );
+    const manifest = buildManifest(layout, docCount, { version: 3, unigramLayout });
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, unigramLayout });
+    try {
+        const results = await searchFulltext('無門x佛');
+        assert.deepEqual(
+            results.map((r) => ({ docId: r.docId, hitCount: r.hitCount })),
+            [{ docId: 1, hitCount: 5 }],
+            'only doc 1 has both runs; hitCount sums per-run tfs (1 + 4)'
+        );
+        const textFetches = fetchMock.calls.filter((u) => u.includes('/text/'));
+        assert.equal(textFetches.length, 0);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// =====================================================================
+// 12. Mixed-script queries (audit #3): CJK runs matched, latin reported
+// =====================================================================
+
+test('searchFulltext v3: mixed script 趙州dog matches CJK run, reports latinIgnored', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const docCount = 10;
+    const layout = shardLayoutForV3(
+        [{ term: '趙州', docIds: [3, 9], tfs: [4, 1] }],
+        docCount
+    );
+    const manifest = buildManifest(layout, docCount, { version: 3 });
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout });
+    try {
+        let stats = null;
+        const results = await searchFulltext('趙州dog', { onStats: (s) => { stats = s; } });
+        assert.deepEqual(
+            results.map((r) => ({ docId: r.docId, hitCount: r.hitCount })),
+            [
+                { docId: 3, hitCount: 4 },
+                { docId: 9, hitCount: 1 },
+            ],
+            'mixed-script query matches on the CJK run, not silent zero'
+        );
+        assert.ok(stats, 'onStats fired');
+        assert.equal(stats.latinIgnored, 'dog');
+        const textFetches = fetchMock.calls.filter((u) => u.includes('/text/'));
+        assert.equal(textFetches.length, 0);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('searchFulltext v2 fallback: mixed script 趙州dog still matches via text verification (not silent zero)', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const docCount = 10;
+    const layout = shardLayoutFor([{ term: '趙州', docIds: [3, 9] }], docCount);
+    const manifest = buildManifest(layout, docCount);
+    const textShards = textShardsForDocs([
+        { docId: 3, text: '趙州趙州和尚' },
+        { docId: 9, text: '趙州' },
+    ]);
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, textShards });
+    try {
+        let stats = null;
+        const results = await searchFulltext('趙州dog', { onStats: (s) => { stats = s; } });
+        const byDocId = new Map(results.map((r) => [r.docId, r.hitCount]));
+        assert.deepEqual([...byDocId.keys()].sort((a, b) => a - b), [3, 9],
+            'v2 fallback matches the CJK run instead of silently zeroing');
+        assert.equal(byDocId.get(3), 2, 'substring hits counted on the CJK run');
+        assert.equal(byDocId.get(9), 1);
+        assert.equal(stats.latinIgnored, 'dog');
+        assert.equal(stats.indexVersion, 2);
+        const textFetches = fetchMock.calls.filter((u) => u.includes('/text/'));
+        assert.ok(textFetches.length >= 1, 'v2 path verifies against text shards');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// =====================================================================
+// 13. Fallback equivalence: v2 and v3 indexes over the SAME corpus agree
+// =====================================================================
+
+test('searchFulltext: v2 and v3 builds of the same corpus return identical docId sets', async () => {
+    // Same logical corpus, two wire formats. The v2 path text-verifies (text
+    // fetches occur); the v3 path ranks from the index (zero text fetches).
+    // Result docId sets must be identical. (hitCounts may differ by design:
+    // v2 counts full-run substring hits, v3 uses the min-over-bigrams
+    // estimator.)
+    const corpus = [
+        { docId: 0, text: '無門關無門關' },
+        { docId: 1, text: '無門者佛心也' },
+        { docId: 2, text: '趙州狗子無佛性' },
+        { docId: 3, text: '門關不通' },
+        { docId: 4, text: '祖師西來意' },
+    ];
+    const docCount = corpus.length;
+    const queries = ['無門', '無門關', '佛性', '趙州dog', '祖師西來'];
+    const expectedSets = {
+        '無門': [0, 1],
+        '無門關': [0],
+        '佛性': [2],
+        '趙州dog': [2],
+        '祖師西來': [4],
+    };
+
+    // --- v2 fixtures: docId-only postings + text shards for verification ---
+    const { bigramEntries, unigramEntries } = v3EntriesForDocs(corpus);
+    const v2Layout = shardLayoutFor(
+        bigramEntries.map((e) => ({ term: e.term, docIds: e.docIds })),
+        docCount
+    );
+    const v2Manifest = buildManifest(v2Layout, docCount);
+    const textShards = textShardsForDocs(corpus);
+
+    const v2Results = {};
+    {
+        const { searchFulltext, clearShardCache } = await freshSearchModule();
+        const fetchMock = installFetchMock({ manifest: v2Manifest, shardLayout: v2Layout, textShards });
+        try {
+            for (const q of queries) {
+                // Drop the shard LRUs so each query's fetch profile is
+                // observable (text shards would otherwise stay cached from
+                // the previous query in this loop).
+                clearShardCache();
+                const before = fetchMock.calls.length;
+                const results = await searchFulltext(q);
+                v2Results[q] = results.map((r) => r.docId).sort((a, b) => a - b);
+                const newTextFetches = fetchMock.calls.slice(before).filter((u) => u.includes('/text/'));
+                assert.ok(newTextFetches.length >= 1,
+                    'v2 path for "' + q + '" should verify via text shards');
+            }
+        } finally {
+            fetchMock.restore();
+        }
+    }
+
+    // --- v3 fixtures: tf-carrying postings, no text shards needed ---
+    const v3Layout = shardLayoutForV3(bigramEntries, docCount);
+    const unigramLayout = shardLayoutForV3(unigramEntries, docCount);
+    const v3Manifest = buildManifest(v3Layout, docCount, { version: 3, unigramLayout });
+
+    const v3Results = {};
+    {
+        const { searchFulltext, clearShardCache } = await freshSearchModule();
+        const fetchMock = installFetchMock({ manifest: v3Manifest, shardLayout: v3Layout, unigramLayout });
+        try {
+            for (const q of queries) {
+                clearShardCache();
+                const before = fetchMock.calls.length;
+                const results = await searchFulltext(q);
+                v3Results[q] = results.map((r) => r.docId).sort((a, b) => a - b);
+                const newTextFetches = fetchMock.calls.slice(before).filter((u) => u.includes('/text/'));
+                assert.equal(newTextFetches.length, 0,
+                    'v3 path for "' + q + '" must not fetch text shards');
+            }
+        } finally {
+            fetchMock.restore();
+        }
+    }
+
+    for (const q of queries) {
+        assert.deepEqual(v2Results[q], expectedSets[q], 'v2 result set for "' + q + '"');
+        assert.deepEqual(v3Results[q], expectedSets[q], 'v3 result set for "' + q + '"');
+        assert.deepEqual(v3Results[q], v2Results[q], 'v2/v3 equivalence for "' + q + '"');
+    }
+});
+
+// =====================================================================
+// 14. Unknown-version shard: graceful degradation + manifest self-heal
+// =====================================================================
+
+test('searchFulltext: unknown-version shard yields [] and refetches the manifest exactly once (self-heal)', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const docCount = 1;
+    const layout = shardLayoutFor([{ term: '無門', docIds: [0] }], docCount);
+    // Byte-patch every shard's version u32 to 99 (technique from the codec
+    // tests) so decoding fails with /unsupported version/.
+    for (const bytes of layout.values()) {
+        bytes[4] = 99; bytes[5] = 0; bytes[6] = 0; bytes[7] = 0;
+    }
+    const manifest = buildManifest(layout, docCount);
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout });
+    try {
+        const results = await searchFulltext('無門');
+        assert.deepEqual(results, [], 'undecodable shard degrades to empty result, no throw');
+        const manifestFetches = fetchMock.calls.filter((u) => u.endsWith('/manifest.json'));
+        assert.equal(manifestFetches.length, 2,
+            'decode failure triggers exactly one manifest self-heal refetch');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('searchFulltext: MULTIPLE shards 404ing concurrently in the stale-manifest window all heal off ONE manifest refetch', async () => {
+    // Regression pin: the once-per-session gate applies to the manifest
+    // REFETCH only — every healable-failing shard must retry its own url
+    // against the shared fresh mapping. Previously the first failing shard
+    // claimed the gate inside its single-flight closure and the other
+    // concurrently-404ing shard was silently treated as empty, so the
+    // triggering query returned [] even though the fresh manifest was
+    // already in hand.
+    const { searchFulltext } = await freshSearchModule();
+    const docCount = 1;
+    const layout = shardLayoutForV3(
+        [
+            { term: '無門', docIds: [0], tfs: [1] },
+            { term: '門關', docIds: [0], tfs: [1] },
+        ],
+        docCount
+    );
+    assert.equal(layout.size, 2, 'fixture precondition: the two bigrams hash to two distinct shards');
+    const staleManifest = { version: 3, shardCount: 4096, docCount, shards: {} };
+    const freshManifest = { version: 3, shardCount: 4096, docCount, shards: {} };
+    for (const hex of layout.keys()) {
+        staleManifest.shards[hex] = 'aaaaaa'; // pre-redeploy hash → 404
+        freshManifest.shards[hex] = 'bbbbbb'; // current hash → 200
+    }
+    const calls = [];
+    let manifestFetches = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+        const u = String(url);
+        calls.push(u);
+        if (u.endsWith('/manifest.json')) {
+            manifestFetches++;
+            const body = manifestFetches === 1 ? staleManifest : freshManifest;
+            return new Response(JSON.stringify(body), { status: 200 });
+        }
+        const m = u.match(/\/shards\/([0-9a-f]{2})\/([0-9a-f]{2})-([0-9a-f]+)\.bin$/);
+        if (m) {
+            if (m[3] === 'aaaaaa') return new Response(null, { status: 404 }); // stale hash
+            const bytes = layout.get(m[1] + m[2]);
+            if (!bytes) return new Response(null, { status: 404 });
+            const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+            return new Response(ab, { status: 200 });
+        }
+        return new Response(null, { status: 404 });
+    };
+    try {
+        const results = await searchFulltext('無門關');
+        assert.equal(manifestFetches, 2,
+            'exactly one self-heal refetch shared by both failing shards (initial + heal)');
+        assert.deepEqual(results.map((r) => r.docId), [0],
+            'both concurrently-failing shards retried against the fresh mapping, so the triggering query succeeds');
+        assert.equal(calls.filter((u) => u.endsWith('-aaaaaa.bin')).length, 2, 'both stale urls tried once');
+        assert.equal(calls.filter((u) => u.endsWith('-bbbbbb.bin')).length, 2, 'both shards retried on the fresh hash');
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+// =====================================================================
+// 15. onStats observability (audit #2 / #6 wiring)
+// =====================================================================
+
+test('searchFulltext v3: onStats fires once with the documented shape', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const docCount = 2;
+    const layout = shardLayoutForV3(
+        [{ term: '無門', docIds: [0, 1], tfs: [2, 3] }],
+        docCount
+    );
+    const manifest = buildManifest(layout, docCount, { version: 3, builtAt: '2026-07-08T12:00:00.000Z' });
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout });
+    try {
+        const statsCalls = [];
+        await searchFulltext('無門', { onStats: (s) => statsCalls.push(s) });
+        assert.equal(statsCalls.length, 1, 'onStats fires exactly once');
+        const s = statsCalls[0];
+        assert.deepEqual(
+            Object.keys(s).sort(),
+            ['builtAt', 'candidateCount', 'cap', 'indexVersion', 'latinIgnored', 'returnedCount', 'truncated']
+        );
+        assert.equal(s.indexVersion, 3);
+        assert.equal(s.builtAt, '2026-07-08T12:00:00.000Z');
+        assert.equal(s.candidateCount, 2);
+        assert.equal(s.returnedCount, 2);
+        assert.equal(s.truncated, false);
+        assert.equal(typeof s.cap, 'number');
+        assert.equal(s.latinIgnored, null);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('searchFulltext v2: onStats fires once on the fallback path (shape + indexVersion 2)', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const docCount = 1;
+    const layout = shardLayoutFor([{ term: '無門', docIds: [0] }], docCount);
+    const manifest = buildManifest(layout, docCount);
+    const textShards = textShardsForDocs([{ docId: 0, text: '無門' }]);
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, textShards });
+    try {
+        const statsCalls = [];
+        await searchFulltext('無門', { onStats: (s) => statsCalls.push(s) });
+        assert.equal(statsCalls.length, 1);
+        const s = statsCalls[0];
+        assert.equal(s.indexVersion, 2);
+        assert.equal(s.builtAt, null, 'v2 manifests carry no builtAt');
+        assert.equal(s.candidateCount, 1);
+        assert.equal(s.returnedCount, 1);
+        assert.equal(s.truncated, false);
+        assert.equal(s.latinIgnored, null);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('searchFulltext v2: truncation over the verification cap is reported (audit #2)', async () => {
+    const { searchFulltext, _setVerificationCapForTests } = await freshSearchModule();
+    // 4 candidate docs, cap overridden to 2: only the first 2 candidates are
+    // verified and onStats must report truncated:true with the cap + full
+    // candidate count. (Cap override avoids fabricating >1500 docs.)
+    const docCount = 4;
+    const layout = shardLayoutFor([{ term: '無門', docIds: [0, 1, 2, 3] }], docCount);
+    const manifest = buildManifest(layout, docCount);
+    const textShards = textShardsForDocs([
+        { docId: 0, text: '無門' },
+        { docId: 1, text: '無門無門' },
+        { docId: 2, text: '無門' },
+        { docId: 3, text: '無門' },
+    ]);
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, textShards });
+    try {
+        _setVerificationCapForTests(2);
+        const statsCalls = [];
+        const results = await searchFulltext('無門', { onStats: (s) => statsCalls.push(s) });
+        assert.equal(results.length, 2, 'only cap-many candidates verified');
+        assert.deepEqual(results.map((r) => r.docId).sort((a, b) => a - b), [0, 1]);
+        assert.equal(statsCalls.length, 1);
+        const s = statsCalls[0];
+        assert.equal(s.truncated, true);
+        assert.equal(s.cap, 2);
+        assert.equal(s.candidateCount, 4);
+        assert.equal(s.returnedCount, 2);
+        assert.equal(s.indexVersion, 2);
+    } finally {
+        _setVerificationCapForTests(null); // restore production default
+        fetchMock.restore();
+    }
+});
+
+// =====================================================================
+// 16. onProgress streaming (both paths)
+// =====================================================================
+
+test('searchFulltext v3: onProgress delivers at least one batch of {docId, hitCount} rows', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const docCount = 2;
+    const layout = shardLayoutForV3(
+        [{ term: '無門', docIds: [0, 1], tfs: [1, 6] }],
+        docCount
+    );
+    const manifest = buildManifest(layout, docCount, { version: 3 });
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout });
+    try {
+        const batches = [];
+        const results = await searchFulltext('無門', { onProgress: (b) => batches.push(b) });
+        assert.ok(batches.length >= 1, 'at least one progress batch on the v3 path');
+        for (const batch of batches) {
+            assert.ok(Array.isArray(batch) && batch.length >= 1);
+            for (const row of batch) {
+                assert.equal(typeof row.docId, 'number');
+                assert.equal(typeof row.hitCount, 'number');
+            }
+        }
+        // All streamed rows must be contained in the final result set.
+        const finalIds = new Set(results.map((r) => r.docId));
+        for (const batch of batches) {
+            for (const row of batch) assert.ok(finalIds.has(row.docId));
+        }
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('searchFulltext v2: onProgress delivers at least one batch of {docId, hitCount} rows', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const docCount = 2;
+    const layout = shardLayoutFor([{ term: '無門', docIds: [0, 1] }], docCount);
+    const manifest = buildManifest(layout, docCount);
+    const textShards = textShardsForDocs([
+        { docId: 0, text: '無門' },
+        { docId: 1, text: '無門無門' },
+    ]);
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, textShards });
+    try {
+        const batches = [];
+        await searchFulltext('無門', { onProgress: (b) => batches.push(b) });
+        assert.ok(batches.length >= 1, 'at least one progress batch on the v2 path');
+        for (const batch of batches) {
+            assert.ok(Array.isArray(batch) && batch.length >= 1);
+            for (const row of batch) {
+                assert.equal(typeof row.docId, 'number');
+                assert.equal(typeof row.hitCount, 'number');
+            }
+        }
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// =====================================================================
+// 17. verifyDocPhrase: exact on-demand phrase counts for displayed rows
+// =====================================================================
+
+test('verifyDocPhrase: all runs present → sum of per-run substring counts', async () => {
+    const { verifyDocPhrase } = await freshSearchModule();
+    const textShards = textShardsForDocs([{ docId: 0, text: '趙州趙州無門' }]);
+    const fetchMock = installFetchMock({ textShards });
+    try {
+        // Latin separates CJK runs: '趙州x無門' -> runs [趙州, 無門] -> 2 + 1.
+        assert.equal(await verifyDocPhrase(0, '趙州x無門'), 3, '2 hits of 趙州 + 1 hit of 無門');
+        // Whitespace is STRIPPED by normalization, so '趙州 無門' fuses into
+        // the single contiguous run 趙州無門 (1 phrase hit in this doc).
+        assert.equal(await verifyDocPhrase(0, '趙州 無門'), 1, 'space-separated CJK fuses into one phrase run');
+        assert.equal(await verifyDocPhrase(0, '趙州dog'), 2, 'latin remainder ignored');
+        assert.equal(await verifyDocPhrase(0, '趙州'), 2);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('verifyDocPhrase: any run absent → 0', async () => {
+    const { verifyDocPhrase } = await freshSearchModule();
+    const textShards = textShardsForDocs([{ docId: 0, text: '趙州趙州無門' }]);
+    const fetchMock = installFetchMock({ textShards });
+    try {
+        assert.equal(await verifyDocPhrase(0, '趙州x佛'), 0, 'run 佛 absent → whole phrase 0');
+        assert.equal(await verifyDocPhrase(0, '祖師'), 0);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('verifyDocPhrase: missing doc / missing shard / non-CJK / bad docId → null (could-not-verify, NOT a verified zero)', async () => {
+    const { verifyDocPhrase } = await freshSearchModule();
+    const textShards = textShardsForDocs([{ docId: 0, text: '趙州' }]);
+    const fetchMock = installFetchMock({ textShards });
+    try {
+        assert.equal(await verifyDocPhrase(5, '趙州'), null, 'text shard for bucket 005 missing');
+        assert.equal(await verifyDocPhrase(0, 'dog'), null, 'no CJK runs');
+        assert.equal(await verifyDocPhrase(-1, '趙州'), null, 'negative docId');
+        assert.equal(await verifyDocPhrase(1.5, '趙州'), null, 'non-integer docId');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('verifyDocPhrase: doc absent from an EXISTING text shard → null, not 0', async () => {
+    const { verifyDocPhrase } = await freshSearchModule();
+    // Doc 0 and doc 4096 share bucket 000, but only doc 0 is in the shard.
+    const textShards = textShardsForDocs([{ docId: 0, text: '趙州' }]);
+    const fetchMock = installFetchMock({ textShards });
+    try {
+        assert.equal(await verifyDocPhrase(4096, '趙州'), null,
+            'doc missing from its bucket is could-not-verify, not a match count');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('verifyDocPhrase: transient text-shard failure is retryable (null result is not memoized)', async () => {
+    const { verifyDocPhrase } = await freshSearchModule();
+    // First mock: bucket 000 404s → null. Second mock: shard present → real count.
+    const failMock = installFetchMock({ textShards: new Map() });
+    try {
+        assert.equal(await verifyDocPhrase(0, '趙州'), null, 'shard fetch failed → null');
+    } finally {
+        failMock.restore();
+    }
+    const okMock = installFetchMock({ textShards: textShardsForDocs([{ docId: 0, text: '趙州趙州' }]) });
+    try {
+        assert.equal(await verifyDocPhrase(0, '趙州'), 2,
+            'failed shard load must not be cached — the retry sees the real shard');
+    } finally {
+        okMock.restore();
+    }
+});
+
+test('verifyDocPhrase: aborted signal resolves null (matches could-not-verify contract)', async () => {
+    const { verifyDocPhrase } = await freshSearchModule();
+    const textShards = textShardsForDocs([{ docId: 0, text: '趙州' }]);
+    const fetchMock = installFetchMock({ textShards });
+    try {
+        const ac = new AbortController();
+        ac.abort();
+        assert.equal(await verifyDocPhrase(0, '趙州', { signal: ac.signal }), null);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// =====================================================================
+// 18. getManifestInfo (audit #6: staleness surface)
+// =====================================================================
+
+test('getManifestInfo: returns {version, builtAt, docCount, hasUnigrams} and caches the manifest', async () => {
+    const { getManifestInfo } = await freshSearchModule();
+    const unigramLayout = shardLayoutForV3([{ term: '佛', docIds: [0], tfs: [1] }], 42);
+    const manifest = buildManifest(new Map(), 42, {
+        version: 3,
+        builtAt: '2026-07-01T00:00:00.000Z',
+        unigramLayout,
+    });
+    const fetchMock = installFetchMock({ manifest });
+    try {
+        const info = await getManifestInfo();
+        assert.deepEqual(info, {
+            version: 3,
+            builtAt: '2026-07-01T00:00:00.000Z',
+            docCount: 42,
+            hasUnigrams: true,
+        });
+        // Second call must be served from the cached manifest (lib/cache.js).
+        const info2 = await getManifestInfo();
+        assert.deepEqual(info2, info);
+        const manifestFetches = fetchMock.calls.filter((u) => u.endsWith('/manifest.json'));
+        assert.equal(manifestFetches.length, 1, 'manifest fetched once across both calls');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('getManifestInfo: v2-era manifest (no version/builtAt/unigramShards) degrades to nulls', async () => {
+    const { getManifestInfo } = await freshSearchModule();
+    const manifest = { shardCount: 4096, docCount: 5014, shards: {} };
+    const fetchMock = installFetchMock({ manifest });
+    try {
+        const info = await getManifestInfo();
+        assert.deepEqual(info, {
+            version: null,
+            builtAt: null,
+            docCount: 5014,
+            hasUnigrams: false,
+        });
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('module exports the v3 API surface: verifyDocPhrase, getManifestInfo, metaForDocId, _resetForTests, _setVerificationCapForTests', async () => {
+    const mod = await freshSearchModule();
+    assert.equal(typeof mod.verifyDocPhrase, 'function');
+    assert.equal(typeof mod.getManifestInfo, 'function');
+    assert.equal(typeof mod.metaForDocId, 'function');
+    assert.equal(typeof mod._resetForTests, 'function');
+    assert.equal(typeof mod._setVerificationCapForTests, 'function');
 });

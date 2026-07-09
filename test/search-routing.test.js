@@ -19,128 +19,31 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { encodePostingList, encodeShard } from '../lib/bigram-codec.js';
-import { fnv1a32 } from '../lib/fnv.js';
 import * as cache from '../lib/cache.js';
+import * as bigramModule from '../lib/bigram-search.js';
+import {
+    bucketHexForBigram,
+    textBucketFor,
+    shardLayoutFor,
+    shardLayoutForV3,
+    buildManifest,
+    buildTextShardNdjson,
+    textShardsForDocs,
+    installFetchMock,
+} from './_search-fixtures.js';
 
-// ----- Fetch fixture infrastructure -----
-
-function bucketHexForBigram(bg) {
-    return (fnv1a32(bg) % 4096).toString(16).padStart(4, '0');
-}
-
-function textBucketFor(docId) {
-    // Match lib/bigram-search.js: 4096 buckets, 3-hex padding.
-    return (docId % 4096).toString(16).padStart(3, '0');
-}
-
-function buildShardBytes(termsMap, docCount) {
-    const termList = [];
-    for (const [term, docIds] of Object.entries(termsMap)) {
-        const sorted = [...docIds].sort((a, b) => a - b);
-        const unique = sorted.filter((v, i) => i === 0 || v !== sorted[i - 1]);
-        termList.push({
-            term,
-            postings: encodePostingList(unique),
-            count: unique.length,
-        });
-    }
-    return encodeShard(termList, docCount);
-}
-
-function shardLayoutFor(entries, docCount) {
-    const byBucket = new Map();
-    for (const { term, docIds } of entries) {
-        const hex = bucketHexForBigram(term);
-        if (!byBucket.has(hex)) byBucket.set(hex, {});
-        byBucket.get(hex)[term] = docIds;
-    }
-    const out = new Map();
-    for (const [hex, terms] of byBucket.entries()) {
-        out.set(hex, buildShardBytes(terms, docCount));
-    }
-    return out;
-}
-
-function buildTextShardNdjson(docs) {
-    return docs.map(d => JSON.stringify({ docId: d.docId, text: d.text })).join('\n');
-}
-
-function buildManifest(shardLayout, docCount) {
-    const shards = {};
-    let i = 0;
-    const palette = ['aaaaaa', 'bbbbbb', 'cccccc', 'dddddd', 'eeeeee', 'ffffff'];
-    for (const hex of shardLayout.keys()) {
-        shards[hex] = palette[i % palette.length];
-        i++;
-    }
-    return { shardCount: 4096, docCount, shards };
-}
-
-function installFetchMock({
-    manifest = null,
-    docsTxt = '',
-    shardLayout = new Map(),
-    textShards = new Map(),
-    englishJsonl = null,
-} = {}) {
-    const calls = [];
-    const original = globalThis.fetch;
-    globalThis.fetch = async (url, _init) => {
-        const u = String(url);
-        calls.push(u);
-        if (u.endsWith('/manifest.json')) {
-            if (!manifest) return new Response(null, { status: 404 });
-            return new Response(JSON.stringify(manifest), { status: 200 });
-        }
-        if (u.endsWith('/docs.txt')) {
-            return new Response(docsTxt, { status: 200 });
-        }
-        const bigramMatch = u.match(/\/shards\/([0-9a-f]{2})\/([0-9a-f]{2})-[0-9a-f]+\.bin$/);
-        if (bigramMatch) {
-            const hex = bigramMatch[1] + bigramMatch[2];
-            const bytes = shardLayout.get(hex);
-            if (!bytes) return new Response(null, { status: 404 });
-            const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-            return new Response(ab, { status: 200 });
-        }
-        const textMatch = u.match(/\/text\/([0-9a-f]{3})\.bin$/);
-        if (textMatch) {
-            const bucket = textMatch[1];
-            const ndjson = textShards.get(bucket);
-            if (ndjson == null) return new Response(null, { status: 404 });
-            return new Response(ndjson, { status: 200 });
-        }
-        if (u.endsWith('/english.jsonl')) {
-            if (englishJsonl == null) return new Response(null, { status: 404 });
-            return new Response(englishJsonl, { status: 200 });
-        }
-        return new Response(null, { status: 404 });
-    };
-    return {
-        calls,
-        restore() { globalThis.fetch = original; },
-    };
-}
+// ----- Fetch fixture infrastructure lives in test/_search-fixtures.js -----
 
 /** Reset shared module-level state in lib/search.js + lib/bigram-search.js.
  *
  * Because lib/search.js's `import` of './bigram-search.js' resolves to the
  * same singleton instance regardless of how many times lib/search.js itself
- * is re-imported with a stamp, we clear bigram-search's caches via its
- * `clearShardCache` export and clear the manifest cache via lib/cache.js.
- *
- * Note: bigram-search.js's `_docsListPromise` is module-private and not
- * resettable from the outside. Tests that depend on docs.txt content must
- * either share the same docsTxt across the whole test file OR run before
- * any prior test has triggered a docs.txt fetch. We mitigate this by
- * NOT exercising fileIdForDocId in negative-result tests where the cached
- * docs list would leak T48n2005-shaped fileIds back. */
+ * is re-imported with a stamp, we reset bigram-search's module state via its
+ * `_resetForTests` export (docs list, LRU caches, manifest refetch flag) and
+ * clear the manifest cache via lib/cache.js. */
 async function freshSearchModule() {
     cache.clear();
-    // Import the singleton bigram-search and clear its in-memory shard caches.
-    const bigramMod = await import('../lib/bigram-search.js');
-    bigramMod.clearShardCache();
+    bigramModule._resetForTests();
     // Re-import lib/search.js with a stamp to reset its module-level
     // _englishCorpusPromise (so a stale cached english.jsonl doesn't bleed
     // into the next test).
@@ -481,6 +384,171 @@ test('federatedSearch: CJK query with no matching bigrams returns empty quietly'
         const { fulltext } = await federatedSearch('無門', { titles: [] });
         const results = await fulltext;
         assert.deepEqual(results, []);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// ===================================================================
+// Latin result ordering (audit #5)
+// ===================================================================
+
+test('federatedSearch: latin rows are sorted by hitCount descending (audit #5)', async () => {
+    const { federatedSearch } = await freshSearchModule();
+    // Three records with 1 / 5 / 3 hits of "koan", deliberately in
+    // non-sorted corpus order.
+    const englishJsonl = [
+        JSON.stringify({ fileId: 'A', titleEn: 'A', text: 'koan' }),
+        JSON.stringify({ fileId: 'B', titleEn: 'B', text: 'koan koan koan koan koan' }),
+        JSON.stringify({ fileId: 'C', titleEn: 'C', text: 'koan koan koan' }),
+    ].join('\n');
+    const titleData = [
+        { fileId: 'A', en: 'A' },
+        { fileId: 'B', en: 'B' },
+        { fileId: 'C', en: 'C' },
+    ];
+    const fetchMock = installFetchMock({ englishJsonl });
+    try {
+        const { fulltext } = await federatedSearch('koan', { titles: titleData });
+        const results = await fulltext;
+        assert.equal(results.length, 3);
+        assert.deepEqual(
+            results.map((r) => ({ fileId: r.meta.file_id, hitCount: r.hitCount })),
+            [
+                { fileId: 'B', hitCount: 5 },
+                { fileId: 'C', hitCount: 3 },
+                { fileId: 'A', hitCount: 1 },
+            ],
+            'rows strictly hitCount-descending, not corpus file order'
+        );
+        for (let i = 1; i < results.length; i++) {
+            assert.ok(results[i - 1].hitCount >= results[i].hitCount,
+                'monotone non-increasing hitCounts');
+        }
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// ===================================================================
+// Fulltext row shape: top-level docId (verify-on-demand needs it)
+// ===================================================================
+
+test('federatedSearch: CJK fulltext rows carry a top-level numeric docId', async () => {
+    const { federatedSearch } = await freshSearchModule();
+    const docCount = 2;
+    const layout = shardLayoutForV3(
+        [{ term: '無門', docIds: [0, 1], tfs: [3, 1] }],
+        docCount
+    );
+    const manifest = buildManifest(layout, docCount, { version: 3 });
+    const docsTxt = '/T48n2005\n/oz.wm32.case01';
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, docsTxt });
+    try {
+        const { fulltext } = await federatedSearch('無門', { titles: [] });
+        const results = await fulltext;
+        assert.equal(results.length, 2);
+        const byFileId = new Map(results.map((r) => [r.meta.file_id, r]));
+        assert.equal(byFileId.get('T48n2005').docId, 0);
+        assert.equal(byFileId.get('oz.wm32.case01').docId, 1);
+        for (const r of results) {
+            assert.equal(typeof r.docId, 'number', 'top-level docId present on every row');
+        }
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// ===================================================================
+// onFulltextStats forwarding (both paths)
+// ===================================================================
+
+test('federatedSearch: onFulltextStats fires on the CJK path with bigram-index stats', async () => {
+    const { federatedSearch } = await freshSearchModule();
+    const docCount = 1;
+    const layout = shardLayoutForV3(
+        [{ term: '無門', docIds: [0], tfs: [4] }],
+        docCount
+    );
+    const manifest = buildManifest(layout, docCount, { version: 3, builtAt: '2026-07-08T00:00:00.000Z' });
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, docsTxt: '/T48n2005' });
+    try {
+        const statsCalls = [];
+        const { fulltext } = await federatedSearch('無門', {
+            titles: [],
+            onFulltextStats: (s) => statsCalls.push(s),
+        });
+        await fulltext;
+        assert.equal(statsCalls.length, 1, 'stats forwarded exactly once');
+        assert.equal(statsCalls[0].indexVersion, 3);
+        assert.equal(statsCalls[0].builtAt, '2026-07-08T00:00:00.000Z');
+        assert.equal(statsCalls[0].truncated, false);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('federatedSearch: onFulltextStats fires on the latin path with null index fields', async () => {
+    const { federatedSearch } = await freshSearchModule();
+    const englishJsonl = [
+        JSON.stringify({ fileId: 'A', titleEn: 'A', text: 'koan' }),
+        JSON.stringify({ fileId: 'B', titleEn: 'B', text: 'koan koan' }),
+    ].join('\n');
+    const titleData = [
+        { fileId: 'A', en: 'A' },
+        { fileId: 'B', en: 'B' },
+    ];
+    const fetchMock = installFetchMock({ englishJsonl });
+    try {
+        const statsCalls = [];
+        const { fulltext } = await federatedSearch('koan', {
+            titles: titleData,
+            onFulltextStats: (s) => statsCalls.push(s),
+        });
+        const results = await fulltext;
+        assert.equal(statsCalls.length, 1, 'latin scan emits stats exactly once');
+        const s = statsCalls[0];
+        assert.equal(s.indexVersion, null, 'no bigram index on the latin path');
+        assert.equal(s.builtAt, null);
+        assert.equal(s.candidateCount, results.length);
+        assert.equal(s.returnedCount, results.length);
+        assert.equal(s.truncated, false);
+        assert.equal(s.latinIgnored, null);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// ===================================================================
+// metaForDocId: docs.txt query-string parsing (side / translator)
+// ===================================================================
+
+test('metaForDocId: parses side and translator query params from docs.txt entries', async () => {
+    await freshSearchModule(); // resets the cached docs list
+    const docsTxt = [
+        '/T48n2005',
+        '/T48n2005?side=en',
+        '/T48n2005?side=community&translator=Alice%20B',
+        '/oz.wm32.case01?translator=Bob&side=community',
+    ].join('\n');
+    const fetchMock = installFetchMock({ docsTxt });
+    try {
+        assert.deepEqual(await bigramModule.metaForDocId(0), {
+            url: '/T48n2005', fileId: 'T48n2005', side: '', translator: '',
+        });
+        assert.deepEqual(await bigramModule.metaForDocId(1), {
+            url: '/T48n2005?side=en', fileId: 'T48n2005', side: 'en', translator: '',
+        });
+        assert.deepEqual(await bigramModule.metaForDocId(2), {
+            url: '/T48n2005?side=community&translator=Alice%20B',
+            fileId: 'T48n2005', side: 'community', translator: 'Alice B',
+        }, 'translator is percent-decoded; fileId excludes the query string');
+        assert.deepEqual(await bigramModule.metaForDocId(3), {
+            url: '/oz.wm32.case01?translator=Bob&side=community',
+            fileId: 'oz.wm32.case01', side: 'community', translator: 'Bob',
+        }, 'param order does not matter');
+        assert.equal(await bigramModule.metaForDocId(99), null, 'out-of-range docId → null');
+        assert.equal(await bigramModule.metaForDocId(-1), null);
     } finally {
         fetchMock.restore();
     }

@@ -1,29 +1,36 @@
 #!/usr/bin/env node
 // build/build-bigram-index.js
 //
-// Builds the SPA CJK bigram inverted index from the CBETA + OpenZen
-// (+ translations + community) corpus. Replaces the Pagefind backend.
+// Builds the SPA CJK inverted index (v3: bigram + unigram, tf-carrying) from
+// the CBETA + OpenZen (+ translations + community) corpus.
 //
 // Output layout:
-//   data/search/bigram/manifest.json
-//   data/search/bigram/docs.txt                   (line N = url for docId N)
-//   data/search/bigram/shards/XX/YY-<hash6>.bin   (4096 hashed shards)
-//   data/search/text/{XX}.bin                     (256 NDJSON text shards
-//                                                  for verification step)
+//   data/search/bigram/manifest.json                     (version 3)
+//   data/search/bigram/docs.txt                          (line N = url for docId N)
+//   data/search/bigram/shards/XX/YY-<hash6>.bin          (4096 hashed bigram shards, v3)
+//   data/search/bigram/unigram/XX/YY-<hash6>.bin         (4096 hashed unigram shards, v3)
+//   data/search/text/{XXX}.bin                           (4096 NDJSON text shards
+//                                                         for phrase verification)
+//
+// v3 shards (see lib/bigram-codec.js encodeShardV3) carry a per-doc term
+// frequency after each docId gap, so ranking is index-only at runtime — text
+// shards are only fetched to phrase-verify the rows actually displayed.
+//
+// Determinism: every directory listing is sorted before traversal, so docId
+// assignment (and therefore every posting list and shard hash) is a pure
+// function of corpus content. Every skipped source file/directory is logged
+// loudly and counted in manifest.skippedFiles.
 //
 // Run with:
 //   node --max-old-space-size=4096 --expose-gc build/build-bigram-index.js
-// or `npm run build:search`
 //
 // Bump to --max-old-space-size=6144 only if rss > 3.8 GB.
 //
 // References:
-//   runs/.../SYNTHESIS.md sections 1, 5
-//   runs/.../IMPLEMENTATION_PLAN.md section 3 "W2.1"
-//   build/build-pagefind-index.js  (env-var conventions, corpus walk)
 //   lib/cjk-normalize.js           (normalizeString, isCjk)
 //   lib/fnv.js                     (fnv1a32)
-//   lib/bigram-codec.js            (encodePostingList, encodeShard)
+//   lib/bigram-codec.js            (encodeShardV3, readShardHeader,
+//                                   decodePostingListV3)
 //   lib/build/extract-text.js      (extractText)
 
 import {
@@ -36,7 +43,7 @@ import { fileURLToPath } from 'url';
 
 import { normalizeString, isCjk } from '../lib/cjk-normalize.js';
 import { fnv1a32 } from '../lib/fnv.js';
-import { encodePostingList, encodeShard } from '../lib/bigram-codec.js';
+import { encodeShardV3, readShardHeader, decodePostingListV3 } from '../lib/bigram-codec.js';
 import { extractText } from '../lib/build/extract-text.js';
 
 // === Configuration (env-var conventions match build-pagefind-index.js) ===
@@ -51,15 +58,23 @@ const COMMUNITY_DIR = process.env.COMMUNITY_DIR || 'C:/Programmieren/CbetaZenTra
 
 const __filename = fileURLToPath(import.meta.url);
 const REPO_ROOT = dirname(dirname(__filename)); // .../ZenLinkPage
-const OUTPUT_ROOT = join(REPO_ROOT, 'data', 'search');
+// Output root is overridable for smoke tests against fixture corpora
+// (default unchanged: <repo>/data/search, gitignored).
+const OUTPUT_ROOT = process.env.SEARCH_OUTPUT_ROOT || join(REPO_ROOT, 'data', 'search');
 const BIGRAM_DIR = join(OUTPUT_ROOT, 'bigram');
 const SHARDS_DIR = join(BIGRAM_DIR, 'shards');
+const UNIGRAM_DIR = join(BIGRAM_DIR, 'unigram');
 const TEXT_DIR = join(OUTPUT_ROOT, 'text');
 
-const SHARD_COUNT = 4096;          // bigram shards (FNV-1a32 mod 4096)
+const SHARD_COUNT = 4096;          // bigram AND unigram shards (FNV-1a32 mod 4096)
 const TEXT_SHARD_COUNT = 4096;     // text shards (docId mod 4096) — smaller per-shard fetches
 const MAX_DOC_COUNT = 65535;       // uint16 docId limit
 const HASH_HEX_LEN = 6;            // first 6 hex of sha-256 of shard bytes
+const VALIDATION_SAMPLE = 16;      // min shards read back per set for round-trip check
+
+// Count of source files/directories silently skipped during the build.
+// Surfaced in the manifest (observability / determinism audit #7).
+let skippedFiles = 0;
 
 // === Helpers ===
 
@@ -83,6 +98,19 @@ function ensureDir(dir) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
+// Loud skip: log absolute path + reason, count it (manifest.skippedFiles).
+function logSkip(absPath, reason) {
+    skippedFiles++;
+    console.error(`  [skip] ${absPath}: ${reason}`);
+}
+
+/**
+ * Deterministic DFS over an XML tree. Every readdirSync listing is sorted
+ * (plain code-unit string sort) so traversal order — and therefore docId
+ * assignment — never depends on filesystem enumeration order (audit #7).
+ * Within a directory, files come first (sorted), then subdirectories are
+ * descended in sorted order.
+ */
 function findXmlFiles(dir) {
     const results = [];
     if (!existsSync(dir)) return results;
@@ -91,12 +119,20 @@ function findXmlFiles(dir) {
         const d = stack.pop();
         let entries;
         try { entries = readdirSync(d, { withFileTypes: true }); }
-        catch { continue; }
+        catch (err) {
+            logSkip(d, `unreadable directory (${err.message})`);
+            continue;
+        }
+        entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+        const subdirs = [];
         for (const entry of entries) {
             const full = join(d, entry.name);
-            if (entry.isDirectory()) stack.push(full);
+            if (entry.isDirectory()) subdirs.push(full);
             else if (entry.name.endsWith('.xml')) results.push(full);
         }
+        // Push in reverse so the LIFO stack pops subdirectories in
+        // ascending sorted order.
+        for (let i = subdirs.length - 1; i >= 0; i--) stack.push(subdirs[i]);
     }
     return results;
 }
@@ -127,10 +163,6 @@ function loadZenIds(path) {
     return ids;
 }
 
-function hasTranslation(relPath, translatedDir) {
-    return existsSync(join(translatedDir, relPath));
-}
-
 // === Document collection ===
 
 /**
@@ -144,16 +176,22 @@ function walkAndIngest(docs, sourceDir, mapper) {
         const relPath = relative(sourceDir, absPath).replace(/\\/g, '/');
         let xml;
         try { xml = readFileSync(absPath, 'utf-8'); }
-        catch { continue; }
+        catch (err) {
+            logSkip(absPath, `unreadable file (${err.message})`);
+            continue;
+        }
 
         const { text } = extractText(xml);
-        if (!text) continue;
+        if (!text) {
+            logSkip(absPath, 'extracted text is empty');
+            continue;
+        }
 
         const meta = mapper(absPath, relPath);
         if (!meta) continue;
 
         // Normalize the extracted text once; all downstream consumers use the
-        // normalized form (bigram emission, verification step at runtime).
+        // normalized form (term emission, verification step at runtime).
         const normalized = normalizeString(text);
 
         docs.push({
@@ -251,9 +289,11 @@ function collectDocuments(cbetaTitles, openzenTitles, zenIds) {
     // 5) Community translations (en) — per translator subdirectory
     console.log(`\nCommunity: ${COMMUNITY_DIR}`);
     if (existsSync(COMMUNITY_DIR)) {
+        // Sorted for deterministic docId assignment (audit #7).
         const users = readdirSync(COMMUNITY_DIR, { withFileTypes: true })
             .filter(d => d.isDirectory())
-            .map(d => d.name);
+            .map(d => d.name)
+            .sort();
         console.log(`  translators: ${users.join(', ') || '(none)'}`);
         for (const user of users) {
             const userDir = join(COMMUNITY_DIR, user);
@@ -300,114 +340,174 @@ function collectDocuments(cbetaTitles, openzenTitles, zenIds) {
     return docs;
 }
 
-// === Bigram index build ===
+// === Term index build (bigram + unigram, with term frequency) ===
 
 /**
- * Build the in-memory bigram index from zh docs.
- * Each bigram lists each doc once (per-doc Set dedupes).
- * Returns Map<bigram:string, Uint16Array (sorted ascending)>.
+ * Flush a per-doc Map<term, tf> into the global interleaved index
+ * Map<term, number[]> where each array is [docId, tf, docId, tf, ...] with
+ * docIds strictly ascending (guaranteed by iterating docs in docId order —
+ * asserted, never re-sorted).
  */
-function buildBigramIndex(zhDocs) {
-    // Two-stage: collect bigram -> Array<docId>; sort + uniq later.
-    // Direct array push avoids per-doc per-bigram Set lookups outside the doc.
-    const bigramToDocIds = new Map();
+function flushDocTerms(globalIndex, docTfs, docId) {
+    for (const [term, tf] of docTfs) {
+        let arr = globalIndex.get(term);
+        if (arr === undefined) {
+            arr = [];
+            globalIndex.set(term, arr);
+        } else if (arr[arr.length - 2] >= docId) {
+            // Postings are appended in ascending doc order by construction;
+            // a violation means docId assignment broke — hard-fail.
+            throw new Error(
+                `flushDocTerms: docId ${docId} for term "${term}" not ascending ` +
+                `(last was ${arr[arr.length - 2]})`
+            );
+        }
+        arr.push(docId, tf);
+    }
+}
+
+/**
+ * Build the in-memory term indexes from all docs in one pass:
+ *   - bigram: every adjacent CJK code-unit pair, counted per occurrence (tf)
+ *   - unigram: every CJK code unit, counted per occurrence (tf)
+ * Returns { bigramIndex, unigramIndex }, each Map<term, number[]> with
+ * interleaved [docId, tf, ...] postings (docIds ascending unique).
+ */
+function buildTermIndexes(docs) {
+    const bigramIndex = new Map();
+    const unigramIndex = new Map();
 
     let docCounter = 0;
-    for (const doc of zhDocs) {
+    for (const doc of docs) {
         const text = doc.normalized;
-        if (!text || text.length < 2) { docCounter++; continue; }
+        if (!text) { docCounter++; continue; }
 
-        // Per-doc set: dedupe bigrams within a single doc.
-        const seen = new Set();
+        // Per-doc tf accumulators (audit #1: count occurrences, not a dedupe
+        // Set; audit #4: unigrams captured in the same char walk).
+        //
+        // Counting convention: NON-OVERLAPPING occurrences, matching the
+        // runtime's countSubstringHits greedy walk (pos = idx + len), the v2
+        // text-verification pipeline, and the KWIC expansion — so the tf a
+        // v3 shard reports for a self-overlapping bigram (e.g. 無無 in a run
+        // 無無無) equals the count every display path computes (1, not 2).
+        // Only a bigram of two IDENTICAL code units can self-overlap, and
+        // only at consecutive start positions, i.e. inside a run of the same
+        // char: greedily count it at every other position of that run.
+        const bigramTfs = new Map();
+        const unigramTfs = new Map();
 
-        // Walk adjacent code-unit pairs. Both code units must be CJK
-        // ideographs (Unified BMP, Extension A, or Compatibility) per
-        // cjk-normalize.isCjk.
         const len = text.length;
-        let prevCu = text.charCodeAt(0);
-        let prevIsCjk = isCjk(prevCu);
+        let prevIsCjk = isCjk(text.charCodeAt(0));
+        if (prevIsCjk) {
+            unigramTfs.set(text[0], 1);
+        }
+        let eqRunStart = 0; // start index of the current run of identical code units
         for (let i = 1; i < len; i++) {
             const cu = text.charCodeAt(i);
             const cuIsCjk = isCjk(cu);
-            if (prevIsCjk && cuIsCjk) {
-                // Build the 2-char bigram. `substring` reuses interned 2-char
-                // slices on V8.
-                const bigram = text.substring(i - 1, i + 1);
-                if (!seen.has(bigram)) {
-                    seen.add(bigram);
-                    let arr = bigramToDocIds.get(bigram);
-                    if (arr === undefined) {
-                        arr = [];
-                        bigramToDocIds.set(bigram, arr);
+            if (cu !== text.charCodeAt(i - 1)) eqRunStart = i;
+            if (cuIsCjk) {
+                // Unigram: single UTF-16 code unit (corpus is BMP-dominated;
+                // matches what the pair loop indexes). Length-1 needles can't
+                // overlap, so every occurrence counts.
+                const ch = text[i];
+                unigramTfs.set(ch, (unigramTfs.get(ch) || 0) + 1);
+                if (prevIsCjk) {
+                    // Bigram: both code units CJK per cjk-normalize.isCjk.
+                    // Self-pair (XX): count only at even offsets within the
+                    // identical-char run (greedy non-overlapping).
+                    if (cu !== text.charCodeAt(i - 1) || (i - 1 - eqRunStart) % 2 === 0) {
+                        const bigram = text.substring(i - 1, i + 1);
+                        bigramTfs.set(bigram, (bigramTfs.get(bigram) || 0) + 1);
                     }
-                    arr.push(doc.docId);
                 }
             }
             prevIsCjk = cuIsCjk;
         }
 
+        // Flush once per doc: appends (docId, tf) pairs in ascending doc order.
+        flushDocTerms(bigramIndex, bigramTfs, doc.docId);
+        flushDocTerms(unigramIndex, unigramTfs, doc.docId);
+
         docCounter++;
         if (docCounter % 500 === 0) {
-            console.log(`  bigrams: processed ${docCounter}/${zhDocs.length} zh docs ` +
-                `(${bigramToDocIds.size} distinct bigrams)`);
+            console.log(`  terms: processed ${docCounter}/${docs.length} docs ` +
+                `(${bigramIndex.size} bigrams, ${unigramIndex.size} unigrams)`);
         }
     }
 
-    // Convert each posting list to a sorted Uint16Array. Doc ids are already
-    // appended in ascending order (we iterate docs by ascending docId), so
-    // each list is already sorted ascending and unique. Verify in dev.
-    const result = new Map();
-    for (const [bigram, arr] of bigramToDocIds) {
-        // Defensive sort + dedupe — cheap when already sorted.
-        arr.sort((a, b) => a - b);
-        // Dedupe (should be a no-op given the per-doc Set, but cheap insurance).
-        let writeIdx = 0;
-        for (let i = 0; i < arr.length; i++) {
-            if (i === 0 || arr[i] !== arr[i - 1]) {
-                arr[writeIdx++] = arr[i];
-            }
-        }
-        const u16 = new Uint16Array(writeIdx);
-        for (let i = 0; i < writeIdx; i++) u16[i] = arr[i];
-        result.set(bigram, u16);
-    }
+    return { bigramIndex, unigramIndex };
+}
 
-    return result;
+/** Total postings (docId,tf pairs) across an interleaved index. */
+function countPostings(index) {
+    let total = 0;
+    for (const arr of index.values()) total += arr.length >>> 1;
+    return total;
 }
 
 // === Sharding & writing ===
 
 /**
- * Partition the bigram index into 4096 buckets via fnv1a32 mod 4096, encode
- * each non-empty bucket as a shard, write to disk, and return the per-bucket
- * manifest entries (a string: 6-hex content hash, or "0" for empty).
+ * Partition an interleaved term index into 4096 buckets via fnv1a32 mod 4096,
+ * encode each non-empty bucket as a v3 shard, write to disk under shardsDir
+ * ({XX}/{YY}-{hash6}.bin, hash6 = first 6 hex of sha-256 of shard bytes),
+ * and return the per-bucket manifest entries ("0" sentinel for empty).
+ *
+ * Memory: the source index is CLEARED as soon as bucketing completes (posting
+ * arrays stay referenced only by their bucket and are freed bucket-by-bucket
+ * after encoding) — no double-hold of raw + converted copies.
+ *
+ * Validation: a random sample of >= VALIDATION_SAMPLE written shards is read
+ * back via readShardHeader + decodePostingListV3 and one full posting list per
+ * sampled shard is compared against the in-memory data. Throws on mismatch.
  */
-function shardAndWrite(index, docCount) {
+function shardAndWrite(index, docCount, shardsDir, label) {
     // Pre-clear the shards directory so a rebuild with changed content (and
     // therefore changed content-hash filenames) doesn't leave stale orphan
     // files alongside the new ones — Cloudflare would happily upload both.
-    if (existsSync(SHARDS_DIR)) {
-        rmSync(SHARDS_DIR, { recursive: true, force: true });
+    if (existsSync(shardsDir)) {
+        rmSync(shardsDir, { recursive: true, force: true });
     }
 
-    // Group bigrams by bucket id.
+    // Group terms by bucket id.
     const buckets = new Array(SHARD_COUNT);
     for (let b = 0; b < SHARD_COUNT; b++) buckets[b] = null;
 
-    for (const [bigram, postings] of index) {
-        const bucket = fnv1a32(bigram) % SHARD_COUNT;
+    for (const [term, interleaved] of index) {
+        const bucket = fnv1a32(term) % SHARD_COUNT;
         let entry = buckets[bucket];
         if (entry === null) {
             entry = [];
             buckets[bucket] = entry;
         }
-        entry.push({ term: bigram, postings });
+        entry.push({ term, interleaved });
     }
+
+    // The buckets now hold the only needed references to the posting arrays;
+    // drop the map entries so each array is freed with its bucket.
+    index.clear();
+
+    // Pick the read-back validation sample among non-empty buckets.
+    const nonEmptyBuckets = [];
+    for (let b = 0; b < SHARD_COUNT; b++) {
+        if (buckets[b] !== null && buckets[b].length > 0) nonEmptyBuckets.push(b);
+    }
+    const sampleSize = Math.min(VALIDATION_SAMPLE, nonEmptyBuckets.length);
+    for (let i = 0; i < sampleSize; i++) {
+        const j = i + Math.floor(Math.random() * (nonEmptyBuckets.length - i));
+        const tmp = nonEmptyBuckets[i];
+        nonEmptyBuckets[i] = nonEmptyBuckets[j];
+        nonEmptyBuckets[j] = tmp;
+    }
+    const sampleBuckets = new Set(nonEmptyBuckets.slice(0, sampleSize));
+    const validationRecords = [];
 
     const manifestShards = {};
     let written = 0;
     let totalShardBytes = 0;
     let totalPostings = 0;
+    let termCount = 0;
 
     for (let b = 0; b < SHARD_COUNT; b++) {
         const xx = ((b >>> 8) & 0xff).toString(16).padStart(2, '0');
@@ -420,23 +520,30 @@ function shardAndWrite(index, docCount) {
             continue;
         }
 
-        // Stable order within a shard: sort by term (deterministic builds).
-        entries.sort((a, b) => (a.term < b.term ? -1 : a.term > b.term ? 1 : 0));
-
-        // Encode each posting list as varint-delta bytes.
+        // Split each interleaved [docId, tf, ...] run into the typed pair
+        // arrays encodeShardV3 expects. (encodeShardV3 sorts terms internally
+        // in UTF-16 code-unit order, so shard bytes are deterministic.)
         const termList = entries.map(e => {
-            const postBytes = encodePostingList(e.postings);
-            totalPostings += e.postings.length;
-            return { term: e.term, postings: postBytes, count: e.postings.length };
+            const arr = e.interleaved;
+            const n = arr.length >>> 1;
+            const docIds = new Uint16Array(n);
+            const tfs = new Uint32Array(n);
+            for (let i = 0; i < n; i++) {
+                docIds[i] = arr[2 * i];
+                tfs[i] = arr[2 * i + 1];
+            }
+            totalPostings += n;
+            return { term: e.term, docIds, tfs };
         });
+        termCount += termList.length;
 
-        const shardBytes = encodeShard(termList, docCount);
+        const shardBytes = encodeShardV3(termList, docCount);
         const hash6 = createHash('sha256')
             .update(shardBytes)
             .digest('hex')
             .slice(0, HASH_HEX_LEN);
 
-        const subDir = join(SHARDS_DIR, xx);
+        const subDir = join(shardsDir, xx);
         ensureDir(subDir);
         const fileName = `${yy}-${hash6}.bin`;
         const filePath = join(subDir, fileName);
@@ -446,30 +553,88 @@ function shardAndWrite(index, docCount) {
         written++;
         totalShardBytes += shardBytes.length;
 
+        // Stash a validation record for sampled buckets: term count plus one
+        // full posting list (references to the freshly built typed arrays —
+        // nothing mutates them after this point).
+        if (sampleBuckets.has(b)) {
+            const pick = termList[Math.floor(Math.random() * termList.length)];
+            validationRecords.push({
+                filePath,
+                termCount: termList.length,
+                term: pick.term,
+                docIds: pick.docIds,
+                tfs: pick.tfs,
+            });
+        }
+
         // Free the bucket — these can be large.
         buckets[b] = null;
 
         if (written % 256 === 0) {
-            gcPause(`shard ${written}`);
+            gcPause(`${label} shard ${written}`);
         }
         if (written % 512 === 0) {
-            console.log(`  wrote ${written} shards (${totalShardBytes} bytes so far)`);
+            console.log(`  wrote ${written} ${label} shards (${totalShardBytes} bytes so far)`);
         }
     }
+
+    validateShardSample(validationRecords, label);
 
     return {
         manifestShards,
         nonEmptyCount: written,
         totalShardBytes,
         totalPostings,
+        termCount,
     };
+}
+
+/**
+ * Read back sampled shard files and assert (a) version 3, (b) dictionary term
+ * count matches, (c) one full posting-list round-trip (docIds + tfs) matches
+ * the in-memory data exactly. Throws on any mismatch.
+ */
+function validateShardSample(records, label) {
+    for (const rec of records) {
+        const bytes = readFileSync(rec.filePath); // Buffer IS a Uint8Array
+        const header = readShardHeader(bytes);
+        if (header.version !== 3) {
+            throw new Error(`validate(${label}): ${rec.filePath} has version ${header.version}, expected 3`);
+        }
+        if (header.terms.size !== rec.termCount) {
+            throw new Error(
+                `validate(${label}): ${rec.filePath} termCount ${header.terms.size} != expected ${rec.termCount}`
+            );
+        }
+        const meta = header.terms.get(rec.term);
+        if (!meta) {
+            throw new Error(`validate(${label}): ${rec.filePath} missing term "${rec.term}"`);
+        }
+        if (meta.count !== rec.docIds.length) {
+            throw new Error(
+                `validate(${label}): ${rec.filePath} term "${rec.term}" posting count ` +
+                `${meta.count} != expected ${rec.docIds.length}`
+            );
+        }
+        const { docIds, tfs } = decodePostingListV3(bytes, meta.count, meta.offset);
+        for (let i = 0; i < meta.count; i++) {
+            if (docIds[i] !== rec.docIds[i] || tfs[i] !== rec.tfs[i]) {
+                throw new Error(
+                    `validate(${label}): ${rec.filePath} term "${rec.term}" posting ${i} ` +
+                    `round-trip mismatch: got (${docIds[i]}, ${tfs[i]}), ` +
+                    `expected (${rec.docIds[i]}, ${rec.tfs[i]})`
+                );
+            }
+        }
+    }
+    console.log(`  [validate] ${label}: ${records.length} sampled shards round-tripped OK`);
 }
 
 // === Manifest + docs.txt ===
 
 function writeManifest(meta) {
     const manifest = {
-        version: 1,
+        version: 3,
         builtAt: new Date().toISOString(),
         docCount: meta.docCount,
         shardCount: SHARD_COUNT,
@@ -478,9 +643,13 @@ function writeManifest(meta) {
         nonEmptyShardCount: meta.nonEmptyShardCount,
         textShards: { count: TEXT_SHARD_COUNT, path: 'data/search/text/{XX}.bin' },
         shards: meta.manifestShards,
+        // v3 additions: parallel unigram shard set + build observability.
+        unigramShards: meta.unigramShards,
+        unigramCount: meta.unigramCount,
+        skippedFiles: meta.skippedFiles,
     };
     const path = join(BIGRAM_DIR, 'manifest.json');
-    // Pretty-print for human readability; manifest is ~2 KB so cost is irrelevant.
+    // Pretty-print for human readability; manifest is small so cost is irrelevant.
     writeFileSync(path, JSON.stringify(manifest, null, 2));
     return path;
 }
@@ -494,15 +663,33 @@ function writeDocList(docs) {
     return path;
 }
 
+/** Read docs.txt back and assert line count === docCount, all lines non-empty. */
+function validateDocList(path, docCount) {
+    const content = readFileSync(path, 'utf-8');
+    const lines = content.split('\n');
+    // writeDocList appends a trailing newline → one trailing empty element.
+    if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+    if (lines.length !== docCount) {
+        throw new Error(`validate(docs.txt): ${lines.length} lines != docCount ${docCount}`);
+    }
+    for (let i = 0; i < lines.length; i++) {
+        if (!lines[i]) {
+            throw new Error(`validate(docs.txt): line ${i} (docId ${i}) is empty`);
+        }
+    }
+    console.log(`  [validate] docs.txt: ${lines.length} non-empty lines OK`);
+}
+
 // === Per-doc text shards ===
 //
 // Each shard at data/search/text/{XXX}.bin is a UTF-8 NDJSON file with one
 // {docId, text} record per line. text is the *normalized* text (the same
-// form used for bigram emission). Bucket by docId mod 4096 (3-hex name).
+// form used for term emission). Bucket by docId mod 4096 (3-hex name).
 //
-// The verification step in lib/bigram-search.js fetches the shard for each
+// The verification step in lib/bigram-search.js fetches the shard for a
 // candidate docId and runs text.indexOf(normalizedQuery) to enumerate true
-// hit positions (bigrams are necessary, not sufficient).
+// hit positions (bigrams are necessary, not sufficient). Under v3 this only
+// happens for displayed rows / KWIC, not for ranking.
 //
 // 4096 buckets keeps each shard small (~50-200 KB) so verification fetches
 // are cheap over HTTP/2 and stream as they arrive.
@@ -540,7 +727,7 @@ function writeTextShards(docs) {
 
 async function main() {
     const t0 = Date.now();
-    console.log('=== build-bigram-index ===');
+    console.log('=== build-bigram-index (v3) ===');
     console.log(`output root: ${OUTPUT_ROOT}`);
 
     // Prepare output dirs.
@@ -566,47 +753,80 @@ async function main() {
     logMem('after collectDocuments');
     gcPause('collectDocuments');
 
-    // ---- 4. Build bigram index ----
-    // Pass ALL docs (not just zh): the inner CJK-pair gate
-    // (`prevIsCjk && cuIsCjk`) ensures English-side docs contribute ~zero
-    // bigrams, but stray CJK in English glosses (e.g. inline names) is
-    // correctly indexed. This unifies the docId space so translations and
-    // community docs participate in CJK fulltext queries.
-    console.log('\n--- buildBigramIndex ---');
-    const index = buildBigramIndex(docs);
-    const bigramCount = index.size;
-    let totalPostings = 0;
-    for (const arr of index.values()) totalPostings += arr.length;
-    console.log(`distinct bigrams: ${bigramCount}`);
-    console.log(`total postings:   ${totalPostings}`);
-    logMem('after buildBigramIndex');
+    // ---- 4. Build term indexes (bigram + unigram, tf-carrying) ----
+    // Pass ALL docs (not just zh): the inner CJK gate ensures English-side
+    // docs contribute ~zero terms, but stray CJK in English glosses (e.g.
+    // inline names) is correctly indexed. This unifies the docId space so
+    // translations and community docs participate in CJK fulltext queries.
+    console.log('\n--- buildTermIndexes ---');
+    const { bigramIndex, unigramIndex } = buildTermIndexes(docs);
+    const bigramCount = bigramIndex.size;
+    const unigramCount = unigramIndex.size;
+    const expectedBigramPostings = countPostings(bigramIndex);
+    const expectedUnigramPostings = countPostings(unigramIndex);
+    console.log(`distinct bigrams:  ${bigramCount}`);
+    console.log(`distinct unigrams: ${unigramCount}`);
+    console.log(`bigram postings:   ${expectedBigramPostings}`);
+    console.log(`unigram postings:  ${expectedUnigramPostings}`);
+    logMem('after buildTermIndexes');
+    gcPause('buildTermIndexes');
 
-    // We can drop normalized text from non-zh docs once bigram index is built,
-    // but we still need normalized text for the per-doc text shards (used by
-    // runtime verification). Keep `docs[].normalized` until writeTextShards.
-    gcPause('buildBigramIndex');
+    // ---- 5. Shard and write (bigram, then unigram) ----
+    // shardAndWrite clears its source index once bucketing completes and
+    // frees each bucket after encoding — peak rss stays bounded.
+    console.log('\n--- shardAndWrite (bigram) ---');
+    const bigramResult = shardAndWrite(bigramIndex, docCount, SHARDS_DIR, 'bigram');
+    console.log(`wrote ${bigramResult.nonEmptyCount} non-empty bigram shards ` +
+        `(${SHARD_COUNT - bigramResult.nonEmptyCount} empty), ` +
+        `${bigramResult.totalShardBytes} bytes total`);
+    if (bigramResult.totalPostings !== expectedBigramPostings) {
+        throw new Error(
+            `bigram postings mismatch: shardAndWrite wrote ${bigramResult.totalPostings}, ` +
+            `index recount was ${expectedBigramPostings}`
+        );
+    }
+    if (bigramResult.termCount !== bigramCount) {
+        throw new Error(
+            `bigram term count mismatch: shardAndWrite wrote ${bigramResult.termCount}, ` +
+            `index had ${bigramCount}`
+        );
+    }
+    logMem('after shardAndWrite (bigram)');
+    gcPause('shardAndWrite bigram');
 
-    // ---- 5. Shard and write ----
-    console.log('\n--- shardAndWrite ---');
-    const shardResult = shardAndWrite(index, docCount);
-    console.log(`wrote ${shardResult.nonEmptyCount} non-empty shards ` +
-        `(${SHARD_COUNT - shardResult.nonEmptyCount} empty), ` +
-        `${shardResult.totalShardBytes} bytes total`);
-    logMem('after shardAndWrite');
-
-    // Drop the index now that it's been written.
-    index.clear();
-    gcPause('shardAndWrite');
+    console.log('\n--- shardAndWrite (unigram) ---');
+    const unigramResult = shardAndWrite(unigramIndex, docCount, UNIGRAM_DIR, 'unigram');
+    console.log(`wrote ${unigramResult.nonEmptyCount} non-empty unigram shards ` +
+        `(${SHARD_COUNT - unigramResult.nonEmptyCount} empty), ` +
+        `${unigramResult.totalShardBytes} bytes total`);
+    if (unigramResult.totalPostings !== expectedUnigramPostings) {
+        throw new Error(
+            `unigram postings mismatch: shardAndWrite wrote ${unigramResult.totalPostings}, ` +
+            `index recount was ${expectedUnigramPostings}`
+        );
+    }
+    if (unigramResult.termCount !== unigramCount) {
+        throw new Error(
+            `unigram term count mismatch: shardAndWrite wrote ${unigramResult.termCount}, ` +
+            `index had ${unigramCount}`
+        );
+    }
+    logMem('after shardAndWrite (unigram)');
+    gcPause('shardAndWrite unigram');
 
     // ---- 6. Manifest + docs.txt ----
     console.log('\n--- writeManifest + writeDocList ---');
     const manifestPath = writeManifest({
         docCount,
         bigramCount,
-        nonEmptyShardCount: shardResult.nonEmptyCount,
-        manifestShards: shardResult.manifestShards,
+        nonEmptyShardCount: bigramResult.nonEmptyCount,
+        manifestShards: bigramResult.manifestShards,
+        unigramShards: unigramResult.manifestShards,
+        unigramCount,
+        skippedFiles,
     });
     const docsPath = writeDocList(docs);
+    validateDocList(docsPath, docCount);
     console.log(`manifest: ${manifestPath}`);
     console.log(`docs.txt: ${docsPath}`);
 
@@ -620,13 +840,18 @@ async function main() {
     const t1 = Date.now();
     const wallSec = ((t1 - t0) / 1000).toFixed(1);
     console.log('\n=== summary ===');
-    console.log(`docCount:           ${docCount}`);
-    console.log(`bigramCount:        ${bigramCount}`);
-    console.log(`nonEmptyShards:     ${shardResult.nonEmptyCount} / ${SHARD_COUNT}`);
-    console.log(`totalShardBytes:    ${shardResult.totalShardBytes}`);
-    console.log(`textShardBytes:     ${textBytes}`);
-    console.log(`totalPostings:      ${totalPostings}`);
-    console.log(`wall time:          ${wallSec}s`);
+    console.log(`docCount:            ${docCount}`);
+    console.log(`bigramCount:         ${bigramCount}`);
+    console.log(`unigramCount:        ${unigramCount}`);
+    console.log(`nonEmptyShards:      ${bigramResult.nonEmptyCount} / ${SHARD_COUNT} bigram, ` +
+        `${unigramResult.nonEmptyCount} / ${SHARD_COUNT} unigram`);
+    console.log(`bigramShardBytes:    ${bigramResult.totalShardBytes}`);
+    console.log(`unigramShardBytes:   ${unigramResult.totalShardBytes}`);
+    console.log(`textShardBytes:      ${textBytes}`);
+    console.log(`bigramPostings:      ${bigramResult.totalPostings}`);
+    console.log(`unigramPostings:     ${unigramResult.totalPostings}`);
+    console.log(`skippedFiles:        ${skippedFiles}`);
+    console.log(`wall time:           ${wallSec}s`);
     logMem('final');
 }
 

@@ -45,6 +45,10 @@ const OUTPUT_PATH = join(REPO_ROOT, 'data', 'search', 'english.jsonl');
 
 const MAX_BYTES_WARN = 5 * 1024 * 1024; // 5 MB threshold
 
+// Count of source files skipped (readdir/read failures, empty extractions).
+// Every skip is logged loudly via console.error with the absolute path.
+let skipped = 0;
+
 // === Title loader (JSONL, keyed by `path`) ===
 function loadTitles(path) {
     const titles = new Map();
@@ -71,9 +75,14 @@ function findXmlFiles(dir) {
         let entries;
         try {
             entries = readdirSync(d, { withFileTypes: true });
-        } catch {
+        } catch (err) {
+            console.error(`  SKIP (readdir error): ${d} :: ${err.message}`);
+            skipped++;
             return;
         }
+        // Deterministic order: plain default string sort (UTF-16 code-unit
+        // order, locale-independent) so dirs and files are visited sorted.
+        entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
         for (const entry of entries) {
             const full = join(d, entry.name);
             if (entry.isDirectory()) walk(full);
@@ -98,13 +107,18 @@ function buildRecord(absPath, opts) {
     try {
         xml = readFileSync(absPath, 'utf-8');
     } catch (err) {
-        console.warn(`  skip (read error): ${absPath} :: ${err.message}`);
+        console.error(`  SKIP (read error): ${absPath} :: ${err.message}`);
+        skipped++;
         return null;
     }
     // captureLb: false for performance — anchors are not needed here.
     const { text } = extractText(xml, { captureLb: false });
     const norm = normalizeForSearch(text);
-    if (!norm) return null;
+    if (!norm) {
+        console.error(`  SKIP (empty extraction): ${absPath}`);
+        skipped++;
+        return null;
+    }
     const rec = {
         fileId,
         side: 'translation',
@@ -168,8 +182,11 @@ function main() {
         try {
             users = readdirSync(COMMUNITY_DIR, { withFileTypes: true })
                 .filter(d => d.isDirectory())
-                .map(d => d.name);
-        } catch {
+                .map(d => d.name)
+                .sort(); // deterministic UTF-16 code-unit order
+        } catch (err) {
+            console.error(`  SKIP (readdir error): ${COMMUNITY_DIR} :: ${err.message}`);
+            skipped++;
             users = [];
         }
         console.log(`  Community translators: ${users.length} (${users.join(', ')})`);
@@ -192,6 +209,15 @@ function main() {
         console.log(`  Community dir not present: ${COMMUNITY_DIR}`);
     }
 
+    // --- Authoritative determinism pin: sort records regardless of walk
+    // order, by (fileId, translator, side) using plain string comparison
+    // (UTF-16 code-unit order, locale-independent). ---
+    const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+    records.sort((a, b) =>
+        cmp(a.fileId, b.fileId) ||
+        cmp(a.translator || '', b.translator || '') ||
+        cmp(a.side || '', b.side || ''));
+
     // --- Emit NDJSON ---
     mkdirSync(dirname(OUTPUT_PATH), { recursive: true });
     const ndjson = records.map(r => JSON.stringify(r)).join('\n') + (records.length ? '\n' : '');
@@ -204,6 +230,7 @@ function main() {
     }
 
     const elapsed = Date.now() - t0;
+    console.log(`english.jsonl: ${records.length} records, ${skipped} skipped`);
     console.log(`Done. ${records.length} records, ${stat.size} bytes (${sizeMB.toFixed(3)} MB), ${elapsed} ms.`);
     console.log(`Output: ${OUTPUT_PATH}`);
 }

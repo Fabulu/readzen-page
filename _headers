@@ -1,4 +1,9 @@
-# Cache strategy: shards/text immutable (content-hashed), manifest 60s
+# Cache strategy: index shards immutable (filenames are content-hashed:
+# {YY}-{sha256[:6]}.bin). TEXT shards are NOT content-hashed — they live at
+# fixed names (text/{XXX}.bin) whose content changes across deploys (the
+# builder renumbers all docIds on every corpus walk), so they must
+# revalidate like the manifest; a year-long immutable cache would map
+# docIds to the wrong documents after a redeploy. Manifest/docs.txt 60s
 # revalidate, english.jsonl 300s revalidate.
 
 /sitemap.xml
@@ -10,10 +15,16 @@
 /data/search/bigram/shards/*
   Cache-Control: public, max-age=31536000, immutable
 
-/data/search/text/*
+/data/search/bigram/unigram/*
   Cache-Control: public, max-age=31536000, immutable
 
-/data/search/manifest.json
+/data/search/text/*
+  Cache-Control: public, max-age=60, must-revalidate
+
+/data/search/bigram/manifest.json
+  Cache-Control: public, max-age=60, must-revalidate
+
+/data/search/bigram/docs.txt
   Cache-Control: public, max-age=60, must-revalidate
 
 /data/search/english.jsonl

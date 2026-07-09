@@ -150,3 +150,64 @@ test('maybeAutoExpandFirstGroup: gates on _autoExpandedThisQuery and sets attrib
         'flag must flip to true on first auto-expand of the query'
     );
 });
+
+// --- v3 search-parity wiring pins (audit #1/#2/#3/#6) ------------------
+// Same source-string style as above: light structural invariants over
+// views/search.js, no DOM behavior (test/_dom-shim.js only implements the
+// tei.js subset).
+
+test('v3 wiring: doSearch forwards onFulltextStats to federatedSearch', () => {
+    assert.ok(
+        SEARCH_VIEW_SRC.includes('onFulltextStats'),
+        'views/search.js must wire the onFulltextStats channel'
+    );
+    assert.ok(
+        SEARCH_VIEW_SRC.includes('onFulltextStats: onFulltextStats'),
+        'the stats callback must be passed into federatedSearch options'
+    );
+});
+
+test('v3 wiring: verifyDocPhrase is imported and invoked for displayed rows', () => {
+    assert.ok(
+        /import\s*\{[^}]*verifyDocPhrase[^}]*\}\s*from\s*'\.\.\/lib\/bigram-search\.js'/.test(SEARCH_VIEW_SRC),
+        'verifyDocPhrase must be imported from ../lib/bigram-search.js'
+    );
+    assert.ok(
+        /verifyDocPhrase\(/.test(SEARCH_VIEW_SRC.replace(/import[^;]+;/g, '')),
+        'verifyDocPhrase must actually be called'
+    );
+    assert.ok(
+        SEARCH_VIEW_SRC.includes('data-doc-id'),
+        'group <details> must carry data-doc-id for verify-on-demand'
+    );
+});
+
+test('v3 wiring: index staleness line ("Index built ...") is rendered from getManifestInfo', () => {
+    assert.ok(
+        SEARCH_VIEW_SRC.includes('Index built'),
+        'staleness line literal must be present (audit #6)'
+    );
+    assert.ok(
+        SEARCH_VIEW_SRC.includes('getManifestInfo'),
+        'staleness line must be fed by getManifestInfo'
+    );
+    assert.ok(
+        SEARCH_VIEW_SRC.includes('search-index-built'),
+        'staleness span uses the .search-index-built class'
+    );
+});
+
+test('v3 wiring: truncation + latin-ignored notices are emitted from _ftStats', () => {
+    assert.ok(
+        SEARCH_VIEW_SRC.includes('showing top'),
+        'truncation notice literal present (audit #2)'
+    );
+    assert.ok(
+        SEARCH_VIEW_SRC.includes('search-ft-notice'),
+        'latin-ignored notice uses the .search-ft-notice class (audit #3)'
+    );
+    assert.ok(
+        SEARCH_VIEW_SRC.includes('latinIgnored'),
+        'latin-ignored notice reads stats.latinIgnored'
+    );
+});

@@ -8,6 +8,9 @@ import {
     encodePostingList,
     decodePostingList,
     encodeShard,
+    encodePostingListWithTf,
+    decodePostingListV3,
+    encodeShardV3,
     readShardHeader,
 } from '../lib/bigram-codec.js';
 
@@ -361,4 +364,223 @@ test('end-to-end: many bigrams with realistic posting density', () => {
         const dec = decodePostingList(shard, meta.count, meta.offset);
         assert.deepEqual(Array.from(dec), t._expected, `posting mismatch for ${t.term}`);
     }
+});
+
+// =====================================================================
+// V3 codec: (docIdGap, tf) varint-pair postings + explicit dictionary count
+// =====================================================================
+
+test('encodeShardV3: writes IIDX magic + version 3 at bytes 4-7 + correct counts', () => {
+    const shard = encodeShardV3(
+        [
+            { term: '無門', docIds: [1, 5, 9], tfs: [2, 1, 7] },
+            { term: '門關', docIds: [2, 5], tfs: [1, 3] },
+        ],
+        100
+    );
+
+    // Magic bytes 'IIDX'
+    assert.equal(shard[0], 0x49);
+    assert.equal(shard[1], 0x49);
+    assert.equal(shard[2], 0x44);
+    assert.equal(shard[3], 0x58);
+    // version u32 LE at offsets 4-7 === 3
+    const version = shard[4] | (shard[5] << 8) | (shard[6] << 16) | (shard[7] << 24);
+    assert.equal(version, 3);
+    // termCount u32 LE
+    const termCount = shard[8] | (shard[9] << 8) | (shard[10] << 16) | (shard[11] << 24);
+    assert.equal(termCount, 2);
+    // docCount u32 LE
+    const docCount = shard[12] | (shard[13] << 8) | (shard[14] << 16) | (shard[15] << 24);
+    assert.equal(docCount, 100);
+});
+
+test('readShardHeader v3: uses the explicit dictionary count, NOT varint scanning', () => {
+    // Craft postings whose terminator-bit count would be WRONG if scanned as
+    // v2: every (docIdGap, tf) pair contributes TWO high-bit-clear terminator
+    // bytes, so _countVarints would report 2× the true posting count. The
+    // explicit v3 dictionary count must win.
+    const docIds = [0, 1, 2];
+    const tfs = [1, 1, 1];
+    const shard = encodeShardV3([{ term: '無門', docIds, tfs }], 10);
+    const header = readShardHeader(shard);
+    assert.equal(header.version, 3);
+    const meta = header.terms.get('無門');
+    assert.ok(meta, 'term present');
+    // 6 small varints = 6 terminator bytes; a v2-style scan would say 6.
+    assert.equal(meta.length, 6, 'posting run is 6 bytes (sanity)');
+    assert.equal(meta.count, 3, 'count comes from the explicit dictionary field, not a varint scan');
+});
+
+test('encodePostingListWithTf / decodePostingListV3: (delta, tf) round-trip incl. boundaries', () => {
+    // tf boundaries 1 / 127 / 128 / 16384; docId boundaries 0 / 65535.
+    const docIds = [0, 1, 127, 128, 16383, 16384, 65535];
+    const tfs = [1, 127, 128, 16384, 1, 127, 128];
+    const enc = encodePostingListWithTf(docIds, tfs);
+    const dec = decodePostingListV3(enc, docIds.length);
+    assert.ok(dec.docIds instanceof Uint16Array);
+    assert.ok(dec.tfs instanceof Uint32Array);
+    assert.deepEqual(Array.from(dec.docIds), docIds);
+    assert.deepEqual(Array.from(dec.tfs), tfs);
+});
+
+test('encodePostingListWithTf: empty input encodes to zero bytes and round-trips', () => {
+    const enc = encodePostingListWithTf([], []);
+    assert.equal(enc.length, 0);
+    const dec = decodePostingListV3(enc, 0);
+    assert.equal(dec.docIds.length, 0);
+    assert.equal(dec.tfs.length, 0);
+});
+
+test('encodePostingListWithTf: varint byte layout — pairs pack tightly', () => {
+    // docIds [0, 128], tfs [1, 128]:
+    //   gap 0 (1B) + tf 1 (1B) + gap 128 (2B) + tf 128 (2B) = 6 bytes.
+    const enc = encodePostingListWithTf([0, 128], [1, 128]);
+    assert.equal(enc.length, 6);
+    assert.equal(enc[0], 0x00);        // gap 0
+    assert.equal(enc[1], 0x01);        // tf 1
+    assert.equal(enc[2], 0x80);        // gap 128 lo (continuation)
+    assert.equal(enc[3], 0x01);        // gap 128 hi
+    assert.equal(enc[4], 0x80);        // tf 128 lo (continuation)
+    assert.equal(enc[5], 0x01);        // tf 128 hi
+});
+
+test('encodePostingListWithTf: rejects tf < 1, non-integer tf, length mismatch', () => {
+    assert.throws(() => encodePostingListWithTf([1], [0]), /tf/);
+    assert.throws(() => encodePostingListWithTf([1], [-3]), /tf/);
+    assert.throws(() => encodePostingListWithTf([1], [1.5]), /tf/);
+    assert.throws(() => encodePostingListWithTf([1, 2], [1]), /length mismatch/);
+});
+
+test('encodePostingListWithTf: rejects non-ascending / duplicate / out-of-range docIds', () => {
+    assert.throws(() => encodePostingListWithTf([3, 2], [1, 1]), /sorted ascending/);
+    assert.throws(() => encodePostingListWithTf([2, 2], [1, 1]), /sorted ascending/);
+    assert.throws(() => encodePostingListWithTf([-1], [1]), /uint16 range/);
+    assert.throws(() => encodePostingListWithTf([65536], [1]), /uint16 range/);
+});
+
+test('decodePostingListV3: truncated buffer throws (both docIdGap and tf positions)', () => {
+    // Ask for 2 pairs from a buffer holding only 1.5 pairs -> truncated tf.
+    const oneAndAHalf = new Uint8Array([0x01, 0x02, 0x03]); // (gap 1, tf 2), gap 3, MISSING tf
+    assert.throws(() => decodePostingListV3(oneAndAHalf, 2), /truncated/i);
+    // Dangling continuation bit -> truncated mid-varint.
+    const dangling = new Uint8Array([0x80]);
+    assert.throws(() => decodePostingListV3(dangling, 1), /truncated/i);
+    // Ask for 2 pairs from a 1-pair buffer -> truncated docIdGap of pair 2.
+    const onePair = new Uint8Array([0x01, 0x02]);
+    assert.throws(() => decodePostingListV3(onePair, 2), /truncated/i);
+});
+
+test('decodePostingListV3: respects offset within a larger buffer', () => {
+    const enc = encodePostingListWithTf([5, 6, 7], [9, 1, 4]);
+    const padded = new Uint8Array(enc.length + 4);
+    padded.set(enc, 4);
+    const dec = decodePostingListV3(padded, 3, 4);
+    assert.deepEqual(Array.from(dec.docIds), [5, 6, 7]);
+    assert.deepEqual(Array.from(dec.tfs), [9, 1, 4]);
+});
+
+test('encodeShardV3 + readShardHeader + decodePostingListV3: full round-trip (two terms)', () => {
+    const shard = encodeShardV3(
+        [
+            { term: '無門', docIds: [1, 5, 9], tfs: [2, 1, 7] },
+            { term: '門關', docIds: [2, 5], tfs: [1, 300] },
+        ],
+        100
+    );
+    const header = readShardHeader(shard);
+    assert.equal(header.version, 3);
+    assert.equal(header.docCount, 100);
+    assert.equal(header.terms.size, 2);
+
+    const e1 = header.terms.get('無門');
+    const e2 = header.terms.get('門關');
+    assert.equal(e1.count, 3);
+    assert.equal(e2.count, 2);
+
+    const d1 = decodePostingListV3(shard, e1.count, e1.offset);
+    assert.deepEqual(Array.from(d1.docIds), [1, 5, 9]);
+    assert.deepEqual(Array.from(d1.tfs), [2, 1, 7]);
+    const d2 = decodePostingListV3(shard, e2.count, e2.offset);
+    assert.deepEqual(Array.from(d2.docIds), [2, 5]);
+    assert.deepEqual(Array.from(d2.tfs), [1, 300]);
+});
+
+test('encodeShardV3: single-character (unigram) terms are legal', () => {
+    const shard = encodeShardV3([{ term: '佛', docIds: [0, 7], tfs: [12, 1] }], 8);
+    const header = readShardHeader(shard);
+    const meta = header.terms.get('佛');
+    assert.ok(meta, 'unigram term present');
+    const dec = decodePostingListV3(shard, meta.count, meta.offset);
+    assert.deepEqual(Array.from(dec.docIds), [0, 7]);
+    assert.deepEqual(Array.from(dec.tfs), [12, 1]);
+});
+
+test('encodeShardV3: byte-determinism across runs AND across input order', () => {
+    const entryA = { term: '無門', docIds: [1, 5], tfs: [3, 4] };
+    const entryB = { term: '門關', docIds: [2], tfs: [1] };
+    const entryC = { term: '佛性', docIds: [0, 1, 2], tfs: [1, 2, 3] };
+    const run1 = encodeShardV3([entryA, entryB, entryC], 50);
+    const run2 = encodeShardV3([entryA, entryB, entryC], 50);
+    const run3 = encodeShardV3([entryC, entryA, entryB], 50); // shuffled input
+    assert.deepEqual(Array.from(run1), Array.from(run2), 'identical input, identical bytes');
+    assert.deepEqual(Array.from(run1), Array.from(run3), 'terms are sorted internally: input order irrelevant');
+});
+
+test('encodeShardV3: rejects duplicate terms and zero-posting terms', () => {
+    assert.throws(
+        () => encodeShardV3([
+            { term: '無門', docIds: [1], tfs: [1] },
+            { term: '無門', docIds: [2], tfs: [1] },
+        ], 10),
+        /duplicate term/
+    );
+    assert.throws(
+        () => encodeShardV3([{ term: '無門', docIds: [], tfs: [] }], 10),
+        /zero postings/
+    );
+});
+
+test('encodeShardV3: empty term list produces a valid header-only v3 shard', () => {
+    const shard = encodeShardV3([], 0);
+    assert.equal(shard.length, 16, 'header is exactly 16 bytes');
+    const header = readShardHeader(shard);
+    assert.equal(header.version, 3);
+    assert.equal(header.terms.size, 0);
+});
+
+test('readShardHeader: still rejects unsupported version 99 on a v3-shaped shard', () => {
+    const shard = encodeShardV3([{ term: '無門', docIds: [1], tfs: [1] }], 10);
+    shard[4] = 99; shard[5] = 0; shard[6] = 0; shard[7] = 0;
+    assert.throws(() => readShardHeader(shard), /unsupported version/);
+});
+
+test('readShardHeader: v2 shards still decode exactly (dual-version dispatch)', () => {
+    // Sanity pin that adding v3 didn't disturb v2: same fixture as the
+    // original round-trip test, decoded through the shared header reader.
+    const shard = encodeShard(
+        [
+            { term: '無門', postings: encodePostingList([1, 5, 9]), count: 3 },
+            { term: '門關', postings: encodePostingList([2, 5]), count: 2 },
+        ],
+        100
+    );
+    const header = readShardHeader(shard);
+    assert.equal(header.version, 2);
+    const e1 = header.terms.get('無門');
+    assert.equal(e1.count, 3, 'v2 count still recovered via varint terminator scan');
+    assert.deepEqual(Array.from(decodePostingList(shard, e1.count, e1.offset)), [1, 5, 9]);
+});
+
+test('readShardHeader v3: truncated dictionary (missing count/len/offset trailer) throws', () => {
+    // Header claims 1 term but the buffer ends right after the term bytes —
+    // the v3 12-byte trailer (count + postingByteLen + postingOffset) is gone.
+    const term = new TextEncoder().encode('ab');
+    const buf = new Uint8Array(16 + 2 + term.length);
+    buf[0] = 0x49; buf[1] = 0x49; buf[2] = 0x44; buf[3] = 0x58; // IIDX
+    buf[4] = 3;  // version 3
+    buf[8] = 1;  // termCount 1
+    buf[16] = term.length & 0xff; buf[17] = 0;
+    buf.set(term, 18);
+    assert.throws(() => readShardHeader(buf), /truncated/i);
 });

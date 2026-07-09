@@ -24,7 +24,13 @@ import { createHash } from 'node:crypto';
 import { normalizeString, isCjk } from '../lib/cjk-normalize.js';
 import { extractText } from '../lib/build/extract-text.js';
 import { fnv1a32 } from '../lib/fnv.js';
-import { encodePostingList, encodeShard } from '../lib/bigram-codec.js';
+import {
+    encodePostingList,
+    encodeShard,
+    encodeShardV3,
+    readShardHeader,
+    decodePostingListV3,
+} from '../lib/bigram-codec.js';
 
 const SHARD_COUNT = 4096;
 
@@ -200,4 +206,196 @@ test('build determinism: shard file naming hash is stable for identical bytes', 
     const firstBytes2 = shards2.get(firstHex);
     const h2 = sha256(firstBytes2).slice(0, 6);
     assert.equal(h, h2);
+});
+
+// =====================================================================
+// V3 pipeline replication: per-doc tf counting + unigram emission +
+// encodeShardV3 determinism.
+//
+// Mirrors build/build-bigram-index.js#buildTermIndexes + shardAndWrite
+// in-memory, using the exact same library primitives. NOTE: like the v2
+// replication above, this CANNOT catch filesystem-enumeration-order
+// defects (readdirSync ordering, docId assignment across directories) —
+// QA's double-build over the real corpus covers that class of bug.
+// =====================================================================
+
+/** V3 fixture corpus: the v2 fixtures plus a doc with a REPEATED bigram. */
+const FIXTURE_DOCS_V3 = [
+    ...FIXTURE_DOCS,
+    {
+        url: '/fixture-doc-4',
+        fileId: 'fixture-doc-4',
+        // 無門無門: bigram 無門 occurs twice (tf 2), 門無 once; unigrams 無 ×2, 門 ×2.
+        xml: '<TEI><text><body>無門無門。</body></text></TEI>',
+    },
+];
+
+/**
+ * Replicate the v3 builder's per-doc term-frequency counting (bigram +
+ * unigram in one char walk — build-bigram-index.js#buildTermIndexes).
+ * Bigram tfs are NON-OVERLAPPING (greedy), matching the runtime's
+ * countSubstringHits convention: a self-pair bigram inside a run of the
+ * same char counts at every other position (無無無 → tf(無無) = 1).
+ */
+function termTfsForNormalizedText(text) {
+    const bigrams = new Map();
+    const unigrams = new Map();
+    if (!text) return { bigrams, unigrams };
+    let prevIsCjk = isCjk(text.charCodeAt(0));
+    if (prevIsCjk) unigrams.set(text[0], 1);
+    let eqRunStart = 0;
+    for (let i = 1; i < text.length; i++) {
+        const cu = text.charCodeAt(i);
+        const cuIsCjk = isCjk(cu);
+        if (cu !== text.charCodeAt(i - 1)) eqRunStart = i;
+        if (cuIsCjk) {
+            const ch = text[i];
+            unigrams.set(ch, (unigrams.get(ch) || 0) + 1);
+            if (prevIsCjk) {
+                if (cu !== text.charCodeAt(i - 1) || (i - 1 - eqRunStart) % 2 === 0) {
+                    const bg = text.substring(i - 1, i + 1);
+                    bigrams.set(bg, (bigrams.get(bg) || 0) + 1);
+                }
+            }
+        }
+        prevIsCjk = cuIsCjk;
+    }
+    return { bigrams, unigrams };
+}
+
+/**
+ * Run the v3 deterministic build pipeline in-memory.
+ * Returns { bigramShards, unigramShards }: Map<bucketHex4, Uint8Array>.
+ */
+function buildShardsV3FromCorpus(docs) {
+    // 1. Extract + normalize + assign positional docIds.
+    const normalizedDocs = docs.map((d, i) => ({
+        docId: i,
+        normalized: normalizeString(extractText(d.xml).text),
+    }));
+
+    // 2. Per-doc tf counting flushed into global indexes (docIds ascending
+    //    by construction, exactly like the builder's flushDocTerms).
+    const bigramIndex = new Map();  // term -> {docIds: [], tfs: []}
+    const unigramIndex = new Map();
+    const flush = (index, tfs, docId) => {
+        for (const [term, tf] of tfs) {
+            let e = index.get(term);
+            if (!e) { e = { docIds: [], tfs: [] }; index.set(term, e); }
+            e.docIds.push(docId);
+            e.tfs.push(tf);
+        }
+    };
+    for (const d of normalizedDocs) {
+        const { bigrams, unigrams } = termTfsForNormalizedText(d.normalized);
+        flush(bigramIndex, bigrams, d.docId);
+        flush(unigramIndex, unigrams, d.docId);
+    }
+
+    // 3+4. Bucket via fnv1a32 mod 4096 and encode each non-empty bucket as a
+    //      v3 shard (encodeShardV3 sorts terms internally — deterministic).
+    const shardify = (index) => {
+        const buckets = new Map(); // bucket number -> termList
+        for (const [term, e] of index) {
+            const b = fnv1a32(term) % SHARD_COUNT;
+            if (!buckets.has(b)) buckets.set(b, []);
+            buckets.get(b).push({ term, docIds: e.docIds, tfs: e.tfs });
+        }
+        const result = new Map();
+        for (const [b, termList] of buckets) {
+            const xx = ((b >>> 8) & 0xff).toString(16).padStart(2, '0');
+            const yy = (b & 0xff).toString(16).padStart(2, '0');
+            result.set(xx + yy, encodeShardV3(termList, normalizedDocs.length));
+        }
+        return result;
+    };
+    return { bigramShards: shardify(bigramIndex), unigramShards: shardify(unigramIndex) };
+}
+
+function assertShardMapsIdentical(map1, map2, label) {
+    assert.equal(map1.size, map2.size, `${label}: same number of non-empty shards`);
+    for (const [bucket, bytes1] of map1) {
+        const bytes2 = map2.get(bucket);
+        assert.ok(bytes2, `${label}: bucket ${bucket} missing in second run`);
+        assert.equal(sha256(bytes1), sha256(bytes2), `${label}: bucket ${bucket} bytes diverged`);
+    }
+}
+
+test('v3 build determinism: two runs produce byte-identical bigram AND unigram shards', () => {
+    const run1 = buildShardsV3FromCorpus(FIXTURE_DOCS_V3);
+    const run2 = buildShardsV3FromCorpus(FIXTURE_DOCS_V3);
+    assertShardMapsIdentical(run1.bigramShards, run2.bigramShards, 'bigram');
+    assertShardMapsIdentical(run1.unigramShards, run2.unigramShards, 'unigram');
+    assert.ok(run1.unigramShards.size >= 1, 'unigram shard set is non-empty');
+});
+
+test('v3 build: repeated bigram increments tf (round-trip through the runtime decoder)', () => {
+    const { bigramShards } = buildShardsV3FromCorpus(FIXTURE_DOCS_V3);
+    const bucket = fnv1a32('無門') % SHARD_COUNT;
+    const hex = ((bucket >>> 8) & 0xff).toString(16).padStart(2, '0')
+        + (bucket & 0xff).toString(16).padStart(2, '0');
+    const shardBytes = bigramShards.get(hex);
+    assert.ok(shardBytes, 'shard containing 無門 exists');
+    const header = readShardHeader(shardBytes);
+    assert.equal(header.version, 3);
+    const meta = header.terms.get('無門');
+    assert.ok(meta, '無門 present');
+    const { docIds, tfs } = decodePostingListV3(shardBytes, meta.count, meta.offset);
+    // 無門 appears once in docs 0, 1, 2 and TWICE in doc 3 (無門無門).
+    assert.deepEqual(Array.from(docIds), [0, 1, 2, 3]);
+    assert.deepEqual(Array.from(tfs), [1, 1, 1, 2], 'repeat bigram increments tf, others stay 1');
+});
+
+test('v3 build: unigram terms are emitted with per-doc occurrence counts', () => {
+    const { unigramShards } = buildShardsV3FromCorpus(FIXTURE_DOCS_V3);
+    const bucket = fnv1a32('門') % SHARD_COUNT;
+    const hex = ((bucket >>> 8) & 0xff).toString(16).padStart(2, '0')
+        + (bucket & 0xff).toString(16).padStart(2, '0');
+    const shardBytes = unigramShards.get(hex);
+    assert.ok(shardBytes, 'unigram shard containing 門 exists');
+    const header = readShardHeader(shardBytes);
+    assert.equal(header.version, 3);
+    const meta = header.terms.get('門');
+    assert.ok(meta, 'unigram 門 present');
+    const { docIds, tfs } = decodePostingListV3(shardBytes, meta.count, meta.offset);
+    // 門 per doc (normalized text): doc 0 "無門關第一則趙州狗子" ×1,
+    // doc 1 "無門關門狗子有佛性" ×2, doc 2 "達摩西來無門內外" ×1,
+    // doc 3 "無門無門" ×2.
+    assert.deepEqual(Array.from(docIds), [0, 1, 2, 3]);
+    assert.deepEqual(Array.from(tfs), [1, 2, 1, 2]);
+});
+
+test('v3 build: self-overlapping bigram tf counts NON-overlapping occurrences (countSubstringHits convention)', () => {
+    // A run of the same char self-overlaps: 無無無 contains 無無 at positions
+    // 0 and 1, but the runtime (countSubstringHits, v2 verification, KWIC)
+    // counts non-overlapping hits (= 1). The builder must agree, otherwise a
+    // single-run 2-char query like 無無 — whose displayed count is taken
+    // straight from the index tf — disagrees with its own KWIC expansion.
+    const one = termTfsForNormalizedText('無無無');
+    assert.equal(one.bigrams.get('無無'), 1, '無無無 → one non-overlapping 無無, not two');
+    assert.equal(one.unigrams.get('無'), 3, 'unigrams count every occurrence (length-1 cannot overlap)');
+
+    const two = termTfsForNormalizedText('無無無無');
+    assert.equal(two.bigrams.get('無無'), 2, '無無無無 → two non-overlapping 無無');
+
+    // Separate runs count independently; non-self bigrams are unaffected.
+    const mixed = termTfsForNormalizedText('無無門無無');
+    assert.equal(mixed.bigrams.get('無無'), 2);
+    assert.equal(mixed.bigrams.get('無門'), 1);
+    assert.equal(mixed.bigrams.get('門無'), 1);
+});
+
+test('v3 build: shard naming hash (sha-256[:6]) is stable for identical v3 bytes', () => {
+    const run1 = buildShardsV3FromCorpus(FIXTURE_DOCS_V3);
+    const run2 = buildShardsV3FromCorpus(FIXTURE_DOCS_V3);
+    for (const [hex, bytes1] of run1.bigramShards) {
+        const h1 = sha256(bytes1).slice(0, 6);
+        const h2 = sha256(run2.bigramShards.get(hex)).slice(0, 6);
+        assert.equal(h1, h2, `bigram shard ${hex} content-hash name diverged`);
+    }
+    for (const [hex, bytes1] of run1.unigramShards) {
+        const h1 = sha256(bytes1).slice(0, 6);
+        const h2 = sha256(run2.unigramShards.get(hex)).slice(0, 6);
+        assert.equal(h1, h2, `unigram shard ${hex} content-hash name diverged`);
+    }
 });
