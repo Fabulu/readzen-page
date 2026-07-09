@@ -2764,11 +2764,21 @@ mark.find-highlight--active {
 
     .line-row {
         grid-template-columns: 1fr;
-        gap: 0.15rem;
-        padding: 0.7rem 1rem;
+        gap: 0;
+        padding: 0.18rem 1rem;
     }
 
-    .line-id { font-size: 0.65rem; }
+    /* Mobile reading flow: in the single-column grid every line-id stacked as
+       its OWN row above the text, doubling the vertical rhythm. Hide them -
+       the data-line-id anchors (links, highlights, copy-link) don't need the
+       visual gutter. The active/target line still identifies itself. */
+    .line-id { display: none; }
+    .line-row.is-active .line-id,
+    .line-row[aria-current="true"] .line-id,
+    .line-row.scroll-target .line-id {
+        display: block;
+        font-size: 0.65rem;
+    }
 
     .line-text,
     .panel-body--source .line-text {
