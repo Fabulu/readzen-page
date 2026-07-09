@@ -7,7 +7,8 @@ import {
     escapeHtml,
     normalizeText,
     sliceLines,
-    sliceFirstN
+    sliceFirstN,
+    renderLinesHtml
 } from '../lib/format.js';
 
 // ---------- escapeHtml ----------
@@ -155,4 +156,23 @@ test('sliceFirstN: missing bucket id is skipped', () => {
     const out = sliceFirstN(linesById, ['missing', 'a'], 5);
     assert.equal(out.length, 1);
     assert.equal(out[0].id, 'a');
+});
+
+// -- per-line copy-link markup (reading-flow feature) --
+
+test('renderLinesHtml without opts emits no line-link button (legacy markup)', () => {
+    const html = renderLinesHtml([{ id: '0001a01', text: 'x' }]);
+    assert.ok(!html.includes('line-link'));
+});
+
+test('renderLinesHtml with lineLinks emits a copy button per real line', () => {
+    const html = renderLinesHtml(
+        [{ id: '0001a01', text: 'x' }, { id: '__lg_break_1', text: '' }],
+        undefined,
+        { lineLinks: true }
+    );
+    assert.ok(html.includes('class="line-link"'));
+    assert.ok(html.includes('data-link-id="0001a01"'));
+    // spacer rows get no button
+    assert.strictEqual((html.match(/line-link/g) || []).length, 1);
 });

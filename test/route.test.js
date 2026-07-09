@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRoute, buildZenUri } from '../lib/route.js';
+import { parseRoute, buildZenUri, buildLineLinkHash } from '../lib/route.js';
 
 // ---------- Passage routes ----------
 
@@ -433,4 +433,32 @@ test('CBETA range still works after OpenZen extension', () => {
     assert.equal(r.endLine, '0292c24');
     assert.equal(r.mode, 'en');
     assert.equal(r.translator, 'Fabulu');
+});
+
+// -- buildLineLinkHash (per-line deep links) --
+
+test('buildLineLinkHash: plain source pane', () => {
+    assert.strictEqual(
+        buildLineLinkHash({ workId: 'T48n2005' }, '0292a23'),
+        '#/T48n2005?scroll=0292a23'
+    );
+});
+
+test('buildLineLinkHash: en side preserved', () => {
+    assert.strictEqual(
+        buildLineLinkHash({ workId: 'T48n2005', mode: 'en' }, '0292a23'),
+        '#/T48n2005?side=en&scroll=0292a23'
+    );
+});
+
+test('buildLineLinkHash: community translator preserved and encoded', () => {
+    assert.strictEqual(
+        buildLineLinkHash({ workId: 'X84n1583', translator: 'the ksepyro' }, '0592b06'),
+        '#/X84n1583?side=community&translator=the%20ksepyro&scroll=0592b06'
+    );
+});
+
+test('buildLineLinkHash: empty inputs yield empty string', () => {
+    assert.strictEqual(buildLineLinkHash(null, 'x'), '');
+    assert.strictEqual(buildLineLinkHash({ workId: 'T1' }, ''), '');
 });

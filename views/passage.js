@@ -18,7 +18,7 @@ import {
     fetchText,
     fetchStarCounts
 } from '../lib/github.js';
-import { buildZenUri } from '../lib/route.js';
+import { buildZenUri, buildLineLinkHash } from '../lib/route.js';
 import * as cache from '../lib/cache.js';
 import { lookupTitle } from '../lib/titles.js';
 import { attachInlineDict } from '../lib/inline-dict.js';
@@ -84,6 +84,8 @@ export function preferAppFirst(_route) {
  */
 export async function render(route, mount, shell) {
     resumeLastReadTracking(); // user intentionally opened a text — re-enable progress tracking
+    wireLineLinkCopy(mount, route);
+
     shell.setTitle(route.workId);
     shell.setContext(
         describeRange(route),
@@ -244,7 +246,7 @@ export async function render(route, mount, shell) {
 
         document.querySelector('#source-meta').textContent = (sourceWork.titleZh || route.workId) + apparatusSummary(sourceWork.apparatus);
         const rangeSearchTerm = route.q || route.highlight || '';
-        let sourceHtml = renderLinesHtml(sourceLines, segmentMap);
+        let sourceHtml = renderLinesHtml(sourceLines, segmentMap, { lineLinks: true });
         if (rangeSearchTerm) sourceHtml = highlightTextInHtml(sourceHtml, rangeSearchTerm);
         document.querySelector('#source-body').innerHTML = sourceHtml;
         attachInlineDict(document.querySelector('#source-body'));
@@ -308,11 +310,11 @@ export async function render(route, mount, shell) {
  * prev/next + page number buttons.
  */
 function renderRangelessBilingual(sourceWork, translationWork, route, mount, segmentMap) {
-    const PAGE = 50;
+    const PAGE = 300; // was 50 - reading flow: ~6x more text per page
     const allSourceLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
     const totalLines = allSourceLines.length;
     const totalPages = Math.max(1, Math.ceil(totalLines / PAGE));
-    const showAll = totalLines <= 200;
+    const showAll = totalLines <= 1200; // was 200
     const searchTerm = route.q || '';
     const scrollLineId = route.scroll || '';
     const tranMap = translationWork.linesById;
@@ -349,8 +351,8 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
 
     function renderPage(page) {
         const lines = pageSlice(page);
-        let srcHtml = renderLinesHtml(lines, segmentMap);
-        let trnHtml = renderLinesHtml(pairTranslation(lines));
+        let srcHtml = renderLinesHtml(lines, segmentMap, { lineLinks: true });
+        let trnHtml = renderLinesHtml(pairTranslation(lines), undefined, { lineLinks: true });
         if (searchTerm) {
             srcHtml = highlightTextInHtml(srcHtml, searchTerm);
             trnHtml = highlightTextInHtml(trnHtml, searchTerm);
@@ -403,8 +405,8 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
 
     const wrap = document.querySelector('#outline-wrap') || mount;
     const initLines = pageSlice(currentPage);
-    let initSrcHtml = renderLinesHtml(initLines, segmentMap);
-    let initTrnHtml = renderLinesHtml(pairTranslation(initLines));
+    let initSrcHtml = renderLinesHtml(initLines, segmentMap, { lineLinks: true });
+    let initTrnHtml = renderLinesHtml(pairTranslation(initLines), undefined, { lineLinks: true });
     if (searchTerm) {
         initSrcHtml = highlightTextInHtml(initSrcHtml, searchTerm);
         initTrnHtml = highlightTextInHtml(initTrnHtml, searchTerm);
@@ -484,11 +486,11 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
  * button.
  */
 function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, segmentMap) {
-    const PAGE = 50;
+    const PAGE = 300; // was 50 - reading flow: ~6x more text per page
     const allLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
     const totalLines = allLines.length;
     const totalPages = Math.max(1, Math.ceil(totalLines / PAGE));
-    const showAll = totalLines <= 200;
+    const showAll = totalLines <= 1200; // was 200
     const searchTerm2 = route.q || '';
     const scrollLineId2 = route.scroll || '';
     let currentPage = 1;
@@ -515,7 +517,7 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, seg
     }
 
     function renderPage(page) {
-        let html = renderLinesHtml(pageSlice(page), segmentMap);
+        let html = renderLinesHtml(pageSlice(page), segmentMap, { lineLinks: true });
         if (searchTerm2) html = highlightTextInHtml(html, searchTerm2);
         const body = document.querySelector('#firstn-source-body');
         body.innerHTML = html;
@@ -562,7 +564,7 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, seg
     }
 
     const wrap = document.querySelector('#outline-wrap') || mount;
-    let initHtml = renderLinesHtml(pageSlice(currentPage), segmentMap);
+    let initHtml = renderLinesHtml(pageSlice(currentPage), segmentMap, { lineLinks: true });
     if (searchTerm2) initHtml = highlightTextInHtml(initHtml, searchTerm2);
     wrap.innerHTML = `
         <article class="panel outline-panel">
@@ -823,6 +825,40 @@ async function renderTranslation(route, _sourceLines, shell) {
             </div>
         `;
     }
+}
+
+// -- Per-line copy-link (delegated once per mount; content re-renders freely) --
+// Copies a ?scroll= deep link for the clicked line: opens with full reading
+// context, auto-pages, and scroll-highlights (the same machinery every other
+// inbound line link uses).
+function wireLineLinkCopy(mount, route) {
+    mount._lineLinkRoute = route; // refresh per render; the listener reads live
+    if (mount._lineLinkWired) return;
+    mount._lineLinkWired = true;
+    mount.addEventListener('click', (e) => {
+        const btn = e.target && e.target.closest ? e.target.closest('.line-link') : null;
+        if (!btn) return;
+        e.preventDefault();
+        const r = mount._lineLinkRoute;
+        const hash = buildLineLinkHash(r, btn.dataset.linkId || '');
+        if (!hash) return;
+        const url = location.origin + location.pathname + hash;
+        const done = () => {
+            btn.textContent = '✓';
+            btn.classList.add('line-link--copied');
+            setTimeout(() => {
+                btn.innerHTML = '&#128279;';
+                btn.classList.remove('line-link--copied');
+            }, 1200);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(done).catch(() => {});
+        } else {
+            // Ancient-browser fallback: put the URL in the location bar territory
+            // via a prompt the user can copy from.
+            window.prompt('Copy link:', url);
+        }
+    });
 }
 
 function describeRange(route) {
