@@ -2083,14 +2083,21 @@ mark.find-highlight--active {
     color-scheme: light;
 }
 .align-mode-ctl select option,
+.align-mode-ctl select optgroup,
 .page-size-ctl select option {
     background: #1c1812;
     color: #e8ddc8;
+}
+.align-mode-ctl select optgroup {
+    font-style: normal;
+    font-weight: 600;
+    color: #a89876;
 }
 :root[data-theme="light"] .align-mode-ctl select {
     background: #fff;
 }
 :root[data-theme="light"] .align-mode-ctl select option,
+:root[data-theme="light"] .align-mode-ctl select optgroup,
 :root[data-theme="light"] .page-size-ctl select option {
     background: #fff;
     color: #2b2317;
