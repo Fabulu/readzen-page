@@ -233,3 +233,23 @@ test('renderMergedHtml escapes text and sanitizes type classes', () => {
     assert.ok(!html.includes('<b>evil</b>'));
     assert.ok(html.includes('merged-seg--badtype'));
 });
+
+test('renderMergedHtml breaks headings out of the running paragraph', () => {
+    const lines = [
+        { id: 'h1', text: '趙州狗子' },       // heading (carried into U1 by the map)
+        { id: 'a1', text: '趙州和尚' }, { id: 'a2', text: '因僧問' },
+    ];
+    const map = new Map([
+        ['h1', { unitId: 'U1', type: 'dialogue' }],
+        ['a1', { unitId: 'U1', type: 'dialogue' }],
+        ['a2', { unitId: 'U1', type: 'dialogue' }],
+    ]);
+    const html = renderMergedHtml(lines, map, null, { side: 'zh', headingIds: new Set(['h1']) });
+    assert.ok(html.includes('class="merged-head"'));
+    // heading is NOT inside the paragraph; body lines are
+    const para = html.slice(html.indexOf('<p'));
+    assert.ok(!para.includes('趙州狗子'));
+    assert.ok(para.includes('趙州和尚') && para.includes('因僧問'));
+    // heading precedes the paragraph
+    assert.ok(html.indexOf('merged-head') < html.indexOf('<p'));
+});

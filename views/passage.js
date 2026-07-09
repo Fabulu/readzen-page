@@ -355,15 +355,20 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
         : (alignMode === 'merged-flow' && !canMerge) ? 'flow'
         : alignMode;
 
+    // Heading line ids from the TEI parse: the segment maps' carried-lb
+    // semantics attach heading lines to the FOLLOWING body unit, so without
+    // this the merged paragraphs swallow case titles and chapter boundaries.
+    const headingIds = new Set((sourceWork.headings || []).map((h) => h.lineId).filter(Boolean));
+
     function buildBodiesHtml(lines) {
         if (effMode === 'merged-stacked') {
-            return { srcHtml: renderMergedHtml(lines, segmentMap, pairTranslation(lines), { stacked: true }), trnHtml: '' };
+            return { srcHtml: renderMergedHtml(lines, segmentMap, pairTranslation(lines), { stacked: true, headingIds }), trnHtml: '' };
         }
         if (effMode === 'merged-flow') {
             const trn = pairTranslation(lines);
             return {
-                srcHtml: renderMergedHtml(lines, segmentMap, null, { side: 'zh' }),
-                trnHtml: renderMergedHtml(lines, segmentMap, trn, { side: 'en' }),
+                srcHtml: renderMergedHtml(lines, segmentMap, null, { side: 'zh', headingIds }),
+                trnHtml: renderMergedHtml(lines, segmentMap, trn, { side: 'en', headingIds }),
             };
         }
         if (effMode === 'interleaved') {

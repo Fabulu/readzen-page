@@ -2018,6 +2018,24 @@ mark.find-highlight--active {
     font-style: italic;
     opacity: 0.55;
 }
+/* Case/chapter headings broken out of the merged flow: the visible seam
+   between koans that the raw segment grouping would otherwise swallow. */
+.merged-head {
+    margin: 1.4rem 0 0.2rem;
+    padding: 0.25rem 1.35rem;
+    font-size: 1.12rem;
+    font-weight: 600;
+    color: var(--accent, #d4ab58);
+    letter-spacing: 0.04em;
+}
+.merged-head .merged-head-en {
+    font-weight: 400;
+    font-size: 0.88rem;
+    color: var(--text-soft);
+    font-style: italic;
+    margin-left: 0.5rem;
+}
+
 /* Type tint: whole paragraphs carry the semantic color (stronger than the
    per-line whisper - a paragraph can afford it). */
 .merged-seg--verse { border-left: 3px solid rgba(150, 180, 220, 0.45); background: rgba(150, 180, 220, 0.05); }
