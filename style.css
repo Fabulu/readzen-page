@@ -721,7 +721,10 @@ code, .mono { font-family: var(--mono); }
 
 .search-group > summary {
     display: grid;
-    grid-template-columns: 9rem minmax(0, 1fr) auto;
+    /* marker | id+badge | title | meta. The ::before caret is a real grid item -
+       it needs its own track, or every child shifts one track right and the meta
+       cell wraps to a second row (the "weird positioning" bug). */
+    grid-template-columns: auto 9rem minmax(0, 1fr) auto;
     gap: 1rem;
     padding: 0.55rem 1rem;       /* density v2: was 0.9rem 1.1rem */
     cursor: pointer;
@@ -760,7 +763,6 @@ code, .mono { font-family: var(--mono); }
     grid-column: 1;
     justify-self: start;
     margin-left: 0.1rem;
-    margin-right: 0.4rem;
 }
 .search-group > summary:hover::before { opacity: 1; }
 .search-group[open] > summary::before {
@@ -1026,7 +1028,7 @@ code, .mono { font-family: var(--mono); }
 /* ---- Responsive: tablet band (641-980px) ---- */
 @media (min-width: 641px) and (max-width: 980px) {
     .search-group > summary {
-        grid-template-columns: 7rem minmax(0, 1fr) auto;
+        grid-template-columns: auto 7rem minmax(0, 1fr) auto;
         gap: 0.75rem;
         padding: 0.85rem 1rem;
     }
