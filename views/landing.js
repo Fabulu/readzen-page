@@ -118,7 +118,7 @@ export function render(_route, mount, shell) {
     const lastRead = getLastRead();
     const continueHtml = lastRead
         ? `<div class="continue-reading" id="continue-reading">
-               <a class="continue-reading-link" href="#/${escapeHtml(lastRead.route || lastRead.fileId)}">
+               <a class="continue-reading-link" href="#/${escapeHtml(lastRead.route || lastRead.fileId)}${lastRead.lineId ? (String(lastRead.route || lastRead.fileId).includes('?') ? '&' : '?') + 'pos=' + encodeURIComponent(lastRead.lineId) : ''}">
                    Continue reading: ${escapeHtml(lastRead.title)} (${lastRead.scrollPercent}%)
                </a>
                <button class="continue-reading-dismiss" id="dismiss-continue" title="Dismiss">\u00d7</button>

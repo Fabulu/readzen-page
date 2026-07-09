@@ -224,7 +224,7 @@ export async function render(route, mount, shell) {
                 renderFirstNLines(sourceWork, 30, route, mount, true, segmentMap);
             }
             shell.hideStatus();
-            if (!(route.q || route.scroll)) window.scrollTo(0, 0);
+            if (!(route.q || route.scroll || route.pos)) window.scrollTo(0, 0);
             return;
         }
 
@@ -317,6 +317,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
     const showAll = totalLines <= 1200; // was 200
     const searchTerm = route.q || '';
     const scrollLineId = route.scroll || '';
+    const resumeLineId = !scrollLineId ? (route.pos || '') : ''; // quiet resume; explicit scroll wins
     const tranMap = translationWork.linesById;
     const pairTranslation = (lines) => lines.map((src) => {
         if (!src) return { id: '', text: '' };
@@ -326,8 +327,8 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
 
     // Compute starting page: search both source AND translation for the term
     let currentPage = 1;
-    if (!showAll && scrollLineId) {
-        currentPage = findPageForLineId(allSourceLines, scrollLineId, PAGE);
+    if (!showAll && (scrollLineId || resumeLineId)) {
+        currentPage = findPageForLineId(allSourceLines, scrollLineId || resumeLineId, PAGE);
     } else if (!showAll && searchTerm) {
         const srcPage = findPageForTerm(allSourceLines, searchTerm, PAGE);
         const allTranLines = pairTranslation(allSourceLines);
@@ -367,6 +368,8 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
         updatePaginationUI();
         if (scrollLineId && page === findPageForLineId(allSourceLines, scrollLineId, PAGE)) {
             scrollToLineId(srcBody, scrollLineId);
+        } else if (resumeLineId && page === findPageForLineId(allSourceLines, resumeLineId, PAGE)) {
+            scrollToLineId(srcBody, resumeLineId, { quiet: true });
         } else if (searchTerm) {
             scrollToFirstHighlight(document.querySelector('#preview-grid') || srcBody);
         } else {
@@ -460,6 +463,8 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
 
     if (scrollLineId) {
         scrollToLineId(sourceBody, scrollLineId);
+    } else if (resumeLineId) {
+        scrollToLineId(sourceBody, resumeLineId, { quiet: true });
     } else if (searchTerm) {
         scrollToFirstHighlight(document.querySelector('#preview-grid'));
     }
@@ -493,9 +498,10 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, seg
     const showAll = totalLines <= 1200; // was 200
     const searchTerm2 = route.q || '';
     const scrollLineId2 = route.scroll || '';
+    const resumeLineId2 = !scrollLineId2 ? (route.pos || '') : '';
     let currentPage = 1;
-    if (!showAll && scrollLineId2) {
-        currentPage = findPageForLineId(allLines, scrollLineId2, PAGE);
+    if (!showAll && (scrollLineId2 || resumeLineId2)) {
+        currentPage = findPageForLineId(allLines, scrollLineId2 || resumeLineId2, PAGE);
     } else if (!showAll && searchTerm2) {
         currentPage = findPageForTerm(allLines, searchTerm2, PAGE);
     }
@@ -527,6 +533,8 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, seg
         updateNav();
         if (scrollLineId2 && page === findPageForLineId(allLines, scrollLineId2, PAGE)) {
             scrollToLineId(body, scrollLineId2);
+        } else if (resumeLineId2 && page === findPageForLineId(allLines, resumeLineId2, PAGE)) {
+            scrollToLineId(body, resumeLineId2, { quiet: true });
         } else if (searchTerm2) {
             scrollToFirstHighlight(body);
         } else {
@@ -586,6 +594,8 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, seg
 
     if (scrollLineId2) {
         scrollToLineId(document.querySelector('#firstn-source-body'), scrollLineId2);
+    } else if (resumeLineId2) {
+        scrollToLineId(document.querySelector('#firstn-source-body'), resumeLineId2, { quiet: true });
     } else if (searchTerm2) {
         scrollToFirstHighlight(document.querySelector('#firstn-source-body'));
     }
@@ -915,7 +925,13 @@ function trackScrollProgress(mount, fileId, title, route) {
             const scrollTop = window.scrollY || document.documentElement.scrollTop;
             const docHeight = document.documentElement.scrollHeight - window.innerHeight;
             const pct = docHeight > 0 ? Math.round((scrollTop / docHeight) * 100) : 0;
-            setLastRead(fileId, title, pct, rawRoute);
+            // Topmost visible line: one elementFromPoint probe per throttled
+            // frame, so "continue reading" can resume the exact position.
+            let topLineId = '';
+            const probe = document.elementFromPoint(Math.floor(window.innerWidth / 2), 110);
+            const row = probe && probe.closest ? probe.closest('.line-row') : null;
+            if (row && row.dataset.lineId) topLineId = row.dataset.lineId;
+            setLastRead(fileId, title, pct, rawRoute, topLineId);
             ticking = false;
         });
     });
