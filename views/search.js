@@ -821,7 +821,7 @@ export async function render(route, mount, shell) {
         }
         var idCell =
             '<span class="search-row-id-cell">' +
-                '<span class="search-row-id">' + escapeHtml(group.fileId) + '</span>' +
+                '<span class="search-row-id" title="' + escapeHtml(group.fileId) + '">' + escapeHtml(group.fileId) + '</span>' +
                 '<span class="search-row-badge search-row-badge--side">' + escapeHtml(badgeText) + '</span>' +
             '</span>';
         // Density v2: excerpt no longer rendered in summary (was creating an

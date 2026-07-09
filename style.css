@@ -737,6 +737,17 @@ code, .mono { font-family: var(--mono); }
     align-items: center;
     gap: 0.4rem;
     min-width: 0;
+    overflow: hidden; /* long OpenZen ids (ws.gateless-barrier) must not invade the title column */
+}
+.search-row-id-cell .search-row-id {
+    flex: 0 1 auto;
+    min-width: 0; /* override flex min-width:auto so the id can actually shrink */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.search-row-id-cell .search-row-badge {
+    flex: none; /* the side badge survives; the id ellipsizes first */
 }
 .search-group > summary::-webkit-details-marker { display: none; }
 .search-group > summary::before {
@@ -791,12 +802,16 @@ code, .mono { font-family: var(--mono); }
     min-width: 0;
 }
 .search-group-zh {
+    overflow-wrap: anywhere;
+    min-width: 0;
     font-family: var(--serif);
     font-size: 1rem;            /* density v2: was 1.04rem */
     line-height: 1.3;
     color: var(--text);
 }
 .search-group-en {
+    overflow-wrap: anywhere;
+    min-width: 0;
     font-family: var(--serif);
     font-size: 0.86rem;
     line-height: 1.3;
