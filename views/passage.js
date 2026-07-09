@@ -26,6 +26,7 @@ import { attachSelectionMirror } from '../lib/selection-sync.js';
 import { addToList, removeFromList, isInList, setLastRead, resumeLastReadTracking } from '../lib/reading-lists.js';
 import { CITE_STYLES, buildCitation, getPreferredStyle, setPreferredStyle } from '../lib/citation.js';
 import { registerFindNavigator } from '../lib/keyboard.js';
+import { getPageSize, PAGE_SIZE_OPTIONS } from '../lib/reader-prefs.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -310,11 +311,12 @@ export async function render(route, mount, shell) {
  * prev/next + page number buttons.
  */
 function renderRangelessBilingual(sourceWork, translationWork, route, mount, segmentMap) {
-    const PAGE = 300; // was 50 - reading flow: ~6x more text per page
+    const pref = getPageSize(); // user-selectable lines per page (reader-prefs)
+    const PAGE = pref === 'all' ? Infinity : pref;
     const allSourceLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
     const totalLines = allSourceLines.length;
     const totalPages = Math.max(1, Math.ceil(totalLines / PAGE));
-    const showAll = totalLines <= 1200; // was 200
+    const showAll = pref === 'all' || totalLines <= Math.max(1200, PAGE);
     const searchTerm = route.q || '';
     const scrollLineId = route.scroll || '';
     const resumeLineId = !scrollLineId ? (route.pos || '') : ''; // quiet resume; explicit scroll wins
@@ -380,7 +382,8 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
     function updatePaginationUI() {
         const nav = document.querySelector('#page-nav');
         if (!nav) return;
-        nav.innerHTML = buildPageButtons(currentPage, totalPages);
+        nav.innerHTML = buildPageButtons(currentPage, totalPages) + buildPageSizeSelect(pref);
+        wirePageSizeSelect(nav, route);
         wirePageButtons(nav);
     }
 
@@ -447,6 +450,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
     wireTranslatorSwitcher(wrap, route);
     mountLicenseChip(wrap.querySelector('#translator-switcher'), translationWork, route);
     if (!showAll) wirePageButtons(wrap.querySelector('#page-nav'));
+    wirePageSizeSelect(wrap, route);
 
     window.requestAnimationFrame(syncRowHeights);
     const sourceBody = document.querySelector('#source-body');
@@ -491,11 +495,12 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
  * button.
  */
 function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, segmentMap) {
-    const PAGE = 300; // was 50 - reading flow: ~6x more text per page
+    const pref = getPageSize(); // user-selectable lines per page (reader-prefs)
+    const PAGE = pref === 'all' ? Infinity : pref;
     const allLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
     const totalLines = allLines.length;
     const totalPages = Math.max(1, Math.ceil(totalLines / PAGE));
-    const showAll = totalLines <= 1200; // was 200
+    const showAll = pref === 'all' || totalLines <= Math.max(1200, PAGE);
     const searchTerm2 = route.q || '';
     const scrollLineId2 = route.scroll || '';
     const resumeLineId2 = !scrollLineId2 ? (route.pos || '') : '';
@@ -545,7 +550,8 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, seg
     function updateNav() {
         const nav = document.querySelector('#page-nav');
         if (!nav) return;
-        nav.innerHTML = buildPageButtons(currentPage, totalPages);
+        nav.innerHTML = buildPageButtons(currentPage, totalPages) + buildPageSizeSelect(pref);
+        wirePageSizeSelect(nav, route);
         wireNav(nav);
     }
 
@@ -591,6 +597,7 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, seg
     insertApparatusMarkers(document.querySelector('#firstn-source-body'), sourceWork.apparatus);
     attachApparatusPopup(document.querySelector('#firstn-source-body'), sourceWork.apparatus, sourceWork.witnessMap);
     if (!showAll) wireNav(wrap.querySelector('#page-nav'));
+    wirePageSizeSelect(wrap, route);
 
     if (scrollLineId2) {
         scrollToLineId(document.querySelector('#firstn-source-body'), scrollLineId2);
@@ -1312,6 +1319,42 @@ function shortenLicense(s) {
 }
 
 // ━━ Show-more button + footer ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// -- Lines-per-page selector (user preference; reader-prefs.js) --
+function buildPageSizeSelect(pref) {
+    const opts = PAGE_SIZE_OPTIONS.map((v) => {
+        const label = v === 'all' ? 'All (may lag on huge texts)'
+            : v === 10000 ? '10000 (slow)'
+            : String(v);
+        const sel = (v === pref) ? ' selected' : '';
+        return `<option value="${v}"${sel}>${label}</option>`;
+    }).join('');
+    return `<label class="page-size-ctl">Lines per page
+        <select id="page-size-select">${opts}</select></label>`;
+}
+
+function wirePageSizeSelect(container, route) {
+    const sel = container.querySelector('#page-size-select');
+    if (!sel) return;
+    sel.addEventListener('change', () => {
+        import('../lib/reader-prefs.js').then(({ setPageSize }) => {
+            setPageSize(sel.value);
+            // Re-render at the same reading position: capture the topmost
+            // visible line and navigate to a quiet ?pos= link. replace() fires
+            // hashchange only when the hash differs; reload() covers the rest.
+            let topLineId = '';
+            const probe = document.elementFromPoint(Math.floor(window.innerWidth / 2), 110);
+            const row = probe && probe.closest ? probe.closest('.line-row') : null;
+            if (row && row.dataset.lineId) topLineId = row.dataset.lineId;
+            const base = '#/' + (route.rawRoute || route.workId).replace(/^\/+/, '');
+            const stripped = base.replace(/([?&])(pos|scroll)=[^&]*/g, '$1').replace(/[?&]+$/, '').replace(/\?&/, '?');
+            const glue = stripped.includes('?') ? '&' : '?';
+            const newHash = topLineId ? stripped + glue + 'pos=' + encodeURIComponent(topLineId) : stripped;
+            if (window.location.hash !== newHash) window.location.replace(newHash);
+            else window.location.reload();
+        });
+    });
+}
 
 function buildPageButtons(current, total) {
     const btns = [];

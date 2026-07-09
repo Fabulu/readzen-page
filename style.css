@@ -2397,6 +2397,27 @@ mark.find-highlight--active {
     flex-wrap: wrap;
 }
 
+/* Lines-per-page preference control (sits in the page-nav bar). */
+.page-size-ctl {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--text-soft);
+}
+.page-size-ctl select {
+    background: var(--paper-strong, #1c1812);
+    color: var(--text);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+    border-radius: 6px;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.8rem;
+}
+:root[data-theme="light"] .page-size-ctl select {
+    background: #fff;
+}
+
 .page-btn {
     padding: 0.35rem 0.7rem;
     font-size: 0.82rem;
