@@ -278,6 +278,8 @@ export async function render(route, mount, shell) {
             window.scrollTo(0, 0);
         }
         window.requestAnimationFrame(syncRowHeights);
+    wireRowSyncStability();
+        wireRowSyncStability();
 
         // Bookmark button + scroll tracking
         const titleText = sourceWork.titleZh || sourceWork.titleEn || route.workId;
@@ -367,6 +369,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
         insertApparatusMarkers(srcBody, sourceWork.apparatus);
         attachApparatusPopup(srcBody, sourceWork.apparatus, sourceWork.witnessMap);
         window.requestAnimationFrame(syncRowHeights);
+        wireRowSyncStability();
         updatePaginationUI();
         if (scrollLineId && page === findPageForLineId(allSourceLines, scrollLineId, PAGE)) {
             scrollToLineId(srcBody, scrollLineId);
@@ -1080,6 +1083,25 @@ function syncRowHeights() {
     }
 }
 
+// Row sync is only correct if it runs against FINAL text metrics. The single
+// requestAnimationFrame call races the serif webfont: when the font lands
+// after sync, English lines re-wrap taller and the panes drift further apart
+// with every row. Re-sync when fonts finish loading and on (debounced)
+// viewport resize. Wired once per session.
+let _rowSyncStabilityWired = false;
+function wireRowSyncStability() {
+    if (_rowSyncStabilityWired) return;
+    _rowSyncStabilityWired = true;
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => window.requestAnimationFrame(syncRowHeights));
+    }
+    let t = null;
+    window.addEventListener('resize', () => {
+        clearTimeout(t);
+        t = setTimeout(() => window.requestAnimationFrame(syncRowHeights), 150);
+    });
+}
+
 // ━━ Bilingual view toggle ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function readViewPref() {
@@ -1129,6 +1151,7 @@ function wireViewToggle(container) {
                 : '1fr';
         }
         window.requestAnimationFrame(syncRowHeights);
+        wireRowSyncStability();
     });
 }
 
