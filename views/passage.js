@@ -404,7 +404,12 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
             setActiveRowSync(syncRowHeights);
             window.requestAnimationFrame(syncRowHeights);
             wireRowSyncStability();
-        } // interleaved: nothing to sync
+        } else {
+            // interleaved / merged-stacked: single column, nothing to sync -
+            // and clear any sync fn left armed by a previous mode (module
+            // global survives re-renders; stale fns fire on fonts/resize).
+            setActiveRowSync(null);
+        }
     }
 
     function pageSlice(page) {
@@ -713,9 +718,12 @@ function insertApparatusMarkers(container, apparatus) {
     for (let i = 0; i < apparatus.length; i += 1) {
         const entry = apparatus[i];
         if (!entry.lineId) continue;
-        const row = container.querySelector(`.line-row[data-line-id="${CSS.escape(entry.lineId)}"]`);
+        // Merged modes carry data-line-id on the inline .line-text span itself;
+        // line modes on the .line-row block. Resolve the text span either way.
+        const row = container.querySelector(`.line-text[data-line-id="${CSS.escape(entry.lineId)}"]`)
+            || container.querySelector(`.line-row[data-line-id="${CSS.escape(entry.lineId)}"]`);
         if (!row) continue;
-        const textSpan = row.querySelector('.line-text');
+        const textSpan = row.classList.contains('line-text') ? row : row.querySelector('.line-text');
         if (!textSpan) continue;
         // Insert a marker sup at the end of the line text.
         const marker = document.createElement('sup');
@@ -996,15 +1004,24 @@ function trackScrollProgress(mount, fileId, title, route) {
         if (ticking) return;
         ticking = true;
         window.requestAnimationFrame(() => {
-            const scrollTop = window.scrollY || document.documentElement.scrollTop;
-            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-            const pct = docHeight > 0 ? Math.round((scrollTop / docHeight) * 100) : 0;
             // Topmost visible line: one elementFromPoint probe per throttled
             // frame, so "continue reading" can resume the exact position.
             let topLineId = '';
             const probe = document.elementFromPoint(Math.floor(window.innerWidth / 2), 110);
-            const row = probe && probe.closest ? probe.closest('.line-row') : null;
+            const row = probe && probe.closest ? probe.closest('[data-line-id]') : null; // rows OR merged inline spans
             if (row && row.dataset.lineId) topLineId = row.dataset.lineId;
+            // Percentage: measure whichever surface actually scrolls. In
+            // flow/merged-flow the text lives in an overflow pane and the
+            // window barely moves - window math yields a meaningless %.
+            const pane = row ? row.closest('.panel-body') : null;
+            let pct;
+            if (pane && pane.scrollHeight > pane.clientHeight + 10) {
+                pct = Math.round((pane.scrollTop / (pane.scrollHeight - pane.clientHeight)) * 100);
+            } else {
+                const scrollTop = window.scrollY || document.documentElement.scrollTop;
+                const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+                pct = docHeight > 0 ? Math.round((scrollTop / docHeight) * 100) : 0;
+            }
             setLastRead(fileId, title, pct, rawRoute, topLineId);
             ticking = false;
         });
@@ -1278,7 +1295,7 @@ function wireAlignSelect(container, route) {
 function reRenderPreservingPosition(route) {
     let topLineId = '';
     const probe = document.elementFromPoint(Math.floor(window.innerWidth / 2), 110);
-    const row = probe && probe.closest ? probe.closest('.line-row') : null;
+    const row = probe && probe.closest ? probe.closest('[data-line-id]') : null; // rows OR merged inline spans
     if (row && row.dataset.lineId) topLineId = row.dataset.lineId;
     const base = '#/' + (route.rawRoute || route.workId).replace(/^\/+/, '');
     const stripped = base.replace(/([?&])(pos|scroll)=[^&]*/g, '$1').replace(/[?&]+$/, '').replace(/\?&/, '?');
@@ -1740,7 +1757,8 @@ function mountFindBar(mount, ctx) {
         const panel = ctx.getPanel();
         if (!panel) return;
         // Find the row for the match's line.
-        const row = panel.querySelector(`.line-row[data-line-id="${CSS.escape(target.lineId)}"]`);
+        const row = panel.querySelector(`.line-row[data-line-id="${CSS.escape(target.lineId)}"]`)
+            || panel.querySelector(`.line-text[data-line-id="${CSS.escape(target.lineId)}"]`); // merged inline span
         if (!row) return;
         const marksInRow = row.querySelectorAll('mark.find-highlight, mark.find-highlight--active');
         // Remove any prior active class on this panel.

@@ -2048,6 +2048,12 @@ mark.find-highlight--active {
     transform: none;
 }
 .merged-seg:hover .line-link--seg { opacity: 1; }
+/* Selection mirror: the peer pane's matching lines light up (inline spans in
+   merged mode - mirrors .line-row.is-active). */
+.merged-text .line-text.is-active {
+    background: var(--accent-soft);
+}
+
 /* Arrival highlight works on the inline span. */
 .merged-text .line-text.scroll-target {
     background: var(--accent-soft);
