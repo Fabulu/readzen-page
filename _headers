@@ -29,3 +29,10 @@
 
 /data/search/english.jsonl
   Cache-Control: public, max-age=300, must-revalidate
+
+# Service worker must revalidate on every load so a deploy rolls out promptly.
+/sw.js
+  Cache-Control: no-cache
+
+/manifest.json
+  Cache-Control: public, max-age=3600

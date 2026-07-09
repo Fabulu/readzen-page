@@ -1,0 +1,14 @@
+{
+  "name": "Read Zen — Chinese Zen Texts",
+  "short_name": "Read Zen",
+  "description": "Read, search, and study classical Chinese Zen texts — full-text corpus search, English translations, and a built-in dictionary.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0907",
+  "theme_color": "#0b0907",
+  "icons": [
+    { "src": "/assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

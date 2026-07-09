@@ -60,6 +60,15 @@ function fireAppLaunchSilent(route) {
 /**
  * Mount the correct view for the current hash and wire the app-first race.
  */
+// PWA service worker: offline reading + instant repeat loads. Skipped on
+// localhost so local development always serves live files.
+if ('serviceWorker' in navigator &&
+    location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => { /* non-fatal */ });
+    });
+}
+
 async function init() {
     const root = document.getElementById('app');
     if (!root) return;
