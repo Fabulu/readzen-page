@@ -2029,8 +2029,21 @@ mark.find-highlight--active {
     padding: 0.2rem 0.4rem;
     font-size: 0.8rem;
 }
+/* Native dropdown popup: without explicit option colors the OS renders the
+   list light while the text stays theme-light -> white-on-white (same fix as
+   .masters-filter-select). */
+.align-mode-ctl select option,
+.page-size-ctl select option {
+    background: var(--paper-strong, #1c1812);
+    color: var(--text);
+}
 :root[data-theme="light"] .align-mode-ctl select {
     background: #fff;
+}
+:root[data-theme="light"] .align-mode-ctl select option,
+:root[data-theme="light"] .page-size-ctl select option {
+    background: #fff;
+    color: var(--text);
 }
 
 /* Stacked (narrow) layouts: split the viewport between the two flow panes. */
