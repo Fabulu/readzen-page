@@ -2088,6 +2088,11 @@ mark.find-highlight--active {
     visibility: hidden; /* the zh row above already shows the shared id */
 }
 
+/* Source-only reading-mode control row in the untranslated (outline) header. */
+.outline-controls {
+    margin-top: 0.5rem;
+}
+
 /* Alignment selector (next to the view toggle). */
 .align-mode-ctl {
     display: inline-flex;

@@ -26,7 +26,7 @@ import { attachSelectionMirror } from '../lib/selection-sync.js';
 import { addToList, removeFromList, isInList, setLastRead, resumeLastReadTracking } from '../lib/reading-lists.js';
 import { CITE_STYLES, buildCitation, getPreferredStyle, setPreferredStyle } from '../lib/citation.js';
 import { registerFindNavigator } from '../lib/keyboard.js';
-import { getPageSize, PAGE_SIZE_OPTIONS, getBilingualMode, setBilingualMode } from '../lib/reader-prefs.js';
+import { getPageSize, PAGE_SIZE_OPTIONS, getBilingualMode, setBilingualMode, getSourceMode, setSourceMode } from '../lib/reader-prefs.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -575,6 +575,19 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, seg
     const searchTerm2 = route.q || '';
     const scrollLineId2 = route.scroll || '';
     const resumeLineId2 = !scrollLineId2 ? (route.pos || '') : '';
+
+    // Reading mode (source-only): 'merged' heals the ~17-char woodblock line cuts
+    // into flowing paragraphs and renders segment types as a paragraph-level border
+    // (so lines stay aligned, instead of the per-line dialogue/verse indent that
+    // makes single lines look "offset"). It needs a segment map; falls back to 'page'.
+    const canMerge = !!(segmentMap && segmentMap.size > 0);
+    const effMode = (getSourceMode() === 'merged' && canMerge) ? 'merged' : 'page';
+    const headingIds = new Set((sourceWork.headings || []).map((h) => h.lineId).filter(Boolean));
+    const bylineIds = new Set((sourceWork.bylines || []).map((b) => b.lineId).filter(Boolean));
+    const renderSourceBody = (lines) => effMode === 'merged'
+        ? renderMergedHtml(lines, segmentMap, null, { side: 'zh', headingIds, bylineIds })
+        : renderLinesHtml(lines, segmentMap, { lineLinks: true });
+
     let currentPage = 1;
     if (!showAll && (scrollLineId2 || resumeLineId2)) {
         currentPage = findPageForLineId(allLines, scrollLineId2 || resumeLineId2, PAGE);
@@ -599,7 +612,7 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, seg
     }
 
     function renderPage(page) {
-        let html = renderLinesHtml(pageSlice(page), segmentMap, { lineLinks: true });
+        let html = renderSourceBody(pageSlice(page));
         if (searchTerm2) html = highlightTextInHtml(html, searchTerm2);
         const body = document.querySelector('#firstn-source-body');
         body.innerHTML = html;
@@ -649,13 +662,14 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, seg
     }
 
     const wrap = document.querySelector('#outline-wrap') || mount;
-    let initHtml = renderLinesHtml(pageSlice(currentPage), segmentMap, { lineLinks: true });
+    let initHtml = renderSourceBody(pageSlice(currentPage));
     if (searchTerm2) initHtml = highlightTextInHtml(initHtml, searchTerm2);
     wrap.innerHTML = `
         <article class="panel outline-panel">
             <header class="outline-head">
                 <h2 class="outline-title">${titleLine}</h2>
                 <p class="outline-sub">${subtitle}${apparatusSummary(sourceWork.apparatus)}</p>
+                <div class="outline-controls">${buildSourceModeSelect(effMode, canMerge)}</div>
             </header>
             <div class="panel-body panel-body--source" id="firstn-source-body">
                 ${initHtml}
@@ -669,6 +683,7 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, seg
     attachApparatusPopup(document.querySelector('#firstn-source-body'), sourceWork.apparatus, sourceWork.witnessMap);
     if (!showAll) wireNav(wrap.querySelector('#page-nav'));
     wirePageSizeSelect(wrap, route);
+    wireSourceModeSelect(wrap, route);
 
     if (scrollLineId2) {
         scrollToLineId(document.querySelector('#firstn-source-body'), scrollLineId2);
@@ -1288,6 +1303,27 @@ function wireAlignSelect(container, route) {
     if (!sel) return;
     sel.addEventListener('change', () => {
         setBilingualMode(sel.value);
+        reRenderPreservingPosition(route);
+    });
+}
+
+/** Reading-mode control for the SOURCE-ONLY (untranslated) view: Merged flow
+ *  vs Page (per line). "Merged flow" is disabled when the text has no segment
+ *  map (nothing to merge). */
+function buildSourceModeSelect(mode, canMerge) {
+    const opt = (v, label, disabled) => '<option value="' + v + '"' +
+        (v === mode ? ' selected' : '') + (disabled ? ' disabled' : '') + '>' + label + '</option>';
+    return '<label class="align-mode-ctl">Reading <select id="source-mode-select">' +
+        opt('merged', 'Merged flow', !canMerge) +
+        opt('page', 'Page (per line)') +
+        '</select></label>';
+}
+
+function wireSourceModeSelect(container, route) {
+    const sel = container.querySelector('#source-mode-select');
+    if (!sel) return;
+    sel.addEventListener('change', () => {
+        setSourceMode(sel.value);
         reRenderPreservingPosition(route);
     });
 }
