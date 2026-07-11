@@ -2286,6 +2286,12 @@ mark.find-highlight--active {
 
 .outline-wrap {
     width: 100%;
+    /* Single-column reader (untranslated / source-only): cap the line length to a
+       comfortable reading measure instead of spanning the whole screen. ~46rem is
+       ~40 CJK chars per line at the reader font; the bilingual two-pane view uses a
+       different container and is unaffected. */
+    max-width: 46rem;
+    margin-inline: auto;
 }
 
 .outline-panel {
@@ -5064,18 +5070,22 @@ a.master-appearance-title:hover {
  * Applied via .line-row--{type} classes from lib/segment-map.js.
  * Texts without a segment map get none of these (graceful fallback). */
 
+/* Per-line segment cues use an INSET left bar (box-shadow) + background/italic
+   only — never border-left or padding-left, which shift the text and make lines
+   look "offset" in the single-column source view. The bar paints inside the row
+   so every line stays aligned regardless of its segment type. */
 .line-row--verse {
-    border-left: 2px solid rgba(212, 171, 88, 0.4);
+    box-shadow: inset 3px 0 rgba(212, 171, 88, 0.45);
     background: rgba(212, 171, 88, 0.04);
     font-style: italic;
 }
 .line-row--dialogue {
-    padding-left: 2.5rem;
-    border-left: 3px solid rgba(212, 171, 88, 0.25);
+    box-shadow: inset 3px 0 rgba(212, 171, 88, 0.3);
+    background: rgba(212, 171, 88, 0.05);
 }
 .line-row--commentary {
     background: rgba(255, 255, 255, 0.02);
-    border-left: 2px solid rgba(139, 123, 105, 0.3);
+    box-shadow: inset 3px 0 rgba(139, 123, 105, 0.4);
     opacity: 0.9;
 }
 .line-row--heading {
@@ -5091,15 +5101,14 @@ a.master-appearance-title:hover {
 .line-row--preface,
 .line-row--colophon {
     opacity: 0.8;
-    border-left: 1px solid rgba(139, 123, 105, 0.2);
+    box-shadow: inset 2px 0 rgba(139, 123, 105, 0.4);
 }
 
-/* Mobile: reduce decoration weight */
+/* Mobile: thinner accent bar; still no horizontal offset. */
 @media (max-width: 640px) {
     .line-row--verse,
     .line-row--dialogue,
     .line-row--commentary {
-        padding-left: 1.1rem;
-        border-left-width: 1px;
+        box-shadow: inset 2px 0 rgba(212, 171, 88, 0.35);
     }
 }
