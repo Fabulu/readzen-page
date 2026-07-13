@@ -249,6 +249,28 @@ export function render(_route, mount, shell) {
                 <a class="btn btn--outline" href="https://ko-fi.com/readzen">Support on Ko-fi</a>
             </div>
 
+            <a class="dict-pitch" href="#/dict">
+                <div class="dict-pitch-body">
+                    <p class="dict-pitch-kicker">The Zen Dictionary</p>
+                    <h3 class="dict-pitch-title">Every term defined only from how Zen Masters use it.</h3>
+                    <p class="dict-pitch-text">
+                        Not a Buddhist dictionary and not a Chinese one. Each entry is built from the
+                        Zen record itself &mdash; described, never interpreted &mdash; and every meaning is
+                        backed by verbatim passages anchored to the text and line they came from. It shows
+                        you where Zen <em>bends</em> a word: <span class="dict-pitch-zh">拂子</span> is a
+                        fly-whisk in any dictionary; in the Zen records it is the emblem of the teaching
+                        seat. <span class="dict-pitch-zh">和尚</span> is a master &mdash; and also the
+                        preceptor who confers the precepts.
+                    </p>
+                    <p class="dict-pitch-stats" id="dict-pitch-stats">
+                        <span class="dict-pitch-stat"><strong id="dict-pitch-count">&mdash;</strong> terms</span>
+                        <span class="dict-pitch-stat">quoted from the <strong>Chan corpus</strong></span>
+                        <span class="dict-pitch-stat">free &amp; open</span>
+                    </p>
+                </div>
+                <span class="dict-pitch-cta">Open the dictionary &rarr;</span>
+            </a>
+
             <div class="corpus-cards">
                 <div class="corpus-card">
                     <h3 class="corpus-card-title">CBETA</h3>
@@ -290,7 +312,7 @@ export function render(_route, mount, shell) {
                         <li>Full-text corpus search across 5,000+ texts</li>
                         <li class="feature-desktop">Co-occurrence analysis, n-gram charts, and TSV export</li>
                         <li class="feature-desktop">Tag &amp; code passages for qualitative research</li>
-                        <li>Hover dictionary in reader, graph popups, and collection views</li>
+                        <li>Click any word in the reader for its Zen dictionary entry</li>
                     </ul>
                     <a class="feature-group-cta" href="#/search">Search the corpus</a>
                 </div>
@@ -445,6 +467,20 @@ export function render(_route, mount, shell) {
     `;
 
     // ── Dismiss continue-reading ──
+    // Live term count in the dictionary pitch: read from the published headword
+    // index (tens of KB) so the number cannot go stale as the dictionary grows.
+    const dictCount = mount.querySelector('#dict-pitch-count');
+    if (dictCount) {
+        import('../lib/zen-dict.js')
+            .then((m) => m.loadZenIndex())
+            .then((idx) => {
+                const n = idx && idx.terms ? idx.terms.size : 0;
+                if (n) dictCount.textContent = n.toLocaleString();
+                else dictCount.closest('.dict-pitch-stats')?.remove();
+            })
+            .catch(() => { dictCount.closest('.dict-pitch-stats')?.remove(); });
+    }
+
     const dismissBtn = mount.querySelector('#dismiss-continue');
     if (dismissBtn) {
         dismissBtn.addEventListener('click', (e) => {

@@ -101,6 +101,21 @@ function showSupportToast() {
 }
 
 
+// The main navigation. Flat and always visible on every page: the destinations
+// used to live behind a "Research" dropdown, which meant the Dictionary was
+// unreachable from, say, the Zen Masters page unless you knew to open a menu.
+// `kinds` are the route kinds that should light the link up as the current page.
+const NAV_LINKS = [
+    { href: '#/masters', label: 'Masters', kinds: ['masters', 'master'] },
+    { href: '#/lineage', label: 'Lineage', kinds: ['lineage'] },
+    { href: '#/scholar', label: 'Collections', kinds: ['scholar', 'shared-list'] },
+    { href: '#/dict', label: 'Dictionary', kinds: ['dict-browse', 'dictionary', 'termbase'] },
+];
+
+function isNavActive(link, route) {
+    return !!(route && link.kinds.includes(route.kind));
+}
+
 /**
  * Render the shell into `#app` and return the inner mount node plus a set of
  * helper functions bound to the live DOM elements.
@@ -122,18 +137,11 @@ export function mountShell(root, route) {
                            type="text" placeholder="Search texts..." />
                     <kbd class="header-search-kbd">Ctrl K</kbd>
                 </form>
-                <div class="header-nav-dropdown" id="research-dropdown">
-                    <button class="header-nav-trigger" aria-expanded="false" aria-label="Research tools menu">
-                        <span class="header-nav-label">Research</span>
-                        <span class="header-nav-icon">&#9662;</span>
-                    </button>
-                    <div class="header-nav-menu" id="research-menu" hidden>
-                        <a class="header-nav-item" href="#/scholar">Browse Collections</a>
-                        <a class="header-nav-item" href="#/lineage">Lineage Graph</a>
-                        <a class="header-nav-item" href="#/masters">Zen Masters</a>
-                        <a class="header-nav-item" href="#/dict">Dictionary</a>
-                    </div>
-                </div>
+                <nav class="header-nav" aria-label="Main">
+                    ${NAV_LINKS.map((l) => `
+                        <a class="header-nav-link${isNavActive(l, route) ? ' header-nav-link--active' : ''}"
+                           href="${l.href}"${isNavActive(l, route) ? ' aria-current="page"' : ''}>${l.label}</a>`).join('')}
+                </nav>
                 <div class="shell-route" id="shell-route-box">
                     <span class="route-chip" id="route-chip" hidden></span>
                     <span class="route-chip route-chip--corpus" id="corpus-chip" hidden></span>
@@ -407,33 +415,12 @@ export function mountShell(root, route) {
         });
     }
 
-    // Research dropdown toggle
-    const researchToggle = root.querySelector('#research-dropdown .header-nav-trigger');
-    const researchMenu = root.querySelector('#research-menu');
-    if (researchToggle && researchMenu) {
-        researchToggle.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isOpen = !researchMenu.hidden;
-            researchMenu.hidden = isOpen;
-            researchToggle.setAttribute('aria-expanded', !isOpen);
-        });
-        // Store handler reference to prevent duplicates on re-mount
-        if (window._researchMenuCloseHandler) {
-            document.removeEventListener('click', window._researchMenuCloseHandler);
-        }
-        window._researchMenuCloseHandler = () => {
-            if (researchMenu) {
-                researchMenu.hidden = true;
-                researchToggle.setAttribute('aria-expanded', 'false');
-            }
-        };
-        document.addEventListener('click', window._researchMenuCloseHandler);
-        researchMenu.querySelectorAll('a').forEach(link => {
-            link.addEventListener('click', () => {
-                researchMenu.hidden = true;
-                researchToggle.setAttribute('aria-expanded', 'false');
-            });
-        });
+    // The nav is now flat links -- no toggle to wire. Clean up the document-level
+    // click handler the old dropdown installed, so a stale one cannot survive a
+    // re-mount and swallow clicks.
+    if (window._researchMenuCloseHandler) {
+        document.removeEventListener('click', window._researchMenuCloseHandler);
+        window._researchMenuCloseHandler = null;
     }
 
     // Wire all support links to open the overlay instead of navigating away
