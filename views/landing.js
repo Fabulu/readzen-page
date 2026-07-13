@@ -172,6 +172,25 @@ export function render(_route, mount, shell) {
                 <button class="btn" type="submit">Search</button>
             </form>
 
+            <div class="lineage-showcase">
+                <h3 class="lineage-showcase-heading">The Zen Lineage</h3>
+                <p class="lineage-showcase-desc">
+                    301 Zen masters from Bodhidharma to the late Qing.
+                    Click a master to trace their lineage. Double-click to visit their profile.
+                </p>
+                <input type="text" id="landing-lineage-search" class="lineage-search--landing"
+                       placeholder="Search masters by name\u2026" />
+                <div class="lineage-showcase-canvas-wrap">
+                    <canvas id="landing-lineage-canvas" class="lineage-showcase-canvas"></canvas>
+                    <div id="landing-lineage-legend" class="lineage-legend lineage-legend--landing"></div>
+                </div>
+                <div class="lineage-showcase-controls">
+                    <a class="btn btn--outline btn--small" href="#/lineage">Open Full Screen</a>
+                    <a class="btn btn--outline btn--small" href="#/masters">Browse All Masters</a>
+                    <button class="btn btn--outline btn--small" id="random-master-btn">\uD83C\uDFB2 Random Master</button>
+                </div>
+            </div>
+
             <a class="dict-pitch" href="#/dict">
                 <div class="dict-pitch-body">
                     <p class="dict-pitch-kicker">The Zen Dictionary</p>
@@ -193,25 +212,6 @@ export function render(_route, mount, shell) {
                 </div>
                 <span class="dict-pitch-cta">Open the dictionary &rarr;</span>
             </a>
-
-            <div class="lineage-showcase">
-                <h3 class="lineage-showcase-heading">The Zen Lineage</h3>
-                <p class="lineage-showcase-desc">
-                    301 Zen masters from Bodhidharma to the late Qing.
-                    Click a master to trace their lineage. Double-click to visit their profile.
-                </p>
-                <input type="text" id="landing-lineage-search" class="lineage-search--landing"
-                       placeholder="Search masters by name\u2026" />
-                <div class="lineage-showcase-canvas-wrap">
-                    <canvas id="landing-lineage-canvas" class="lineage-showcase-canvas"></canvas>
-                    <div id="landing-lineage-legend" class="lineage-legend lineage-legend--landing"></div>
-                </div>
-                <div class="lineage-showcase-controls">
-                    <a class="btn btn--outline btn--small" href="#/lineage">Open Full Screen</a>
-                    <a class="btn btn--outline btn--small" href="#/masters">Browse All Masters</a>
-                    <button class="btn btn--outline btn--small" id="random-master-btn">\uD83C\uDFB2 Random Master</button>
-                </div>
-            </div>
 
             <div class="community-research" id="community-research">
                 <h3 class="community-research-heading">Community Research</h3>
