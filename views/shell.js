@@ -14,7 +14,18 @@
 import { escapeHtml } from '../lib/format.js';
 import { buildZenUri, describeRoute } from '../lib/route.js';
 import { copyShareableLink } from '../lib/share.js';
-import { getDictMode, setDictMode, getZenHighlight, setZenHighlight } from '../lib/reader-prefs.js';
+import { getDictMode, setDictMode, getZenHighlight, setZenHighlight, getChrome, setChrome } from '../lib/reader-prefs.js';
+
+// Candidate header layouts, offered live so they can be compared on real pages
+// instead of in the abstract. Each is a different ANSWER to the same problem --
+// too much in one row -- not a different colour scheme.
+const CHROME_OPTIONS = [
+    { id: 'compact', name: 'Compact', desc: 'One tight row. The oversized serif title shrinks to a wordmark and the search collapses to an icon, so the nav stops overflowing.' },
+    { id: 'masthead', name: 'Masthead', desc: 'Two rows: the brand line, then the nav on its own rule beneath it. Nothing competes; the nav can grow.' },
+    { id: 'rail', name: 'Side rail', desc: 'The nav moves to a vertical rail down the left. The top row empties out entirely and the nav scales to any number of destinations.' },
+    { id: 'journal', name: 'Journal', desc: 'A printed-journal masthead: centred serif wordmark between hairline rules, nav as plain small-caps text. No pills, no gradients.' },
+    { id: 'current', name: 'Current', desc: 'What the site has today, kept here so the others can be judged against it.' },
+];
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 const AUTO_OPEN_PREF_KEY = 'readzen-auto-open';
@@ -121,8 +132,9 @@ function isNavActive(link, route) {
  * helper functions bound to the live DOM elements.
  */
 export function mountShell(root, route) {
+    const chrome = getChrome();
     root.innerHTML = `
-        <div class="shell">
+        <div class="shell shell--${chrome}">
             <header class="shell-header">
                 <a class="shell-brand" href="#">
                     <div class="hero-mark" aria-hidden="true"></div>
@@ -166,6 +178,21 @@ export function mountShell(root, route) {
             </section>
 
             <main class="shell-main" id="view-mount"></main>
+
+            <div class="chrome-switch" id="chrome-switch">
+                <button type="button" class="chrome-switch-trigger" id="chrome-switch-trigger"
+                        aria-expanded="false">Layout: <strong>${escapeHtml((CHROME_OPTIONS.find((o) => o.id === chrome) || {}).name || chrome)}</strong></button>
+                <div class="chrome-switch-panel" id="chrome-switch-panel" hidden>
+                    <p class="chrome-switch-title">Header layout</p>
+                    <p class="chrome-switch-hint">Try them on a real page. Your choice is remembered.</p>
+                    ${CHROME_OPTIONS.map((o) => `
+                        <button type="button" class="chrome-switch-opt${o.id === chrome ? ' chrome-switch-opt--on' : ''}"
+                                data-chrome="${o.id}">
+                            <span class="chrome-switch-opt-name">${escapeHtml(o.name)}</span>
+                            <span class="chrome-switch-opt-desc">${escapeHtml(o.desc)}</span>
+                        </button>`).join('')}
+                </div>
+            </div>
 
             <aside class="upsell" id="upsell" hidden>
                 <p class="upsell-kicker">Want more power?</p>
@@ -421,6 +448,33 @@ export function mountShell(root, route) {
     if (window._researchMenuCloseHandler) {
         document.removeEventListener('click', window._researchMenuCloseHandler);
         window._researchMenuCloseHandler = null;
+    }
+
+    // Header-layout switcher. Applying a layout only swaps a class on .shell --
+    // every variant is the same markup laid out differently -- so switching is
+    // instant and needs no re-render.
+    const chromeTrigger = root.querySelector('#chrome-switch-trigger');
+    const chromePanel = root.querySelector('#chrome-switch-panel');
+    if (chromeTrigger && chromePanel) {
+        chromeTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const open = chromePanel.hidden;
+            chromePanel.hidden = !open;
+            chromeTrigger.setAttribute('aria-expanded', String(open));
+        });
+        chromePanel.addEventListener('click', (e) => {
+            const btn = e.target.closest('.chrome-switch-opt');
+            if (!btn) return;
+            const id = btn.dataset.chrome;
+            setChrome(id);
+            const shellEl = root.querySelector('.shell');
+            shellEl.className = 'shell shell--' + id;
+            chromePanel.querySelectorAll('.chrome-switch-opt').forEach((b) => {
+                b.classList.toggle('chrome-switch-opt--on', b.dataset.chrome === id);
+            });
+            const opt = CHROME_OPTIONS.find((o) => o.id === id);
+            chromeTrigger.innerHTML = 'Layout: <strong>' + escapeHtml(opt ? opt.name : id) + '</strong>';
+        });
     }
 
     // Wire all support links to open the overlay instead of navigating away
