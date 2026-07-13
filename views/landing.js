@@ -135,7 +135,9 @@ export function render(_route, mount, shell) {
                    ${myList.map((i) =>
                        `<div class="reading-list-entry">
                             <a class="reading-list-item" href="#/${escapeHtml(i.route || i.fileId)}">${escapeHtml(i.title)}</a>
-                            <button class="reading-list-remove" data-file-id="${escapeHtml(i.fileId)}" title="Remove from reading list">\u00d7</button>
+                            <button class="reading-list-remove" data-file-id="${escapeHtml(i.fileId)}"
+                                    title="Remove from reading list"
+                                    aria-label="Remove ${escapeHtml(i.title)} from reading list">Remove</button>
                         </div>`
                    ).join('')}
                </div>

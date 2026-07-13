@@ -27,6 +27,24 @@ export function preferAppFirst(_route) {
  */
 export async function render(route, mount, shell) {
     const term = (route && route.term) || '';
+
+    // #/dict/{term} is the permalink for a dictionary entry, so a term that HAS
+    // a Zen entry shows the Zen entry. Only terms we have not defined fall
+    // through to the CC-CEDICT gloss, which is what this route used to be.
+    try {
+        const { loadZenEntry, renderZenCard } = await import('../lib/zen-dict.js');
+        const entry = term ? await loadZenEntry(term) : null;
+        if (entry) {
+            if (shell) {
+                shell.setTitle('Zen Dictionary · ' + term);
+                shell.setContext(`Zen dictionary · ${term}`, 'Zen-to-Zen dictionary entry');
+            }
+            mount.replaceChildren();
+            renderZenCard(entry, mount, { showOpenLink: false });
+            return;
+        }
+    } catch { /* Zen dictionary unavailable — fall through to CC-CEDICT */ }
+
     applyChrome(shell, term);
     await renderDictCard(term, mount);
 }

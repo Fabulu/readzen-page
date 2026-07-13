@@ -1102,6 +1102,238 @@ code, .mono { font-family: var(--mono); }
     color: #6b4f0d;
     box-shadow: inset 0 0 0 1px rgba(184, 134, 11, 0.5);
 }
+
+/* ── Zen-word highlight (curated termbase terms in the Chinese source) ── */
+/* A term with a Zen entry is marked with a dotted underline only — with this
+   many headwords (佛, 僧問, 上堂 …) a background tint would shred the page.
+   Hover lightens the underline so it reads as clickable. */
+.zen-term {
+    background: none;
+    color: inherit;
+    border-bottom: 1px dotted rgba(212, 171, 88, 0.5);
+    cursor: pointer;
+    transition: border-bottom-color 120ms ease;
+}
+.zen-term:hover {
+    border-bottom-color: rgba(240, 214, 150, 0.95);
+}
+:root[data-theme="light"] .zen-term {
+    border-bottom-color: rgba(140, 106, 30, 0.45);
+}
+:root[data-theme="light"] .zen-term:hover {
+    border-bottom-color: rgba(190, 150, 60, 0.9);
+}
+
+/* Link bar under a Zen entry card — present in the reader's side panel and on
+   the entry page, so an entry can be shared from wherever you found it. */
+.zen-card-links {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--border-soft);
+}
+.zen-card-link {
+    background: none;
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    padding: 0.25rem 0.6rem;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.zen-card-link:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+/* ── Zen dictionary side panel (click a marked term) ── */
+.zen-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 9998;
+    width: min(400px, 92vw);
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--bg-soft, #13100c);
+    border-left: 1px solid var(--border, rgba(211, 180, 112, 0.16));
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.35);
+    padding: 2.25rem 1.1rem 2rem;
+}
+.zen-panel__close {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.6rem;
+    background: none;
+    border: none;
+    color: var(--muted, #8b7b69);
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.15rem 0.4rem;
+}
+.zen-panel__close:hover {
+    color: var(--text, #ede3d1);
+}
+
+/* On narrow screens the panel becomes a bottom sheet so it never covers the text. */
+@media (max-width: 720px) {
+    .zen-panel {
+        top: auto;
+        bottom: 0;
+        width: 100%;
+        height: auto;
+        max-height: 60vh;
+        border-left: none;
+        border-top: 1px solid var(--border, rgba(211, 180, 112, 0.16));
+        box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.35);
+    }
+}
+
+/* ── Zen dictionary card sense blocks ── */
+.zen-sense-target { font-weight: 600; margin: 0 0 0.25rem; }
+.zen-sense-expl { margin: 0.25rem 0; }
+.zen-sense-alts, .zen-sense-note, .zen-sense-links { margin: 0.25rem 0; font-size: 0.92em; }
+.zen-lbl { opacity: 0.6; margin-right: 0.25rem; }
+.zen-link { margin-right: 0.4rem; white-space: nowrap; }
+.zen-sense-badges { margin: 0.25rem 0; }
+.zen-badge {
+    display: inline-block;
+    font-size: 0.75em;
+    font-weight: 600;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    margin-right: 0.3rem;
+    background: rgba(120, 120, 120, 0.2);
+    border: 1px solid rgba(120, 120, 120, 0.4);
+}
+.zen-badge--multi { background: rgba(40, 140, 120, 0.22); border-color: rgba(40, 140, 120, 0.55); }
+.zen-badge--provisional { background: rgba(180, 140, 40, 0.22); border-color: rgba(180, 140, 40, 0.55); }
+.zen-badge--disputed { background: rgba(180, 60, 50, 0.22); border-color: rgba(180, 60, 50, 0.55); }
+
+/* ── Dictionary browse grid ── */
+.dict-grid { margin-top: 1rem; }
+.dict-more-hint { grid-column: 1 / -1; opacity: 0.6; text-align: center; padding: 1rem; }
+
+/* Pager — every term is reachable by paging; nothing is hidden behind a search. */
+.dict-pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    margin: 1.5rem 0 0.5rem;
+}
+.dict-page-btn {
+    background: none;
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    color: var(--text-soft);
+    font-size: 0.8rem;
+    padding: 0.3rem 0.6rem;
+    min-width: 2rem;
+    cursor: pointer;
+}
+.dict-page-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.dict-page-btn:disabled { opacity: 0.35; cursor: default; }
+.dict-page-btn--current {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+.dict-page-gap { color: var(--muted); padding: 0 0.15rem; }
+
+/* Cards — the original responsive grid. Equal-height cells, so a short entry
+   beside a long one leaves whitespace; fast to scan, cramped to read. */
+.dict-grid--cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+.dict-grid--cards .dict-cell .lookup-card { height: 100%; }
+
+/* Columns — cards flow down each column and wrap, so uneven heights leave no
+   holes. The fix for the ragged-gap problem when you still want density. */
+.dict-grid--columns {
+    column-width: 22rem;
+    column-gap: 1rem;
+}
+.dict-grid--columns .dict-cell {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 1rem;
+}
+
+/* List — one entry per row, capped to a comfortable reading measure. Nothing
+   is squeezed; this is the one to read a long explanation in. */
+.dict-grid--list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 52rem;
+}
+
+/* Compact — headword + gloss only. For finding a term, not reading it. */
+.dict-grid--compact {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-width: 52rem;
+}
+.dict-compact-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.9rem;
+    padding: 0.45rem 0.7rem;
+    border-bottom: 1px solid var(--border-soft);
+    text-decoration: none;
+    color: var(--text);
+}
+.dict-compact-row:hover { background: var(--paper); }
+.dict-compact-term { font-size: 1.05rem; min-width: 6.5rem; }
+.dict-compact-gloss { color: var(--text-soft); flex: 1; }
+.dict-compact-senses { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+
+/* Per-entry permalink: the shareable link to a single dictionary entry. */
+.dict-cell { position: relative; }
+.dict-permalink {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.5rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.95rem;
+    opacity: 0;
+    transition: opacity 120ms ease;
+    padding: 0 0.25rem;
+}
+.dict-cell:hover .dict-permalink,
+.dict-permalink:focus { opacity: 1; }
+.dict-permalink:hover { color: var(--accent); }
+
+/* Layout switch (segmented control in the browse header). */
+.dict-layout-switch { display: inline-flex; gap: 0; }
+.dict-layout-btn {
+    background: none;
+    border: 1px solid var(--border-soft);
+    color: var(--muted);
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+.dict-layout-btn:first-child { border-radius: 4px 0 0 4px; }
+.dict-layout-btn:last-child { border-radius: 0 4px 4px 0; }
+.dict-layout-btn + .dict-layout-btn { border-left: none; }
+.dict-layout-btn:hover { color: var(--text); }
+.dict-layout-btn[aria-pressed="true"] {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
 .scroll-target {
     background: var(--accent-soft);
     scroll-margin-top: 6rem;
@@ -4327,17 +4559,22 @@ a.master-appearance-title:hover {
 
 .reading-list-item:hover { border-color: var(--accent); }
 
+/* A labelled control, not a bare "×": people could not find the remove button. */
 .reading-list-remove {
     background: none;
-    border: none;
+    border: 1px solid var(--border-soft);
     color: var(--muted);
-    font-size: 1.1rem;
+    font-size: 0.78rem;
     cursor: pointer;
-    padding: 0.2rem 0.4rem;
-    line-height: 1;
+    padding: 0.25rem 0.6rem;
+    line-height: 1.2;
     border-radius: 4px;
+    white-space: nowrap;
 }
-.reading-list-remove:hover { color: var(--error); }
+.reading-list-remove:hover {
+    color: var(--error);
+    border-color: var(--error);
+}
 
 .reading-list-upsell {
     font-size: 0.8rem;

@@ -3,7 +3,7 @@
 //
 // Storage shapes (mirrored from the desktop app):
 //   community/termbases/{user}.json    — per-user pretty JSON array (array of TermbaseEntry)
-//   community/termbase.json            — project-wide shared termbase (array of TermbaseEntry)
+//   termbase.json                      — project-wide shared termbase (array of TermbaseEntry)
 //
 // TermbaseEntry shape (see Models/TermbaseEntry.cs):
 //   { SourceTerm, PreferredTarget, AlternateTargets[], Status, Note,
@@ -107,7 +107,7 @@ async function loadTermbase(user) {
         }
     }
 
-    const sharedUrl = DATA_REPO_BASE + 'community/termbase.json';
+    const sharedUrl = DATA_REPO_BASE + 'termbase.json';
     return fetchTermbaseJson(sharedUrl);
 }
 

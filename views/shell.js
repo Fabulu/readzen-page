@@ -14,6 +14,7 @@
 import { escapeHtml } from '../lib/format.js';
 import { buildZenUri, describeRoute } from '../lib/route.js';
 import { copyShareableLink } from '../lib/share.js';
+import { getDictMode, setDictMode, getZenHighlight, setZenHighlight } from '../lib/reader-prefs.js';
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 const AUTO_OPEN_PREF_KEY = 'readzen-auto-open';
@@ -130,6 +131,7 @@ export function mountShell(root, route) {
                         <a class="header-nav-item" href="#/scholar">Browse Collections</a>
                         <a class="header-nav-item" href="#/lineage">Lineage Graph</a>
                         <a class="header-nav-item" href="#/masters">Zen Masters</a>
+                        <a class="header-nav-item" href="#/dict">Dictionary</a>
                     </div>
                 </div>
                 <div class="shell-route" id="shell-route-box">
@@ -184,8 +186,12 @@ export function mountShell(root, route) {
                     <button class="font-btn" id="font-increase" aria-label="Increase text size">A+</button>
                 </p>
                 <p class="shell-foot-pref">
-                    Hover dictionary:
-                    <a href="#" id="hover-dict-toggle" class="shell-foot-toggle"></a>
+                    Dictionary:
+                    <a href="#" id="dict-mode-toggle" class="shell-foot-toggle" title="Switch the click dictionary between the Zen termbase and CC-CEDICT"></a>
+                </p>
+                <p class="shell-foot-pref">
+                    Zen word highlight:
+                    <a href="#" id="zen-highlight-toggle" class="shell-foot-toggle" title="Highlight curated Zen terms in the Chinese text"></a>
                 </p>
                 <p class="shell-foot-pref">
                     <a href="#" id="theme-toggle" class="shell-foot-toggle" title="Toggle light/dark theme"></a>
@@ -279,16 +285,30 @@ export function mountShell(root, route) {
         });
     }
 
-    // Hover dictionary toggle
-    const dictToggle = root.querySelector('#hover-dict-toggle');
-    if (dictToggle) {
-        const dictOn = localStorage.getItem('readzen-hover-dict') !== 'off';
-        dictToggle.textContent = dictOn ? 'on' : 'off';
-        dictToggle.addEventListener('click', (ev) => {
+    // Dictionary mode toggle: Zen ⇄ CC-CEDICT. Click-only, mutually exclusive.
+    // The chosen mode drives which dictionary a click on Chinese text opens.
+    const dictModeToggle = root.querySelector('#dict-mode-toggle');
+    if (dictModeToggle) {
+        const label = (m) => (m === 'cedict' ? 'CC-CEDICT' : 'Zen');
+        dictModeToggle.textContent = label(getDictMode());
+        dictModeToggle.addEventListener('click', (ev) => {
             ev.preventDefault();
-            const nowOn = localStorage.getItem('readzen-hover-dict') !== 'off';
-            localStorage.setItem('readzen-hover-dict', nowOn ? 'off' : 'on');
-            dictToggle.textContent = nowOn ? 'off' : 'on';
+            const next = getDictMode() === 'zen' ? 'cedict' : 'zen';
+            setDictMode(next);
+            dictModeToggle.textContent = label(next);
+        });
+    }
+
+    // Zen word highlight toggle: purely visual highlighting of curated terms
+    // in the Chinese source. Takes effect on the next passage render.
+    const zenHlToggle = root.querySelector('#zen-highlight-toggle');
+    if (zenHlToggle) {
+        zenHlToggle.textContent = getZenHighlight() ? 'on' : 'off';
+        zenHlToggle.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            const next = !getZenHighlight();
+            setZenHighlight(next);
+            zenHlToggle.textContent = next ? 'on' : 'off';
         });
     }
 

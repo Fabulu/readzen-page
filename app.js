@@ -12,6 +12,7 @@ import * as landing from './views/landing.js';
 import * as passage from './views/passage.js';
 import { disposeAllFindBarHandlers } from './views/passage.js';
 import * as dictionary from './views/dictionary.js';
+import * as dictBrowse from './views/dict-browse.js';
 import * as termbase from './views/termbase.js';
 import * as master from './views/master.js';
 import * as mastersBrowse from './views/masters-browse.js';
@@ -28,7 +29,7 @@ import { detachAllMirrors } from './lib/selection-sync.js';
 
 // Lookup views share a common contract: instant render, no app-first race.
 // They're dispatched before the placeholder path in `init` below.
-const LOOKUP_VIEWS = [dictionary, termbase, master, mastersBrowse, lineageGraph, tags, scholarGraph, scholar, search, sharedList];
+const LOOKUP_VIEWS = [dictionary, dictBrowse, termbase, master, mastersBrowse, lineageGraph, tags, scholarGraph, scholar, search, sharedList];
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 

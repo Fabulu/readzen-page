@@ -26,7 +26,8 @@ import { attachSelectionMirror } from '../lib/selection-sync.js';
 import { addToList, removeFromList, isInList, setLastRead, resumeLastReadTracking } from '../lib/reading-lists.js';
 import { CITE_STYLES, buildCitation, getPreferredStyle, setPreferredStyle } from '../lib/citation.js';
 import { registerFindNavigator } from '../lib/keyboard.js';
-import { getPageSize, PAGE_SIZE_OPTIONS, getBilingualMode, setBilingualMode, getSourceMode, setSourceMode } from '../lib/reader-prefs.js';
+import { getPageSize, PAGE_SIZE_OPTIONS, getBilingualMode, setBilingualMode, getSourceMode, setSourceMode, getZenHighlight } from '../lib/reader-prefs.js';
+import { loadZenIndex } from '../lib/zen-dict.js';
 
 const XML_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -176,10 +177,18 @@ export async function render(route, mount, shell) {
         // functions, not closures over render(), so a `var` here is invisible
         // to them (strict-mode ReferenceError — broke the rangeless and
         // first-N paths).
-        const [sourceWork, segmentMap] = await Promise.all([
+        const [sourceWork, segmentMap, zenIndex] = await Promise.all([
             loadXml(srcUrl),
-            loadSegmentMap(route.workId)
+            loadSegmentMap(route.workId),
+            // Zen-word highlight term set — the HEADWORD index only (tens of KB).
+            // The full entry for a term is fetched from its shard when clicked, so
+            // the reader's cost stays flat as the dictionary grows.
+            getZenHighlight() ? loadZenIndex().catch(() => null) : Promise.resolve(null)
         ]);
+        // A plain matcher {terms,maxLen} handed to the render helpers; null when
+        // highlighting is off or the termbase is absent (reader renders as before).
+        const zenMatcher = (zenIndex && zenIndex.terms && zenIndex.terms.size)
+            ? { terms: zenIndex.terms, maxLen: zenIndex.maxLen } : null;
 
         if (isRangeless) {
             // CBETA's source <head> elements (the table of contents) can't
@@ -216,13 +225,13 @@ export async function render(route, mount, shell) {
 
             if (translationWork) {
                 // Translated works: side-by-side paginated view.
-                renderRangelessBilingual(sourceWork, translationWork, route, mount, segmentMap);
+                renderRangelessBilingual(sourceWork, translationWork, route, mount, segmentMap, zenMatcher);
             } else {
                 // Untranslated works: show the full text paginated.
                 // No TOC-only view — clicking individual headings one by one
                 // is a terrible reading experience for koan collections and
                 // recorded sayings with hundreds of sections.
-                renderFirstNLines(sourceWork, 30, route, mount, true, segmentMap);
+                renderFirstNLines(sourceWork, 30, route, mount, true, segmentMap, zenMatcher);
             }
             shell.hideStatus();
             if (!(route.q || route.scroll || route.pos)) window.scrollTo(0, 0);
@@ -247,7 +256,7 @@ export async function render(route, mount, shell) {
 
         document.querySelector('#source-meta').textContent = (sourceWork.titleZh || route.workId) + apparatusSummary(sourceWork.apparatus);
         const rangeSearchTerm = route.q || route.highlight || '';
-        let sourceHtml = renderLinesHtml(sourceLines, segmentMap, { lineLinks: true });
+        let sourceHtml = renderLinesHtml(sourceLines, segmentMap, { lineLinks: true, zenMatcher });
         if (rangeSearchTerm) sourceHtml = highlightTextInHtml(sourceHtml, rangeSearchTerm);
         document.querySelector('#source-body').innerHTML = sourceHtml;
         attachInlineDict(document.querySelector('#source-body'));
@@ -312,7 +321,7 @@ export async function render(route, mount, shell) {
  * Small works (<200 lines) render in full; larger works paginate with
  * prev/next + page number buttons.
  */
-function renderRangelessBilingual(sourceWork, translationWork, route, mount, segmentMap) {
+function renderRangelessBilingual(sourceWork, translationWork, route, mount, segmentMap, zenMatcher) {
     const pref = getPageSize(); // user-selectable lines per page (reader-prefs)
     const PAGE = pref === 'all' ? Infinity : pref;
     const allSourceLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
@@ -363,12 +372,12 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
 
     function buildBodiesHtml(lines) {
         if (effMode === 'merged-stacked') {
-            return { srcHtml: renderMergedHtml(lines, segmentMap, pairTranslation(lines), { stacked: true, headingIds, bylineIds }), trnHtml: '' };
+            return { srcHtml: renderMergedHtml(lines, segmentMap, pairTranslation(lines), { stacked: true, headingIds, bylineIds, zenMatcher }), trnHtml: '' };
         }
         if (effMode === 'merged-flow') {
             const trn = pairTranslation(lines);
             return {
-                srcHtml: renderMergedHtml(lines, segmentMap, null, { side: 'zh', headingIds, bylineIds }),
+                srcHtml: renderMergedHtml(lines, segmentMap, null, { side: 'zh', headingIds, bylineIds, zenMatcher }),
                 trnHtml: renderMergedHtml(lines, segmentMap, trn, { side: 'en', headingIds, bylineIds }),
             };
         }
@@ -377,7 +386,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
             const trn = pairTranslation(lines);
             let html = '';
             for (let i = 0; i < lines.length; i++) {
-                html += renderLinesHtml([lines[i]], segmentMap, { lineLinks: true });
+                html += renderLinesHtml([lines[i]], segmentMap, { lineLinks: true, zenMatcher });
                 const t = trn[i];
                 if (t && t.text && !String(t.id).startsWith('__')) {
                     html += renderLinesHtml([t], undefined, { rowClass: 'line-row--inter-en' });
@@ -386,7 +395,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
             return { srcHtml: html, trnHtml: '' };
         }
         return {
-            srcHtml: renderLinesHtml(lines, segmentMap, { lineLinks: true }),
+            srcHtml: renderLinesHtml(lines, segmentMap, { lineLinks: true, zenMatcher }),
             trnHtml: renderLinesHtml(pairTranslation(lines), undefined, { lineLinks: true }),
         };
     }
@@ -565,7 +574,7 @@ function renderRangelessBilingual(sourceWork, translationWork, route, mount, seg
  * small works (<200), otherwise paginates in chunks of 50 with a "Show more"
  * button.
  */
-function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, segmentMap) {
+function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, segmentMap, zenMatcher) {
     const pref = getPageSize(); // user-selectable lines per page (reader-prefs)
     const PAGE = pref === 'all' ? Infinity : pref;
     const allLines = sliceFirstN(sourceWork.linesById, sourceWork.lineOrder, Infinity);
@@ -585,8 +594,8 @@ function renderFirstNLines(sourceWork, _unused, route, mount, noTranslation, seg
     const headingIds = new Set((sourceWork.headings || []).map((h) => h.lineId).filter(Boolean));
     const bylineIds = new Set((sourceWork.bylines || []).map((b) => b.lineId).filter(Boolean));
     const renderSourceBody = (lines) => effMode === 'merged'
-        ? renderMergedHtml(lines, segmentMap, null, { side: 'zh', headingIds, bylineIds })
-        : renderLinesHtml(lines, segmentMap, { lineLinks: true });
+        ? renderMergedHtml(lines, segmentMap, null, { side: 'zh', headingIds, bylineIds, zenMatcher })
+        : renderLinesHtml(lines, segmentMap, { lineLinks: true, zenMatcher });
 
     let currentPage = 1;
     if (!showAll && (scrollLineId2 || resumeLineId2)) {
