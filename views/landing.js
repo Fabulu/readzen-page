@@ -172,6 +172,28 @@ export function render(_route, mount, shell) {
                 <button class="btn" type="submit">Search</button>
             </form>
 
+            <a class="dict-pitch" href="#/dict">
+                <div class="dict-pitch-body">
+                    <p class="dict-pitch-kicker">The Zen Dictionary</p>
+                    <h3 class="dict-pitch-title">Every term defined only from how Zen Masters use it.</h3>
+                    <p class="dict-pitch-text">
+                        Not a Buddhist dictionary and not a Chinese one. Each entry is built from the
+                        Zen record itself &mdash; described, never interpreted &mdash; and every meaning is
+                        backed by verbatim passages anchored to the text and line they came from. It shows
+                        you where Zen <em>bends</em> a word: <span class="dict-pitch-zh">拂子</span> is a
+                        fly-whisk in any dictionary; in the Zen records it is the emblem of the teaching
+                        seat. <span class="dict-pitch-zh">和尚</span> is a master &mdash; and also the
+                        preceptor who confers the precepts.
+                    </p>
+                    <p class="dict-pitch-stats" id="dict-pitch-stats">
+                        <span class="dict-pitch-stat"><strong id="dict-pitch-count">&mdash;</strong> terms</span>
+                        <span class="dict-pitch-stat">quoted from the <strong>Chan corpus</strong></span>
+                        <span class="dict-pitch-stat">free &amp; open</span>
+                    </p>
+                </div>
+                <span class="dict-pitch-cta">Open the dictionary &rarr;</span>
+            </a>
+
             <div class="lineage-showcase">
                 <h3 class="lineage-showcase-heading">The Zen Lineage</h3>
                 <p class="lineage-showcase-desc">
@@ -204,72 +226,12 @@ export function render(_route, mount, shell) {
                 </div>
             </div>
 
-            <div class="graph-showcase">
-                <h3 class="graph-showcase-heading">Interactive Knowledge Graphs</h3>
-                <p class="graph-showcase-desc">
-                    Every collection can be visualized as a force-directed graph. Seven node types &mdash;
-                    passages, concepts, Zen masters, terms, collections, books, and web links &mdash;
-                    connected by typed, labeled edges.
-                </p>
-                <div class="graph-showcase-features">
-                    <div class="graph-showcase-feature">
-                        <span class="graph-showcase-icon" style="font-size:1.3rem;color:#FFD700">&#x25C9;</span>
-                        <div>
-                            <strong>Starting node highlight</strong>
-                            <p>The collection author marks an entry point so readers know where to begin.</p>
-                        </div>
-                    </div>
-                    <div class="graph-showcase-feature">
-                        <span class="graph-showcase-icon" style="font-size:1.3rem;color:var(--accent)">&#x25A3;</span>
-                        <div>
-                            <strong>Rich popup cards</strong>
-                            <p>Click any node for a card with full Chinese/English text, metadata, connections, and dictionary lookup.</p>
-                        </div>
-                    </div>
-                    <div class="graph-showcase-feature">
-                        <span class="graph-showcase-icon" style="font-size:1.3rem;color:var(--accent)">&#x2192;</span>
-                        <div>
-                            <strong>Click to navigate</strong>
-                            <p>Click a passage to see its details. Open it in the reader to see it in full context.</p>
-                        </div>
-                    </div>
-                    <div class="graph-showcase-feature">
-                        <span class="graph-showcase-icon" style="font-size:1.3rem;color:var(--accent)">&#x5B57;</span>
-                        <div>
-                            <strong>Hover dictionary</strong>
-                            <p>CC-CEDICT lookup on any Chinese character &mdash; in the reader, graph popups, and collection views.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <div class="hero-actions">
                 <a class="btn" href="#/search">Advanced Search &amp; Filters</a>
                 <a class="btn btn--outline" href="${RELEASES_URL}">Download Desktop App</a>
                 <a class="btn btn--outline" href="https://ko-fi.com/readzen">Support on Ko-fi</a>
             </div>
 
-            <a class="dict-pitch" href="#/dict">
-                <div class="dict-pitch-body">
-                    <p class="dict-pitch-kicker">The Zen Dictionary</p>
-                    <h3 class="dict-pitch-title">Every term defined only from how Zen Masters use it.</h3>
-                    <p class="dict-pitch-text">
-                        Not a Buddhist dictionary and not a Chinese one. Each entry is built from the
-                        Zen record itself &mdash; described, never interpreted &mdash; and every meaning is
-                        backed by verbatim passages anchored to the text and line they came from. It shows
-                        you where Zen <em>bends</em> a word: <span class="dict-pitch-zh">拂子</span> is a
-                        fly-whisk in any dictionary; in the Zen records it is the emblem of the teaching
-                        seat. <span class="dict-pitch-zh">和尚</span> is a master &mdash; and also the
-                        preceptor who confers the precepts.
-                    </p>
-                    <p class="dict-pitch-stats" id="dict-pitch-stats">
-                        <span class="dict-pitch-stat"><strong id="dict-pitch-count">&mdash;</strong> terms</span>
-                        <span class="dict-pitch-stat">quoted from the <strong>Chan corpus</strong></span>
-                        <span class="dict-pitch-stat">free &amp; open</span>
-                    </p>
-                </div>
-                <span class="dict-pitch-cta">Open the dictionary &rarr;</span>
-            </a>
 
             <div class="corpus-cards">
                 <div class="corpus-card">
@@ -364,6 +326,45 @@ export function render(_route, mount, shell) {
             </div>
 
             <!-- Explore Zen Masters section removed — replaced by the embedded lineage graph above -->
+
+            <div class="graph-showcase">
+                <h3 class="graph-showcase-heading">Interactive Knowledge Graphs</h3>
+                <p class="graph-showcase-desc">
+                    Every collection can be visualized as a force-directed graph. Seven node types &mdash;
+                    passages, concepts, Zen masters, terms, collections, books, and web links &mdash;
+                    connected by typed, labeled edges.
+                </p>
+                <div class="graph-showcase-features">
+                    <div class="graph-showcase-feature">
+                        <span class="graph-showcase-icon" style="font-size:1.3rem;color:#FFD700">&#x25C9;</span>
+                        <div>
+                            <strong>Starting node highlight</strong>
+                            <p>The collection author marks an entry point so readers know where to begin.</p>
+                        </div>
+                    </div>
+                    <div class="graph-showcase-feature">
+                        <span class="graph-showcase-icon" style="font-size:1.3rem;color:var(--accent)">&#x25A3;</span>
+                        <div>
+                            <strong>Rich popup cards</strong>
+                            <p>Click any node for a card with full Chinese/English text, metadata, connections, and dictionary lookup.</p>
+                        </div>
+                    </div>
+                    <div class="graph-showcase-feature">
+                        <span class="graph-showcase-icon" style="font-size:1.3rem;color:var(--accent)">&#x2192;</span>
+                        <div>
+                            <strong>Click to navigate</strong>
+                            <p>Click a passage to see its details. Open it in the reader to see it in full context.</p>
+                        </div>
+                    </div>
+                    <div class="graph-showcase-feature">
+                        <span class="graph-showcase-icon" style="font-size:1.3rem;color:var(--accent)">&#x5B57;</span>
+                        <div>
+                            <strong>Hover dictionary</strong>
+                            <p>CC-CEDICT lookup on any Chinese character &mdash; in the reader, graph popups, and collection views.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <div class="start-here">
                 <h3 class="start-here-heading">Start Here</h3>
