@@ -1709,7 +1709,12 @@ mark.find-highlight--active {
     position: absolute;
     top: 8px;
     right: 8px;
-    background: rgba(20, 16, 12, 0.85);
+    /* Palette-aware: a hardcoded dark box left the legend unreadable on every
+       light theme (its text follows --text-soft). */
+    background: var(--bg-soft);
+    background: color-mix(in srgb, var(--bg-soft) 88%, transparent);
+    border: 1px solid var(--border-soft);
+    color: var(--text-soft);
     border-radius: 6px;
     padding: 6px 10px;
     font-size: 10px;
@@ -4284,7 +4289,8 @@ a.master-appearance-title:hover {
     padding: 0.4rem 0.6rem;
     border-radius: 6px;
     border: 1px solid var(--border);
-    background: rgba(11, 9, 7, 0.85);
+    background: var(--bg-soft);
+    background: color-mix(in srgb, var(--bg-soft) 88%, transparent);
     color: var(--text);
     font-family: var(--sans);
     font-size: 0.82rem;
@@ -4306,7 +4312,8 @@ a.master-appearance-title:hover {
     height: 28px;
     border-radius: 4px;
     border: 1px solid var(--border);
-    background: rgba(11, 9, 7, 0.8);
+    background: var(--bg-soft);
+    background: color-mix(in srgb, var(--bg-soft) 85%, transparent);
     color: var(--text);
     font-size: 1rem;
     cursor: pointer;
@@ -4330,7 +4337,11 @@ a.master-appearance-title:hover {
     gap: 0.3rem;
     padding: 0.5rem 0.7rem;
     border-radius: 6px;
-    background: rgba(11, 9, 7, 0.85);
+    /* Was a hardcoded near-black. Its text is var(--text-soft), which on any
+       LIGHT palette is dark brown -- dark on dark, unreadable. Follow the
+       palette instead. */
+    background: var(--bg-soft);
+    background: color-mix(in srgb, var(--bg-soft) 88%, transparent);
     border: 1px solid var(--border-soft);
     backdrop-filter: blur(8px);
     z-index: 2;
@@ -4367,7 +4378,8 @@ a.master-appearance-title:hover {
     text-decoration: none;
     padding: 0.3rem 0.6rem;
     border-radius: 4px;
-    background: rgba(11, 9, 7, 0.8);
+    background: var(--bg-soft);
+    background: color-mix(in srgb, var(--bg-soft) 85%, transparent);
     border: 1px solid var(--border-soft);
     backdrop-filter: blur(8px);
     z-index: 2;
@@ -5623,9 +5635,15 @@ a.master-appearance-title:hover {
 .chrome-switch-trigger strong { color: var(--accent); font-weight: 500; }
 .chrome-switch-trigger:hover { border-color: var(--accent); }
 .chrome-switch-panel {
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 8px);
+    position: fixed;
+    right: 1rem;
+    bottom: 3.4rem;
+    /* Anchored to the viewport, not the button: with nine palettes and five
+       layouts the panel grew taller than the screen and its top ran off-frame.
+       Cap it and let it scroll internally instead. */
+    max-height: calc(100vh - 5rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     width: min(23rem, 90vw);
     background: var(--bg-soft);
     border: 1px solid var(--border);
@@ -5651,3 +5669,253 @@ a.master-appearance-title:hover {
 .chrome-switch-opt-name { display: block; color: var(--text); font-size: 0.85rem; margin-bottom: 0.1rem; }
 .chrome-switch-opt--on .chrome-switch-opt-name { color: var(--accent); }
 .chrome-switch-opt-desc { display: block; color: var(--muted); font-size: 0.75rem; line-height: 1.45; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PALETTES
+   A palette re-tints the design tokens. The light/dark FAMILY still rides on
+   data-theme, because ~30 component rules are keyed on [data-theme="light"] --
+   a light palette that failed to set it would render broken. So a light palette
+   sets BOTH: data-theme="light" (family) and data-palette="woodblock" (tokens).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── SUMI ── ink-wash. Near-black, cool grey text, a vermilion seal for the
+   accent instead of gold. The register of a Chinese ink painting, not a
+   dashboard. ── */
+:root[data-palette="sumi"] {
+    color-scheme: dark;
+    --bg: #101011;
+    --bg-soft: #17171a;
+    --paper: rgba(255, 255, 255, 0.028);
+    --paper-strong: rgba(255, 255, 255, 0.05);
+    /* The seal red is a SEAL: it belongs on the one stamped mark, not on every
+       border in the page. Borders stay neutral; the red is kept for the accent. */
+    --border: rgba(255, 255, 255, 0.13);
+    --border-soft: rgba(255, 255, 255, 0.07);
+    --text: #e6e4e0;
+    --text-soft: #b6b3ad;
+    --muted: #7d7a75;
+    --accent: #b3574c;
+    --accent-soft: rgba(179, 87, 76, 0.11);
+    --shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+    --error: rgba(212, 92, 74, 0.9);
+}
+:root[data-palette="sumi"] .hero-mark {
+    background: radial-gradient(circle, rgba(179, 87, 76, 0.7) 0%, rgba(179, 87, 76, 0) 72%);
+}
+
+/* ── SLATE ── cool blue-grey dark. Low-chroma and quiet: the least decorated of
+   the dark sets, for long reading sessions. ── */
+:root[data-palette="slate"] {
+    color-scheme: dark;
+    --bg: #10131a;
+    --bg-soft: #171b24;
+    --paper: rgba(255, 255, 255, 0.03);
+    --paper-strong: rgba(255, 255, 255, 0.055);
+    --border: rgba(148, 170, 200, 0.18);
+    --border-soft: rgba(255, 255, 255, 0.07);
+    --text: #dfe4ec;
+    --text-soft: #aeb7c5;
+    --muted: #78828f;
+    --accent: #8fb3d9;
+    --accent-soft: rgba(143, 179, 217, 0.12);
+    --shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+    --error: rgba(206, 110, 96, 0.9);
+}
+:root[data-palette="slate"] .hero-mark {
+    background: radial-gradient(circle, rgba(143, 179, 217, 0.8) 0%, rgba(143, 179, 217, 0) 72%);
+}
+
+/* ── WOODBLOCK ── aged block-print parchment: deep brown text, rust-red accent,
+   heavier rules. Reads like a printed book rather than a screen. Light family,
+   so it inherits every [data-theme="light"] component override. ── */
+:root[data-palette="woodblock"] {
+    color-scheme: light;
+    --bg: #ece1cc;
+    --bg-soft: #e2d5ba;
+    --paper: rgba(90, 60, 30, 0.045);
+    --paper-strong: rgba(90, 60, 30, 0.08);
+    --border: rgba(122, 74, 42, 0.30);
+    --border-soft: rgba(90, 60, 30, 0.14);
+    --text: #2e2116;
+    --text-soft: #55402c;
+    --muted: #8a7357;
+    --accent: #9e3b28;
+    --accent-soft: rgba(158, 59, 40, 0.12);
+    --shadow: 0 30px 80px rgba(70, 45, 20, 0.14);
+    --error: rgba(158, 59, 40, 0.9);
+}
+:root[data-palette="woodblock"] .hero-mark {
+    background: radial-gradient(circle, rgba(158, 59, 40, 0.7) 0%, rgba(158, 59, 40, 0) 72%);
+    opacity: 0.55;
+}
+/* A term with a dictionary entry has to stay legible against parchment. */
+:root[data-palette="woodblock"] .zen-term { border-bottom-color: rgba(158, 59, 40, 0.45); }
+:root[data-palette="woodblock"] .zen-term:hover { border-bottom-color: rgba(158, 59, 40, 0.95); }
+
+/* ── Swatches in the Design panel ── */
+.chrome-switch-title--sep {
+    margin-top: 0.9rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid var(--border-soft);
+}
+.chrome-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+}
+.chrome-swatch {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: none;
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    padding: 0.25rem 0.6rem 0.25rem 0.3rem;
+    color: var(--text-soft);
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+.chrome-swatch:hover { border-color: var(--border); }
+.chrome-swatch--on { border-color: var(--accent); color: var(--accent); }
+.chrome-swatch-chip {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    flex-shrink: 0;
+}
+/* Each chip previews its palette: page colour, with the accent as a slice. */
+.chrome-swatch-chip--ink { background: linear-gradient(135deg, #0b0907 50%, #d4ab58 50%); }
+.chrome-swatch-chip--sumi { background: linear-gradient(135deg, #0c0c0d 50%, #c4433a 50%); }
+.chrome-swatch-chip--slate { background: linear-gradient(135deg, #10131a 50%, #8fb3d9 50%); }
+.chrome-swatch-chip--paper { background: linear-gradient(135deg, #f5f0e8 50%, #9b7d2f 50%); }
+.chrome-swatch-chip--woodblock { background: linear-gradient(135deg, #ece1cc 50%, #9e3b28 50%); }
+
+/* ── The colourful ones ─────────────────────────────────────────────────────
+   Colour carried by the PAGE, not just the accent. A palette that only swaps the
+   link colour is a recolour; these change what the page is made of. ── */
+
+/* JADE -- deep green-teal night. The accent is a pale jade that actually reads
+   as green rather than "blue-ish grey". */
+:root[data-palette="jade"] {
+    color-scheme: dark;
+    --bg: #08211d;
+    --bg-soft: #0d2e28;
+    --paper: rgba(120, 255, 220, 0.035);
+    --paper-strong: rgba(120, 255, 220, 0.06);
+    --border: rgba(126, 214, 187, 0.22);
+    --border-soft: rgba(180, 255, 235, 0.09);
+    --text: #e2f2ec;
+    --text-soft: #a9ccc1;
+    --muted: #6f9b90;
+    --accent: #5fd2a8;
+    --accent-soft: rgba(95, 210, 168, 0.14);
+    --shadow: 0 30px 80px rgba(0, 20, 15, 0.5);
+    --error: rgba(230, 120, 100, 0.9);
+}
+:root[data-palette="jade"] .hero-mark {
+    background: radial-gradient(circle, rgba(95, 210, 168, 0.85) 0%, rgba(95, 210, 168, 0) 72%);
+}
+
+/* PERSIMMON -- warm dark. A brown-black page lit by persimmon orange: the
+   friendliest of the dark sets, and the least austere thing here. */
+:root[data-palette="persimmon"] {
+    color-scheme: dark;
+    --bg: #1b120c;
+    --bg-soft: #251810;
+    --paper: rgba(255, 190, 120, 0.045);
+    --paper-strong: rgba(255, 190, 120, 0.075);
+    --border: rgba(240, 140, 70, 0.24);
+    --border-soft: rgba(255, 200, 150, 0.10);
+    --text: #f6e7d8;
+    --text-soft: #d3b699;
+    --muted: #9c7f66;
+    --accent: #f08a3c;
+    --accent-soft: rgba(240, 138, 60, 0.15);
+    --shadow: 0 30px 80px rgba(30, 12, 0, 0.5);
+    --error: rgba(224, 92, 72, 0.9);
+}
+:root[data-palette="persimmon"] .hero-mark {
+    background: radial-gradient(circle, rgba(240, 138, 60, 0.9) 0%, rgba(240, 138, 60, 0) 72%);
+}
+
+/* INDIGO -- night-sky. Deep violet-blue page with a cyan accent. The most vivid
+   of the set; high contrast without being harsh. */
+:root[data-palette="indigo"] {
+    color-scheme: dark;
+    --bg: #12132b;
+    --bg-soft: #1a1c3d;
+    --paper: rgba(160, 180, 255, 0.05);
+    --paper-strong: rgba(160, 180, 255, 0.08);
+    --border: rgba(140, 160, 255, 0.24);
+    --border-soft: rgba(180, 195, 255, 0.10);
+    --text: #e6e8ff;
+    --text-soft: #b3b8e6;
+    --muted: #7d84b8;
+    --accent: #63d7f0;
+    --accent-soft: rgba(99, 215, 240, 0.14);
+    --shadow: 0 30px 80px rgba(5, 5, 40, 0.55);
+    --error: rgba(240, 120, 140, 0.9);
+}
+:root[data-palette="indigo"] .hero-mark {
+    background: radial-gradient(circle, rgba(99, 215, 240, 0.85) 0%, rgba(99, 215, 240, 0) 72%);
+}
+
+/* MATCHA -- light and green. Soft tea-green page, warm bark-brown text, a deep
+   green accent. Playful without being loud, and easy on the eyes for long reads.
+   Light family, so it inherits every [data-theme="light"] component override. */
+:root[data-palette="matcha"] {
+    color-scheme: light;
+    --bg: #eef2e2;
+    --bg-soft: #e2e9d0;
+    --paper: rgba(60, 80, 30, 0.045);
+    --paper-strong: rgba(60, 80, 30, 0.08);
+    --border: rgba(85, 120, 55, 0.28);
+    --border-soft: rgba(60, 80, 30, 0.13);
+    --text: #26301c;
+    --text-soft: #4d5c3c;
+    --muted: #7d8b6c;
+    --accent: #4f7a2e;
+    --accent-soft: rgba(79, 122, 46, 0.13);
+    --shadow: 0 30px 80px rgba(40, 60, 20, 0.13);
+    --error: rgba(170, 70, 50, 0.9);
+}
+:root[data-palette="matcha"] .hero-mark {
+    background: radial-gradient(circle, rgba(79, 122, 46, 0.7) 0%, rgba(79, 122, 46, 0) 72%);
+    opacity: 0.55;
+}
+:root[data-palette="matcha"] .zen-term { border-bottom-color: rgba(79, 122, 46, 0.5); }
+:root[data-palette="matcha"] .zen-term:hover { border-bottom-color: rgba(79, 122, 46, 0.95); }
+
+/* PLUM -- light and pink. Blossom-tinted paper, plum accent, aubergine text.
+   The most playful thing on the list, and it still reads. */
+:root[data-palette="plum"] {
+    color-scheme: light;
+    --bg: #faeef1;
+    --bg-soft: #f2dfe5;
+    --paper: rgba(120, 40, 70, 0.04);
+    --paper-strong: rgba(120, 40, 70, 0.07);
+    --border: rgba(160, 70, 110, 0.26);
+    --border-soft: rgba(120, 40, 70, 0.12);
+    --text: #34202a;
+    --text-soft: #5e4050;
+    --muted: #96707f;
+    --accent: #b3407a;
+    --accent-soft: rgba(179, 64, 122, 0.12);
+    --shadow: 0 30px 80px rgba(80, 30, 55, 0.12);
+    --error: rgba(178, 55, 55, 0.9);
+}
+:root[data-palette="plum"] .hero-mark {
+    background: radial-gradient(circle, rgba(179, 64, 122, 0.65) 0%, rgba(179, 64, 122, 0) 72%);
+    opacity: 0.6;
+}
+:root[data-palette="plum"] .zen-term { border-bottom-color: rgba(179, 64, 122, 0.45); }
+:root[data-palette="plum"] .zen-term:hover { border-bottom-color: rgba(179, 64, 122, 0.95); }
+
+/* Swatch chips for the new palettes. */
+.chrome-swatch-chip--jade { background: linear-gradient(135deg, #08211d 50%, #5fd2a8 50%); }
+.chrome-swatch-chip--persimmon { background: linear-gradient(135deg, #1b120c 50%, #f08a3c 50%); }
+.chrome-swatch-chip--indigo { background: linear-gradient(135deg, #12132b 50%, #63d7f0 50%); }
+.chrome-swatch-chip--matcha { background: linear-gradient(135deg, #eef2e2 50%, #4f7a2e 50%); }
+.chrome-swatch-chip--plum { background: linear-gradient(135deg, #faeef1 50%, #b3407a 50%); }

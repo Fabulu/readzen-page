@@ -14,7 +14,26 @@
 import { escapeHtml } from '../lib/format.js';
 import { buildZenUri, describeRoute } from '../lib/route.js';
 import { copyShareableLink } from '../lib/share.js';
-import { getDictMode, setDictMode, getZenHighlight, setZenHighlight, getChrome, setChrome } from '../lib/reader-prefs.js';
+import {
+    getDictMode, setDictMode, getZenHighlight, setZenHighlight,
+    getChrome, setChrome, getPalette, setPalette, PALETTES, PALETTE_FAMILY,
+} from '../lib/reader-prefs.js';
+
+// Colour palettes. Each is a different register, not a different hue: what the
+// site should FEEL like to read in. Family is what the existing light/dark
+// component overrides key on.
+const PALETTE_OPTIONS = [
+    { id: 'ink', name: 'Ink', desc: 'The current one. Warm gold on near-black.' },
+    { id: 'sumi', name: 'Sumi', desc: 'Ink-wash black with a muted seal red. The red is kept for the accent only, so it reads as a stamp rather than a warning.' },
+    { id: 'slate', name: 'Slate', desc: 'Cool blue-grey dark. Low-chroma and quiet; the least decorated of the set.' },
+    { id: 'jade', name: 'Jade', desc: 'Deep green-teal night with a pale jade accent. Colourful but calm.' },
+    { id: 'persimmon', name: 'Persimmon', desc: 'Brown-black page lit by persimmon orange. The warmest and friendliest of the dark sets.' },
+    { id: 'indigo', name: 'Indigo', desc: 'Night-sky violet-blue with a cyan accent. The most vivid thing here.' },
+    { id: 'paper', name: 'Paper', desc: 'The existing light theme. Warm off-white, ochre accent.' },
+    { id: 'woodblock', name: 'Woodblock', desc: 'Aged block-print parchment, rust-red accent, deep brown text. Reads like a printed book.' },
+    { id: 'matcha', name: 'Matcha', desc: 'Soft tea-green paper, deep green accent. Playful without being loud, and easy for long reads.' },
+    { id: 'plum', name: 'Plum', desc: 'Blossom-tinted paper with a plum accent. The most playful of the lot — and it still reads.' },
+];
 
 // Candidate header layouts, offered live so they can be compared on real pages
 // instead of in the abstract. Each is a different ANSWER to the same problem --
@@ -54,8 +73,31 @@ function applyTheme(theme) {
     try { localStorage.setItem(THEME_PREF_KEY, theme); } catch {}
 }
 
-// Apply saved theme immediately on module load.
-applyTheme(getTheme());
+/**
+ * Apply a palette: set the colour tokens (data-palette) AND the light/dark
+ * family they belong to (data-theme), because the component overrides are keyed
+ * on the family, not the palette.
+ */
+function applyPalette(id) {
+    const family = PALETTE_FAMILY[id] || 'dark';
+    document.documentElement.setAttribute('data-palette', id);
+    applyTheme(family);
+    setPalette(id);
+}
+
+// Apply the saved palette (and with it the saved light/dark family) on load. A
+// palette the user has never touched falls back to their light/dark preference.
+(function initPalette() {
+    let saved = null;
+    try { saved = localStorage.getItem('zl:palette'); } catch { /* private mode */ }
+    if (saved && PALETTES.includes(saved)) {
+        applyPalette(saved);
+    } else {
+        const theme = getTheme();
+        document.documentElement.setAttribute('data-palette', theme === 'light' ? 'paper' : 'ink');
+        applyTheme(theme);
+    }
+})();
 
 // ── Reading engagement tracking for support toast ──
 let readingStartTime = 0;
@@ -133,6 +175,7 @@ function isNavActive(link, route) {
  */
 export function mountShell(root, route) {
     const chrome = getChrome();
+    const palette = getPalette();
     root.innerHTML = `
         <div class="shell shell--${chrome}">
             <header class="shell-header">
@@ -181,7 +224,7 @@ export function mountShell(root, route) {
 
             <div class="chrome-switch" id="chrome-switch">
                 <button type="button" class="chrome-switch-trigger" id="chrome-switch-trigger"
-                        aria-expanded="false">Layout: <strong>${escapeHtml((CHROME_OPTIONS.find((o) => o.id === chrome) || {}).name || chrome)}</strong></button>
+                        aria-expanded="false">Design</button>
                 <div class="chrome-switch-panel" id="chrome-switch-panel" hidden>
                     <p class="chrome-switch-title">Header layout</p>
                     <p class="chrome-switch-hint">Try them on a real page. Your choice is remembered.</p>
@@ -191,6 +234,17 @@ export function mountShell(root, route) {
                             <span class="chrome-switch-opt-name">${escapeHtml(o.name)}</span>
                             <span class="chrome-switch-opt-desc">${escapeHtml(o.desc)}</span>
                         </button>`).join('')}
+
+                    <p class="chrome-switch-title chrome-switch-title--sep">Theme</p>
+                    <div class="chrome-swatches">
+                        ${PALETTE_OPTIONS.map((o) => `
+                            <button type="button" class="chrome-swatch${o.id === palette ? ' chrome-swatch--on' : ''}"
+                                    data-palette="${o.id}" title="${escapeHtml(o.desc)}">
+                                <span class="chrome-swatch-chip chrome-swatch-chip--${o.id}" aria-hidden="true"></span>
+                                <span class="chrome-swatch-name">${escapeHtml(o.name)}</span>
+                            </button>`).join('')}
+                    </div>
+                    <p class="chrome-switch-hint" id="palette-desc">${escapeHtml((PALETTE_OPTIONS.find((o) => o.id === palette) || {}).desc || '')}</p>
                 </div>
             </div>
 
@@ -348,15 +402,23 @@ export function mountShell(root, route) {
     }
 
     // Theme toggle: flips between dark (default) and light.
+    // Footer light/dark toggle. It must flip the PALETTE, not just the family:
+    // setting data-theme alone would leave a dark palette's tokens on a light
+    // page. Flipping jumps to the default of the other family; the Design panel
+    // is where a specific palette is chosen.
     const themeBtn = root.querySelector('#theme-toggle');
     if (themeBtn) {
-        const cur = getTheme();
-        themeBtn.textContent = cur === 'light' ? '\u2600\ufe0f dark' : '\u263c light';
+        const label = (fam) => (fam === 'light' ? '\u2600\ufe0f dark' : '\u263c light');
+        themeBtn.textContent = label(PALETTE_FAMILY[getPalette()] || 'dark');
         themeBtn.addEventListener('click', (ev) => {
             ev.preventDefault();
-            const next = getTheme() === 'light' ? 'dark' : 'light';
-            applyTheme(next);
-            themeBtn.textContent = next === 'light' ? '\u2600\ufe0f dark' : '\u263c light';
+            const isLight = (PALETTE_FAMILY[getPalette()] || 'dark') === 'light';
+            const next = isLight ? 'ink' : 'paper';
+            applyPalette(next);
+            themeBtn.textContent = label(PALETTE_FAMILY[next]);
+            root.querySelectorAll('.chrome-swatch').forEach((b) => {
+                b.classList.toggle('chrome-swatch--on', b.dataset.palette === next);
+            });
         });
     }
 
@@ -463,17 +525,28 @@ export function mountShell(root, route) {
             chromeTrigger.setAttribute('aria-expanded', String(open));
         });
         chromePanel.addEventListener('click', (e) => {
-            const btn = e.target.closest('.chrome-switch-opt');
-            if (!btn) return;
-            const id = btn.dataset.chrome;
-            setChrome(id);
-            const shellEl = root.querySelector('.shell');
-            shellEl.className = 'shell shell--' + id;
-            chromePanel.querySelectorAll('.chrome-switch-opt').forEach((b) => {
-                b.classList.toggle('chrome-switch-opt--on', b.dataset.chrome === id);
-            });
-            const opt = CHROME_OPTIONS.find((o) => o.id === id);
-            chromeTrigger.innerHTML = 'Layout: <strong>' + escapeHtml(opt ? opt.name : id) + '</strong>';
+            const layoutBtn = e.target.closest('.chrome-switch-opt');
+            if (layoutBtn) {
+                const id = layoutBtn.dataset.chrome;
+                setChrome(id);
+                root.querySelector('.shell').className = 'shell shell--' + id;
+                chromePanel.querySelectorAll('.chrome-switch-opt').forEach((b) => {
+                    b.classList.toggle('chrome-switch-opt--on', b.dataset.chrome === id);
+                });
+                return;
+            }
+
+            const paletteBtn = e.target.closest('.chrome-swatch');
+            if (paletteBtn) {
+                const id = paletteBtn.dataset.palette;
+                applyPalette(id);
+                chromePanel.querySelectorAll('.chrome-swatch').forEach((b) => {
+                    b.classList.toggle('chrome-swatch--on', b.dataset.palette === id);
+                });
+                const desc = chromePanel.querySelector('#palette-desc');
+                const opt = PALETTE_OPTIONS.find((o) => o.id === id);
+                if (desc && opt) desc.textContent = opt.desc;
+            }
         });
     }
 
