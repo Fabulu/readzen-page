@@ -6,6 +6,7 @@ import { getLastRead, clearLastRead, getLists, removeFromList } from '../lib/rea
 import { loadAllTitlesAsArray } from '../lib/titles.js';
 import { loadMasters } from './master.js';
 import { initGraph } from './lineage-graph.js';
+import { loadLineageMasters } from '../lib/lineage-data.js';
 import { escapeHtml } from '../lib/format.js';
 import { initTypeahead } from '../lib/typeahead.js';
 import { DATA_REPO_BASE } from '../lib/github.js';
@@ -175,8 +176,9 @@ export function render(_route, mount, shell) {
             <div class="lineage-showcase">
                 <h3 class="lineage-showcase-heading">The Zen Lineage</h3>
                 <p class="lineage-showcase-desc">
-                    301 Zen masters from Bodhidharma to the late Qing.
+                    609 Zen masters from Bodhidharma to the late Qing.
                     Click a master to trace their lineage. Double-click to visit their profile.
+                    <br><span class="lineage-showcase-caption">Solid lines are carved in stone or spoken first-person; dotted lines are tradition only.</span>
                 </p>
                 <input type="text" id="landing-lineage-search" class="lineage-search--landing"
                        placeholder="Search masters by name\u2026" />
@@ -637,9 +639,9 @@ export function render(_route, mount, shell) {
     const legend = mount.querySelector('#landing-lineage-legend');
     const searchInput = mount.querySelector('#landing-lineage-search');
     if (canvas) {
-        loadMasters().then(masters => {
+        loadLineageMasters().then(masters => {
             if (!canvas.isConnected) return; // navigated away during load
-            initGraph(canvas, legend, searchInput, masters, null);
+            initGraph(canvas, legend, searchInput, masters, null, { full: false });
         }).catch(() => {
             // If masters fail to load, hide the canvas area gracefully
             const wrap = mount.querySelector('.lineage-showcase-canvas-wrap');
