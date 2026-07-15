@@ -1785,7 +1785,10 @@ mark.find-highlight--active {
 .lineage-showcase-canvas-wrap {
     position: relative;
     width: 100%;
-    height: 420px;
+    /* Roomier by default so the scroll isn't cramped, but still viewport-aware:
+       grows with tall windows, never taller than the screen on short ones.
+       (A fullscreen toggle lives in the corner for the full-viewport view.) */
+    height: clamp(420px, 68vh, 640px);
     border: 1px solid var(--border-soft);
     border-radius: 12px;
     overflow: hidden;
@@ -1820,8 +1823,14 @@ mark.find-highlight--active {
     border-radius: 6px;
     padding: 6px 10px;
     font-size: 10px;
+    /* The legend body stays click-through so nodes under the top-right corner
+       remain clickable (canvas panning underneath). Only the collapse toggle
+       is made interactive below — previously the whole box was
+       pointer-events:none, which left that toggle a dead control in the embed
+       (it works on the full page). */
     pointer-events: none;
 }
+.lineage-legend--landing .lin-leg-toggle { pointer-events: auto; }
 
 .lineage-showcase-controls {
     display: flex;
@@ -1851,7 +1860,7 @@ mark.find-highlight--active {
 }
 
 @media (max-width: 640px) {
-    .lineage-showcase-canvas-wrap { height: 320px; }
+    .lineage-showcase-canvas-wrap { height: clamp(360px, 62vh, 460px); }
     .lineage-search--landing { width: 140px; }
 }
 
@@ -6141,6 +6150,56 @@ a.master-appearance-title:hover {
 
 /* landing embed uses the same legend, compact */
 .lineage-legend.lin-leg--collapsed { }
+
+/* ── Fullscreen toggle (embed + full #/lineage page) ──
+   A single floating button created by initGraph, so it is guaranteed present
+   in BOTH contexts regardless of their differing chrome. */
+.lin-fs-btn {
+    position: absolute; bottom: 0.8rem; right: 0.8rem;
+    width: 32px; height: 32px; border-radius: 6px;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg-soft) 85%, transparent);
+    color: var(--text); font-size: 1.05rem; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(8px); z-index: 6;
+}
+.lin-fs-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Search floated on top of the chart while fullscreen. The landing embed's
+   input is relocated into this overlay (its dropdown is created alongside);
+   the full page keeps its own .lin-controls search, which already floats. */
+.lin-fs-search {
+    position: absolute; top: 0.8rem; left: 50%;
+    transform: translateX(-50%);
+    width: min(22rem, 82vw); z-index: 7;
+}
+.lin-fs-search .lineage-search--landing,
+.lin-fs-search input { width: 100%; margin: 0; display: block; }
+.lin-fs-search .lin-search-drop { width: 100%; }
+
+/* Native fullscreen: the UA already sizes the element to the viewport; here we
+   just flatten the chrome and keep the themed background. Kept as separate rule
+   lists so an unrecognized pseudo doesn't invalidate the whole selector. */
+.lin-root:fullscreen,
+.lineage-showcase-canvas-wrap:fullscreen {
+    width: 100vw; height: 100vh; border-radius: 0; border: none;
+    background: var(--bg-soft);
+}
+.lin-root:-webkit-full-screen,
+.lineage-showcase-canvas-wrap:-webkit-full-screen {
+    width: 100vw; height: 100vh; border-radius: 0; border: none;
+    background: var(--bg-soft);
+}
+
+/* Fallback fullscreen for contexts without the Fullscreen API — a fixed
+   full-viewport overlay. Token-driven background keeps both themes correct. */
+.lin-fs-fallback {
+    position: fixed !important; inset: 0 !important;
+    width: 100vw !important; height: 100vh !important;
+    max-width: none !important; max-height: none !important;
+    margin: 0 !important; border-radius: 0 !important; border: none !important;
+    z-index: 9999 !important; background: var(--bg-soft);
+}
 
 /* ── Detail panel / bottom sheet (§4) ── */
 .lin-panel {

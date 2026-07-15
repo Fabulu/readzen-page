@@ -803,8 +803,12 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName, opt
     // ── search ──
     if (searchInput) wireSearch();
     function wireSearch() {
-        const drop = container.querySelector('.lin-search-drop');
+        // Resolve the dropdown LIVE on each keystroke (not captured once): in
+        // fullscreen the embed's input is relocated into a floating overlay
+        // that carries its own .lin-search-drop, and the full page's drop lives
+        // in .lin-controls. Either way there is exactly one in the container.
         searchInput.addEventListener('input', () => {
+            const drop = container.querySelector('.lin-search-drop');
             const q = searchInput.value.trim().toLowerCase();
             if (!q) { state.searchHits = null; if (drop) { drop.hidden = true; drop.innerHTML = ''; } requestDraw(); return; }
             // books (source nodes) are searchable by English title and hanja
@@ -866,10 +870,112 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName, opt
     });
     updateModeUI();
 
+    // ── fullscreen (present in BOTH the embed and the full #/lineage page) ──
+    // The chart element (the wrap on the landing embed, .lin-root on the full
+    // page) goes fullscreen. Native Fullscreen API when available; a fixed
+    // full-viewport overlay as a graceful fallback. Either way the canvas
+    // backing store is rebuilt and the whole scroll re-fit to the new box, so
+    // the legend + pan/zoom stay usable and both themes keep working (tokens
+    // still cascade from :root while the element is fullscreen).
+    let fsFallback = false;
+    const fsBtn = document.createElement('button');
+    fsBtn.type = 'button';
+    fsBtn.className = 'lin-fs-btn';
+    fsBtn.setAttribute('aria-label', 'Enter fullscreen');
+    fsBtn.title = 'Fullscreen';
+    fsBtn.textContent = '⤢'; // ⤢ enter-fullscreen glyph
+    container.appendChild(fsBtn);
+
+    const nativeFsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+    function isFs() { return fsFallback || nativeFsEl() === container; }
+    function reflowFs() {
+        // The box just changed size — rebuild the canvas backing store and
+        // re-fit the whole chart. A second pass catches the browser settling
+        // the new fullscreen box a frame late.
+        resize(); fitAll();
+        setTimeout(() => { if (canvas.isConnected) { resize(); fitAll(); } }, 60);
+    }
+    function syncFsBtn() {
+        const on = isFs();
+        fsBtn.textContent = on ? '⤡' : '⤢'; // ⤡ exit / ⤢ enter
+        fsBtn.setAttribute('aria-label', on ? 'Exit fullscreen' : 'Enter fullscreen');
+        fsBtn.title = on ? 'Exit fullscreen' : 'Fullscreen';
+    }
+
+    // In fullscreen the chart element is the ONLY visible element, so a search
+    // input living OUTSIDE it (the landing embed's input is a sibling of the
+    // wrap) would disappear. Move the real input node — its event listeners
+    // travel with it — into a floating overlay inside the container, giving it
+    // its own dropdown; restore it verbatim on exit (no duplication, no lost
+    // listeners). The full page's input already lives inside the container and
+    // floats on top there, so it is left untouched.
+    let searchHome = null, fsSearchWrap = null;
+    function mountSearchOverlay() {
+        if (!searchInput || fsSearchWrap) return;
+        if (container.contains(searchInput)) return; // already inside (full page)
+        searchHome = { parent: searchInput.parentNode, next: searchInput.nextSibling };
+        fsSearchWrap = document.createElement('div');
+        fsSearchWrap.className = 'lin-fs-search';
+        const drop = document.createElement('div');
+        drop.className = 'lin-search-drop';
+        drop.hidden = true;
+        fsSearchWrap.appendChild(searchInput); // MOVE (keeps listeners intact)
+        fsSearchWrap.appendChild(drop);
+        container.appendChild(fsSearchWrap);
+    }
+    function unmountSearchOverlay() {
+        if (!fsSearchWrap) return;
+        if (searchHome && searchHome.parent) {
+            const { parent, next } = searchHome;
+            if (next && next.parentNode === parent) parent.insertBefore(searchInput, next);
+            else parent.appendChild(searchInput);
+        }
+        fsSearchWrap.remove();
+        fsSearchWrap = null; searchHome = null;
+    }
+    // Single post-transition sync: button glyph, floating search, re-fit.
+    function afterFsChange() {
+        syncFsBtn();
+        if (isFs()) mountSearchOverlay(); else unmountSearchOverlay();
+        reflowFs();
+    }
+    function enterFallback() {
+        fsFallback = true;
+        container.classList.add('lin-fs-fallback');
+        afterFsChange();
+    }
+    function exitFallback() {
+        fsFallback = false;
+        container.classList.remove('lin-fs-fallback');
+        afterFsChange();
+    }
+    function enterFs() {
+        const req = container.requestFullscreen || container.webkitRequestFullscreen;
+        if (req) {
+            try { Promise.resolve(req.call(container)).catch(enterFallback); }
+            catch { enterFallback(); }
+        } else { enterFallback(); }
+    }
+    function exitFs() {
+        if (fsFallback) { exitFallback(); return; }
+        const ex = document.exitFullscreen || document.webkitExitFullscreen;
+        if (ex) { try { ex.call(document); } catch { /* ignore */ } }
+    }
+    function toggleFs() { if (isFs()) exitFs(); else enterFs(); }
+    fsBtn.addEventListener('click', toggleFs);
+    // Native API exits (Esc / browser chrome) fire this; keep the button + fit
+    // in sync. isFs() is container-scoped, so another element's change is inert.
+    function onFsChange() { afterFsChange(); }
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+
     // ── keyboard ──
     function onKey(e) {
         if (!canvas.isConnected) return;
         if (e.key === 'Escape') {
+            // The native Fullscreen API handles its own Esc; the fixed-overlay
+            // fallback does not, so exit it here first.
+            if (fsFallback) { exitFallback(); return; }
             if (state.focused) { clearFocus(); if (panel) panel.hide(); }
             else fitAll();   // second Esc = step out to the whole chart
             return;
@@ -911,6 +1017,11 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName, opt
         window.removeEventListener('keydown', onKey);
         window.removeEventListener('popstate', onPop);
         window.removeEventListener('mouseup', onUp);
+        document.removeEventListener('fullscreenchange', onFsChange);
+        document.removeEventListener('webkitfullscreenchange', onFsChange);
+        if (fsFallback) { fsFallback = false; container.classList.remove('lin-fs-fallback'); }
+        unmountSearchOverlay(); // restore a relocated search input to its home
+        if (fsBtn) fsBtn.remove();
         themeObs.disconnect();
         if (tip) tip.remove();
     }
