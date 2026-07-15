@@ -20,6 +20,7 @@
     --muted: #8b7b69;
     --accent: #d4ab58;
     --accent-soft: rgba(212, 171, 88, 0.12);
+    --text-muted: var(--muted); /* alias: several .master-* rules reference this; resolves per-theme via --muted */
     --shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
     --error: rgba(188, 88, 67, 0.85);
     --serif: "Noto Serif TC", "Source Han Serif TC", "Noto Serif SC", "Source Han Serif SC", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", Georgia, "Noto Serif", "Palatino Linotype", serif;
@@ -3953,10 +3954,35 @@ a.master-appearance-title:hover {
     font-size: 0.82rem;
 }
 
-.master-appearance-count {
+.mapp-en-badge {
+    flex: none;
+    align-self: center;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
     color: var(--accent);
-    font-size: 0.78rem;
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    padding: 0 0.3rem;
+    line-height: 1.5;
+    opacity: 0.85;
+}
+
+.master-appearance-count {
+    flex: none;
+    margin-left: auto;
+    align-self: center;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid var(--border);
+    font-size: 0.72rem;
     font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.5;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
 }
 
 .master-appearance-snippet {
@@ -3985,6 +4011,181 @@ a.master-appearance-title:hover {
 
 .master-appearance-more a:hover {
     text-decoration: underline;
+}
+
+/* Collapsible appearance rows with live KWIC (replaces the stale baked snippet).
+   The KWIC treatment mirrors the search view (.kwic-row): serif CJK, pivot-aligned
+   grid, mono locus tag at right, whole row links into the reader. */
+.mapp-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.mapp-toggle {
+    flex: none;
+    width: 1.4rem;
+    margin-left: -0.2rem; /* occupies 1.2rem: keeps title at 1.55rem (matches .mapp-kwic indent) */
+    padding: 0.1rem 0;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    cursor: pointer;
+    text-align: center;
+    align-self: baseline;
+    border-radius: 4px;
+    transition: color 120ms ease, background 120ms ease;
+}
+.mapp-toggle::before {
+    content: '▸';
+    display: inline-block;
+    transition: transform 150ms ease;
+}
+.mapp-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
+.mapp-toggle:hover { color: var(--accent); background: var(--accent-soft); }
+.mapp-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mapp-toggle--none { cursor: default; }
+@media (pointer: coarse) {
+    /* Bigger touch target; negative margins keep the occupied width at 1.2rem. */
+    .mapp-toggle { width: 1.9rem; margin: -0.15rem -0.35rem; padding: 0.25rem 0; }
+}
+
+.mapp-kwic {
+    margin: 0.45rem 0 0.35rem 1.55rem; /* aligns with the title's left edge */
+    padding-left: 0.8rem;
+    border-left: 2px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.mapp-kwic-loading,
+.mapp-kwic-empty {
+    margin: 0.1rem 0;
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-style: italic;
+}
+.mapp-kwic-loading::after {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-left: 0.45rem;
+    animation: pulse 1s infinite;
+}
+.mapp-kwic-error {
+    color: var(--error);
+    font-style: normal;
+}
+
+.mapp-kwic-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+    grid-template-areas: "left match right lb";
+    column-gap: 0.35rem;
+    align-items: baseline;
+    padding: 0.3rem 0.45rem;
+    margin: 0 -0.45rem; /* hover surface bleeds past the text without shifting it */
+    border-radius: 4px;
+    font-family: var(--serif);
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: inherit;
+    text-decoration: none;
+    transition: background 140ms ease;
+}
+.mapp-kwic-row--bi {
+    grid-template-areas:
+        "left match right lb"
+        "en   en    en    en";
+    row-gap: 0.15rem;
+}
+.mapp-kwic-row:hover { background: rgba(255, 255, 255, 0.04); }
+:root[data-theme="light"] .mapp-kwic-row:hover { background: rgba(0, 0, 0, 0.04); }
+.mapp-kwic-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.mapp-kwic-left {
+    grid-area: left;
+    color: var(--text-soft);
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* Clip the START of the left context so the characters nearest the match
+       stay visible (Han is strong-LTR, so ordering is preserved). */
+    direction: rtl;
+}
+.mapp-kwic-match {
+    grid-area: match;
+    white-space: nowrap;
+}
+.mapp-kwic-right {
+    grid-area: right;
+    color: var(--text-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.mapp-kwic-lb {
+    grid-area: lb;
+    justify-self: end;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.mapp-kwic-en {
+    grid-area: en;
+    font-family: var(--serif);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text-soft);
+    overflow-wrap: anywhere;
+}
+.mapp-kwic-en-label {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-right: 0.4rem;
+}
+
+.mapp-showmore {
+    align-self: flex-start;
+    margin-top: 0.15rem;
+    padding: 0.25rem 0.5rem 0.25rem 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 140ms ease;
+}
+.mapp-showmore:hover { color: var(--text); }
+
+@media (max-width: 640px) {
+    .mapp-kwic { margin-left: 0.8rem; }
+    /* Collapse the pivot grid: continuous Chinese with the mark inline. */
+    .mapp-kwic-row { display: block; }
+    .mapp-kwic-left,
+    .mapp-kwic-right {
+        display: inline;
+        white-space: normal;
+        direction: ltr;
+    }
+    .mapp-kwic-lb { display: block; margin-top: 0.15rem; }
+    .mapp-kwic-en { display: block; margin-top: 0.25rem; }
 }
 
 .master-appearance-showmore {

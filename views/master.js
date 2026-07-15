@@ -8,9 +8,10 @@
 // Route: #/master/{name}
 // The user parameter is optional and ignored for the canonical data.
 
-import { DATA_REPO_BASE } from '../lib/github.js';
+import { DATA_REPO_BASE, loadTranslatedFileIds } from '../lib/github.js';
 import * as cache from '../lib/cache.js';
 import { escapeHtml } from '../lib/format.js';
+import { loadAndSearchXml } from '../lib/search.js';
 
 const MASTER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const MASTERS_URL = DATA_REPO_BASE + 'masters.json';
@@ -67,10 +68,15 @@ export async function render(route, mount, shell) {
     // Load per-master corpus shard — use the master's canonical name (first in names array)
     // rather than the route name, since the corpus index is keyed by canonical name.
     const canonicalName = (master.names && master.names[0]) || name;
+    // Kick off the translated-file-id lookup in parallel (cached session-wide). Used to
+    // badge appearance rows that have an English translation and to skip doomed 404s.
+    const translatedPromise = loadTranslatedFileIds().catch(() => new Set());
     let appearances = null;
     try { appearances = await loadMasterCorpus(canonicalName); } catch {}
+    let translatedIds = new Set();
+    try { translatedIds = await translatedPromise; } catch {}
 
-    mount.innerHTML = renderMasterProfile(master, appearances);
+    mount.innerHTML = renderMasterProfile(master, appearances, translatedIds);
 }
 
 function applyChrome(shell, name) {
@@ -165,7 +171,7 @@ function findMaster(masters, name) {
 }
 
 /** Render the full master profile HTML. */
-function renderMasterProfile(m, appearances) {
+function renderMasterProfile(m, appearances, translatedIds) {
     const names = m.names || [];
     const primary = names[0] || '';
     const chinese = names.filter(n => /[\u4e00-\u9fff]/.test(n));
@@ -245,11 +251,11 @@ function renderMasterProfile(m, appearances) {
 
         if (appearances.primary && appearances.primary.length > 0) {
             html += `<p class="master-label" style="margin-top:0.8rem;">Primary texts (author/subject)</p>`;
-            html += renderAppearanceList(appearances.primary);
+            html += renderAppearanceList(appearances.primary, chinese, translatedIds);
         }
         if (appearances.secondary && appearances.secondary.length > 0) {
             html += `<p class="master-label" style="margin-top:0.8rem;">Also mentioned in</p>`;
-            html += renderAppearanceList(appearances.secondary);
+            html += renderAppearanceList(appearances.secondary, chinese, translatedIds);
         }
         html += `<p class="master-appearance-upsell">Full corpus search in <a href="https://github.com/Fabulu/ReadZen" target="_blank" rel="noopener">Read Zen desktop</a> · <a href="https://ko-fi.com/readzen" target="_blank" rel="noopener">Support on Ko-fi</a></p>`;
         html += `</section>`;
@@ -274,8 +280,17 @@ function fileIdFromPath(path) {
 
 const PAGE_SIZE = 30;
 
-/** Render a paginated list of text appearances. */
-function renderAppearanceList(items) {
+const MAX_KWIC = 5; // passages shown per text before "show more"
+
+/**
+ * Render a paginated list of text appearances. Each row is collapsible; on first
+ * expand it fetches LIVE, highlighted KWIC passages from the current search engine
+ * (lib/search.js#loadAndSearchXml) for the master's Chinese names, replacing the
+ * stale pre-baked snippet. `zhNames` are the master's Chinese names to search for.
+ * `translatedIds` (may be empty if the GitHub tree API was unavailable) flags which
+ * texts have an English translation — used to badge rows and gate the KWIC EN fetch.
+ */
+function renderAppearanceList(items, zhNames, translatedIds) {
     const listId = 'app-list-' + (++renderAppearanceList._seq);
     const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
     let currentPage = 1;
@@ -288,18 +303,29 @@ function renderAppearanceList(items) {
             const title = item.title_zh || item.title || item.path;
             const sub = item.title && item.title_zh ? item.title : '';
             const fileId = fileIdFromPath(item.path);
-            html += '<div class="master-appearance">';
+            const canKwic = !!fileId && Array.isArray(zhNames) && zhNames.length > 0;
+            html += '<div class="master-appearance"' + (fileId ? ' data-file-id="' + escapeHtml(fileId) + '"' : '') + '>';
+            html += '<div class="mapp-head">';
+            if (canKwic) {
+                html += '<button class="mapp-toggle" aria-expanded="false" aria-label="Show passages" title="Show passages"></button>';
+            } else {
+                html += '<span class="mapp-toggle mapp-toggle--none"></span>';
+            }
             if (fileId) {
                 html += '<a href="#/' + encodeURIComponent(fileId) + '" class="master-appearance-title">' + escapeHtml(title) + '</a>';
             } else {
                 html += '<span class="master-appearance-title">' + escapeHtml(title) + '</span>';
             }
             if (sub) html += ' <span class="master-appearance-sub">' + escapeHtml(sub) + '</span>';
-            html += ' <span class="master-appearance-count">' + item.mentions + 'x</span>';
-            if (item.snippet) {
-                html += '<p class="master-appearance-snippet">' + escapeHtml(item.snippet) + '</p>';
+            html += ' <span class="master-appearance-count">' + escapeHtml(String(item.mentions)) + '×</span>';
+            if (fileId && translatedIds && translatedIds.has(fileId)) {
+                html += '<span class="mapp-en-badge" title="An English translation is available">EN</span>';
             }
-            html += '</div>';
+            html += '</div>'; // .mapp-head
+            if (canKwic) {
+                html += '<div class="mapp-kwic" hidden data-loaded="0"></div>';
+            }
+            html += '</div>'; // .master-appearance
         }
         return html;
     }
@@ -356,6 +382,7 @@ function renderAppearanceList(items) {
         const navWrap = list.querySelector('.master-appearances-nav');
         if (navWrap) navWrap.innerHTML = buildNav(currentPage, totalPages);
         wireNav(list);
+        wireExpanders(list, zhNames, translatedIds);
     }
 
     const wrapHtml = '<div class="master-appearances" id="' + listId + '">'
@@ -366,12 +393,128 @@ function renderAppearanceList(items) {
     // Defer wiring until DOM is ready
     setTimeout(() => {
         const el = document.getElementById(listId);
-        if (el) wireNav(el);
+        if (el) { wireNav(el); wireExpanders(el, zhNames, translatedIds); }
     }, 0);
 
     return wrapHtml;
 }
 renderAppearanceList._seq = 0;
+
+/** Wire the collapse/expand toggles for a rendered appearance list; loads live KWIC on first open. */
+function wireExpanders(container, zhNames, translatedIds) {
+    // If we have a translated-id set, only ask for the EN alignment on texts we know are
+    // translated (skips a doomed 404 per untranslated text). If the set is empty (API was
+    // unavailable), fall back to asking unconditionally so EN never silently disappears.
+    const haveSet = translatedIds && translatedIds.size > 0;
+    container.querySelectorAll('.master-appearance').forEach(row => {
+        const toggle = row.querySelector('.mapp-toggle');
+        const body = row.querySelector('.mapp-kwic');
+        if (!toggle || !body || toggle.classList.contains('mapp-toggle--none')) return;
+        toggle.addEventListener('click', () => {
+            if (body.hasAttribute('hidden')) {
+                body.removeAttribute('hidden');
+                toggle.setAttribute('aria-expanded', 'true');
+                if (body.dataset.loaded === '0') {
+                    body.dataset.loaded = '1';
+                    const countEl = row.querySelector('.master-appearance-count');
+                    const includeTr = haveSet ? translatedIds.has(row.dataset.fileId) : true;
+                    loadKwicInto(body, row.dataset.fileId, zhNames, countEl, includeTr); // fire-and-forget; manages its own DOM
+                }
+            } else {
+                body.setAttribute('hidden', '');
+                toggle.setAttribute('aria-expanded', 'false');
+            }
+        });
+    });
+}
+
+/**
+ * Fetch live KWIC passages for `fileId` across the master's Chinese names, merge/dedupe
+ * them, and render highlighted windows (bilingual where a translation exists) into `body`.
+ * Updates the count badge to the live hit count. Aborts if the row leaves the DOM.
+ */
+async function loadKwicInto(body, fileId, zhNames, countEl, includeTranslation) {
+    body.innerHTML = '<p class="mapp-kwic-loading">Loading passages…</p>';
+    const terms = Array.isArray(zhNames) ? zhNames.filter(Boolean) : [];
+    if (!fileId || terms.length === 0) {
+        body.innerHTML = '<p class="mapp-kwic-empty">No searchable name for this master.</p>';
+        return;
+    }
+    try {
+        const merged = [];
+        const seen = new Set();
+        const trans = new Map();
+        for (const term of terms) {
+            let r;
+            try {
+                r = await loadAndSearchXml(fileId, term, { includeTranslation: !!includeTranslation });
+            } catch {
+                continue; // one alias failing shouldn't sink the rest
+            }
+            if (!document.body.contains(body)) return; // route changed mid-load
+            for (const p of (r.passages || [])) {
+                // Key by position (line + left-context), NOT the matched term, so overlapping
+                // aliases (e.g. 臨濟 ⊂ 臨濟義玄) at the same spot collapse to one row. The
+                // canonical (first) name wins the highlight since it's searched first.
+                const key = JSON.stringify([p.lineId || '', p.left || '']);
+                if (seen.has(key)) continue;
+                seen.add(key);
+                merged.push(p);
+            }
+            if (r.translatedPassages) {
+                for (const [k, v] of r.translatedPassages) {
+                    if (!trans.has(k)) trans.set(k, v);
+                }
+            }
+        }
+        if (!document.body.contains(body)) return;
+        if (merged.length === 0) {
+            const baked = countEl ? countEl.textContent : '';
+            body.innerHTML = '<p class="mapp-kwic-empty">No live matches in this text' + (baked ? ' (indexed ' + escapeHtml(baked) + ')' : '') + '.</p>';
+            return;
+        }
+        merged.sort((a, b) => String(a.startLb).localeCompare(String(b.startLb)));
+        if (countEl) countEl.textContent = merged.length + '×';
+        body.innerHTML = renderKwicRows(merged, trans, MAX_KWIC, fileId);
+        const more = body.querySelector('.mapp-showmore');
+        if (more) {
+            more.addEventListener('click', () => {
+                body.innerHTML = renderKwicRows(merged, trans, merged.length, fileId);
+            });
+        }
+    } catch {
+        body.innerHTML = '<p class="mapp-kwic-empty mapp-kwic-error">Couldn’t load passages.</p>';
+    }
+}
+
+/** Render up to `limit` KWIC rows; append a "show more" button when more remain. */
+function renderKwicRows(passages, trans, limit, fileId) {
+    const shown = passages.slice(0, limit);
+    let html = shown.map(p => renderKwicRow(p, trans, fileId)).join('');
+    if (passages.length > limit) {
+        html += '<button class="mapp-showmore">Show ' + (passages.length - limit) + ' more</button>';
+    }
+    return html;
+}
+
+/** One KWIC window (Chinese, match highlighted) with an optional aligned English row.
+ *  Each row links into the reader at its exact line, mirroring the search view. */
+function renderKwicRow(p, trans, fileId) {
+    let lbRange = p.startLb;
+    if (p.endLb && p.endLb !== p.startLb) lbRange = p.startLb + '-' + p.endLb;
+    const href = '#/' + encodeURIComponent(fileId) + '/' + lbRange + '?q=' + encodeURIComponent(p.match || '');
+    const en = trans && trans.get(p.startLb);
+    let row = '<a class="mapp-kwic-row' + (en ? ' mapp-kwic-row--bi' : '') + '" href="' + escapeHtml(href) + '">'
+        + '<span class="mapp-kwic-left">' + escapeHtml(p.left || '') + '</span>'
+        + '<mark class="search-highlight mapp-kwic-match">' + escapeHtml(p.match || '') + '</mark>'
+        + '<span class="mapp-kwic-right">' + escapeHtml(p.right || '') + '</span>'
+        + '<span class="mapp-kwic-lb">' + escapeHtml(p.lineId || '') + '</span>';
+    if (en) {
+        row += '<span class="mapp-kwic-en"><span class="mapp-kwic-en-label">EN</span>' + escapeHtml(en) + '</span>';
+    }
+    row += '</a>';
+    return row;
+}
 
 /** Build a clickable link to another master's profile using underscore URLs. */
 function buildMasterLink(name) {
