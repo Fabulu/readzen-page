@@ -8,3 +8,7 @@ test/
 package.json
 package-lock.json
 README.md
+
+# See .wranglerignore for why: dist/ (build/make-dist.js's staging tree) must
+# never ride along on a raw directory deploy.
+dist/

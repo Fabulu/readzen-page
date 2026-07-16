@@ -161,16 +161,109 @@ node build/shard-master-corpus.js
 
 ## Deployment
 
-Deployed to Cloudflare Pages. Push to `main` triggers automatic deployment.
+Deployed to Cloudflare Pages, but **manually and locally** - there is no
+automatic deploy trigger. `.github/workflows/deploy.yml`'s `push:` trigger is
+commented out; the workflow only runs on `workflow_dispatch` (the manual button
+in the Actions tab), because the bigram search index build peaks at ~3.5 GB and
+OOMs on GitHub Actions runners. Pushing to `main` builds and deploys nothing on
+its own - the site only updates when someone runs the deploy command below.
 
 **Cloudflare Pages limits:**
 - 20,000 files max per deployment - this is why the dictionary is bucketed (12K → 201 files) and the Pagefind index is deployed separately
 
-### Manual deploy (if GitHub Actions OOMs)
+### Deploy
+
+```bash
+npm run deploy
+```
+
+This is the one command. It builds the dictionary shards and search index,
+stages a deploy-time copy of the whole site into `dist/` via
+`build/make-dist.js` (stamping the app shell's internal references with a
+content-hash version and switching its cache headers to `immutable` in that
+copy only), and ships `dist/` with `wrangler`. `dist/` is gitignored and
+rebuilt from scratch on every run - nothing about it is ever committed.
+
+### Caching architecture
+
+The app shell (`app.js`, `style.css`, `views/*.js`, `lib/*.js`) needs to load
+instantly on repeat visits *and* never leave a client frozen on a stale build.
+A service worker only reinstalls when its own bytes change, so if `sw.js` isn't
+guaranteed to change on every shell deploy, its precache can go silently stale
+forever - which is exactly what happened to a real user, who ran a
+months-stale build until a hard-refresh. The design here closes that gap by
+making the URL name its content, and by keeping that trick confined to a
+throwaway build artifact instead of the repo:
+
+- **The repo itself is never stamped.** `app.js`, `views/*.js`, `lib/*.js`,
+  `sw.js`, and `_headers` in this tree always reference each other with plain,
+  unversioned paths, and `_headers` always serves the shell `no-cache`. That's
+  deliberate: it's what keeps the raw tree safe to read, edit, and deploy at
+  any time (see "Emergency fallback" below), and it's what the `pwa.test.js`
+  precache test enforces - if a stamped `sw.js` is ever committed, that test
+  goes red on purpose.
+- **`build/make-dist.js` is the only place a stamp is ever written.** It hashes
+  the current shell contents into a `BUILD_ID`, copies the whole site into
+  `dist/`, rewrites every shell-to-shell reference to `?v=<BUILD_ID>`, and
+  edits the four shell rules in a *copy* of `_headers` to
+  `immutable, max-age=31536000`. Because the URL now names its own content, a
+  cached copy can never disagree with what's live - a new deploy is a new URL,
+  never a silent mutation of an old one.
+  - After everything above is written, it greps the entire staged tree it
+    just produced for any bare reference to a shell file - unstamped, or
+    stamped with anything other than that run's own `BUILD_ID` (a hardcoded,
+    never-updated `?v=deadbeef` is just as dangerous as no query at all,
+    since Cloudflare serves the same file regardless of query string). A
+    single hit - or a crash anywhere between the `_headers` rewrite and the
+    guard finishing - deletes the `dist/` it just wrote and exits non-zero,
+    so a rejected build never leaves a complete-looking `dist/` on disk that
+    could be `wrangler pages deploy dist`'d by accident; nothing survives
+    to be shipped. **This guard is load-bearing** - it is the only thing
+    standing between "content-addressed and safe" and "immutable and wrong."
+    Never weaken it to a warning, and never bypass it.
+  - `sw.js` itself is dual-mode: an unversioned request (i.e. the raw tree was
+    deployed) is handled network-first under `no-cache`; a `?v=`-stamped
+    request (i.e. a `dist/` deploy) is cache-first, since the URL can't
+    disagree with what's cached.
+- **`index.html` is the only file that keeps revalidating.** It stays
+  `no-cache` in both the repo and `dist/`, and it's the only place allowed to
+  reference a shell URL that isn't itself content-addressed - because
+  `make-dist.js` rewrites it every deploy to point at that deploy's `?v=` URLs.
+- **Never add a second `_headers` rule for a path that already has one**
+  (in particular `/app.js`, `/style.css`, `/views/*`, `/lib/*`). Cloudflare
+  joins duplicate header values with a comma instead of overriding them, so a
+  second rule adding `immutable` next to the existing `no-cache` produces
+  `Cache-Control: no-cache, immutable` - DevTools will proudly show
+  "immutable" while the browser keeps revalidating every load and the whole
+  trick silently does nothing. `make-dist.js` avoids this by editing the four
+  existing rule values in place, in a copy, never by appending a rule.
+- **Dev workflow is unaffected.** `npx serve .` (see "Development" below) runs
+  the unstamped tree as-is; the service worker isn't even registered on
+  `localhost` (see `app.js`/`sw.js`), so none of this is in play locally.
+
+### Known limitation: Cloudflare's tiered cache
+
+Cloudflare Pages fronts everything with Tiered Cache, which can hold an edge
+copy of `index.html` for up to about a week **independent of `Cache-Control`**
+(community-reported; no header opts out of it). Under this design that's
+bounded and benign, not a repeat of the original bug: a stale edge
+`index.html` still names a real, internally-consistent build's `?v=` URLs,
+which still serve correctly - so the worst case is an old-but-coherent build
+for a while, never a torn or frozen one. Purging the edge on every deploy
+would close this but needs a Cloudflare API token and is out of scope here.
+
+### Emergency fallback (raw deploy)
 
 ```bash
 npx wrangler pages deploy . --project-name=readzen --branch=main
 ```
+
+Deploying the worktree directly - skipping `dist/` and `make-dist.js` entirely
+- is still safe. The repo's `_headers` is permanently `no-cache` and its shell
+references are permanently unstamped, so this just re-enables the pre-Phase-2
+behavior (a cheap revalidation round-trip per load) instead of the
+instant-repeat-load win. Reach for it if `make-dist.js` or `wrangler` is
+misbehaving and the site needs to go live right now.
 
 ## Development
 
