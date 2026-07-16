@@ -264,7 +264,7 @@ export function mountShell(root, route) {
             </aside>
 
             <footer class="shell-foot">
-                <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA + OpenZenTexts · <a href="https://ko-fi.com/readzen" target="_blank" rel="noreferrer">Support this project</a> · <a href="#" id="contact-link" class="shell-foot-contact">Contact</a></p>
+                <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA + OpenZenTexts · <a href="/credits">Credits &amp; licenses</a> · <a href="https://ko-fi.com/readzen" target="_blank" rel="noreferrer">Support this project</a> · <a href="#" id="contact-link" class="shell-foot-contact">Contact</a></p>
                 <p class="shell-foot-pref">
                     Auto-open in desktop app:
                     <a href="#" id="auto-open-toggle" class="shell-foot-toggle"></a>
