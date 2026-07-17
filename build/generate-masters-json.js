@@ -268,11 +268,24 @@ function main() {
         // instead of a CJK-encoded URL. The 49 roster masters with no teacher_key
         // are exactly the 49 flagged teacher_dangling — their teacher genuinely is
         // not in the database, so the raw string is kept and its link will 404.
+        //
+        // The ROSTER WINS here, unlike floruit/notes where curation wins. This is the
+        // one field where the two datasets disagree on substance rather than coverage:
+        // on 26 masters the curated string names the teacher-in-fact or the ordination
+        // master, while teacher_key names the DHARMA heir (Touzi Yiqing was taught by
+        // Fushan Fayuan but holds Dayang Jingxuan's lineage; Gyeongheo was ordained by
+        // Manhwa Boseon but claimed Yongam Hyeeon's transmission). Tonsure is not
+        // transmission — the rule this whole roster was built on.
+        //
+        // Consistency forces it regardless of which reading you prefer: the lineage
+        // chart draws its edges from teacher_key, so a profile that named a different
+        // teacher would contradict, on the same screen, the line the chart just drew.
+        // Curated is the fallback, not the override. (User decision, 2026-07-17.)
         let teacher;
-        if (c && c.teacher) {
+        if (r.teacher_key) {
+            teacher = toPrimary(r.teacher_key) || (c && c.teacher) || r.teacher || undefined;
+        } else if (c && c.teacher) {
             teacher = c.teacher;
-        } else if (r.teacher_key) {
-            teacher = toPrimary(r.teacher_key) || r.teacher || undefined;
         } else if (r.teacher) {
             teacher = r.teacher;
             report.teacherUnresolved++;
