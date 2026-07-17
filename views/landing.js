@@ -176,7 +176,7 @@ export function render(_route, mount, shell) {
             <div class="lineage-showcase">
                 <h3 class="lineage-showcase-heading">The Zen Lineage</h3>
                 <p class="lineage-showcase-desc">
-                    609 Zen masters from Bodhidharma to the late Qing.
+                    965 Zen masters from Bodhidharma to the late Qing.
                     Click a master to trace their lineage. Double-click to visit their profile.
                     <br><span class="lineage-showcase-caption">Solid lines are carved in stone or spoken first-person; dotted lines are tradition only.</span>
                 </p>

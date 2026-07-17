@@ -34,5 +34,36 @@
 /sw.js
   Cache-Control: no-cache
 
+# App shell: revalidate on every load. These files are small and ETag'd, so a
+# revalidation is a cheap 304 — worth it to guarantee a deploy is live at once.
+# This is NOT redundant with the service worker's network-first strategy: the
+# SW's own fetch() goes through the HTTP cache, so without no-cache here a
+# network-first request could still be answered from a stale HTTP entry.
+# no-cache (revalidate before use), NOT no-store — the entry must stay stored
+# so the SW can still serve it offline.
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+# make-dist rewrites the Cache-Control value of exactly these four rules
+# (/app.js, /style.css, /views/*, /lib/*) to immutable in dist/. Edit values
+# here only in coordination with build/make-dist.js. Never ADD a second rule
+# for these paths — Cloudflare joins duplicate headers with commas and
+# "no-cache, immutable" means no-cache.
+/app.js
+  Cache-Control: no-cache
+
+/style.css
+  Cache-Control: no-cache
+
+# app.js imports these; if they went stale the app would freeze with the shell.
+/views/*
+  Cache-Control: no-cache
+
+/lib/*
+  Cache-Control: no-cache
+
 /manifest.json
   Cache-Control: public, max-age=3600

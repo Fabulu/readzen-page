@@ -9,7 +9,8 @@
     "build:seo": "node build/generate-seo-pages.js",
     "build:seo:force": "node build/generate-seo-pages.js --force",
     "build:search": "node --max-old-space-size=4096 --expose-gc build/build-bigram-index.js && node build/build-english-jsonl.js && npm run build:seo",
-    "deploy": "npm run build && npm run build:search && node -e \"console.log('Build complete. Deploy with: npx wrangler pages deploy . --project-name=readzen --branch=main')\""
+    "dist": "node build/make-dist.js",
+    "deploy": "npm run build && npm run build:search && node build/make-dist.js && npx wrangler pages deploy dist --project-name=readzen --branch=main"
   },
   "dependencies": {}
 }

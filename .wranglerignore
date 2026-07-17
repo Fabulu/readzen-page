@@ -9,3 +9,11 @@ test
 .wranglerignore
 package.json
 package-lock.json
+
+# dist/ is the deploy-time staging tree from build/make-dist.js — normally
+# shipped on its own via `wrangler pages deploy dist`, never as part of a raw
+# `wrangler pages deploy .`. Without this line, a raw deploy from the repo
+# root would also upload whatever dist/ happens to be sitting on disk
+# (13k+ files) on top of the ~13k real repo files, blowing past Cloudflare
+# Pages' 20,000-file limit — exactly when "the emergency fallback" is needed.
+dist

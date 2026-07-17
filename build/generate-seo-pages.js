@@ -241,7 +241,7 @@ async function main() {
         textCount++;
     }
 
-    // --- Master pages (all 301, with rich bios) ---
+    // --- Master pages (one per record in masters.json, with rich bios) ---
     const masterIndex = []; // for the crawlable index page
     if (existsSync(MASTERS)) {
         const mastersData = JSON.parse(readFileSync(MASTERS, 'utf8'));
@@ -281,7 +281,7 @@ async function main() {
     // --- Static pages ---
     const statics = [
         { route: 'search', title: 'Search Chinese Zen Texts - Read Zen', desc: 'Full-text and title search across ~5000 Chinese Zen texts from CBETA and OpenZen.', noscript: '<h1>Search</h1>\n<p>Search across ~5000 Chinese Zen texts from CBETA and OpenZen.</p>' },
-        { route: 'lineage', title: 'Zen Lineage Graph - Read Zen', desc: 'Interactive lineage graph of 301 Chan/Zen masters across nine schools, from Bodhidharma to the late Ming.', noscript: '<h1>Zen Lineage</h1>\n<p>Explore the interactive Zen lineage graph.</p>' },
+        { route: 'lineage', title: 'Zen Lineage Graph - Read Zen', desc: 'Interactive lineage graph of 943 Chan/Zen masters across nine schools, from Bodhidharma to the late Qing.', noscript: '<h1>Zen Lineage</h1>\n<p>Explore the interactive Zen lineage graph.</p>' },
     ];
 
     for (const s of statics) {
@@ -292,21 +292,24 @@ async function main() {
     }
 
     // --- Crawlable master index page ---
+    // The count is derived, never hardcoded: this page listed 944 rows under a
+    // "301 Zen Master Profiles" heading the moment the roster grew.
     masterIndex.sort((a, b) => a.canonical.localeCompare(b.canonical));
+    const masterTotal = masterIndex.length;
     let masterListHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>301 Zen Master Profiles - Read Zen</title>
-<meta name="description" content="Browse 301 Zen master profiles with biographical details, lineage connections, school affiliations, and corpus text appearances.">
+<title>${masterTotal} Zen Master Profiles - Read Zen</title>
+<meta name="description" content="Browse ${masterTotal} Zen master profiles with biographical details, lineage connections, school affiliations, and corpus text appearances.">
 <meta property="og:type" content="website">
-<meta property="og:title" content="301 Zen Master Profiles - Read Zen">
-<meta property="og:description" content="Browse 301 Zen master profiles with biographical details, lineage connections, and corpus text appearances.">
+<meta property="og:title" content="${masterTotal} Zen Master Profiles - Read Zen">
+<meta property="og:description" content="Browse ${masterTotal} Zen master profiles with biographical details, lineage connections, and corpus text appearances.">
 <meta property="og:url" content="${BASE}/masters">
 <meta property="og:site_name" content="Read Zen">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="301 Zen Master Profiles - Read Zen">
+<meta name="twitter:title" content="${masterTotal} Zen Master Profiles - Read Zen">
 <link rel="canonical" href="${BASE}/masters">
 <style>
 body { font-family: 'Segoe UI', system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 2em 1.5em; line-height: 1.7; color: #e0e0e0; background: #1a1a2e; }
@@ -324,7 +327,7 @@ td a { color: #6EAFF8; }
 </style>
 </head>
 <body>
-<h1>301 Zen Master Profiles</h1>
+<h1>${masterTotal} Zen Master Profiles</h1>
 <p>Browse Zen master profiles with biographical details, lineage connections, school affiliations, and corpus text appearances.</p>
 <table>
 <tr><th>Name</th><th>Chinese</th><th>School</th><th>Dates</th></tr>
