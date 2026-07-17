@@ -117,7 +117,7 @@ test('NOTHING OVERLAPS — spine view (opt-in key-masters mode)', () => {
     assert.ok(a.ok, `overlaps in spine: ${a.nodeNode} node·node, ${a.edgeNode} edge·node\n${a.samples.join('\n')}`);
 });
 
-test('NOTHING OVERLAPS — full expansion (all 609, the default view)', () => {
+test('NOTHING OVERLAPS — full expansion (all 943, the default view)', () => {
     const g = buildLineage(DATA);
     const { vnodes, vedges } = buildVisible(g, 'all');
     computeLayout(vnodes, vedges);
@@ -130,10 +130,33 @@ test('the scroll HANGS — compact width, mostly-vertical descent', () => {
     // 2026-07-15: 26,000px-wide world, teacher and heir joined by long
     // horizontal wires). The tidy-forest layout must keep the world compact
     // and edges reading as downward descent.
+    //
+    // WIDTH BAR — calibrated per roster, not a constant of nature:
+    //   609 masters (2026-07-15): laid out at 12,163px; bar set at 14,000.
+    //   943 masters (2026-07-17): bar recalibrated 14,000 -> 18,000. After
+    //   generalized chain-stacking folded 374 pure chains (596 nodes), the
+    //   honest floor is ~17,050px, and that residue is STRUCTURAL: per-layer
+    //   breadth holds at 15-17k continuously from layer ~15 to ~44 (the max
+    //   layer is only ~12% above the plateau median — no slack layer to
+    //   reclaim). That plateau IS the Five Houses diverging in the Tang and
+    //   running laterally separate for thirty generations; the un-foldable
+    //   items are real named sub-lineages (e.g. the 456-node Linji main line)
+    //   that cannot share columns without overlapping or misrepresenting
+    //   distinct schools. Measured-and-rejected alternatives: gap-squeeze to
+    //   visual minimum bought only ~1,700px; hitting 14,000 via NODE_W needs
+    //   132 -> 96px, a 27% cut to every name box. The shape invariants below
+    //   (h/w ratio, horizontal-edge share) sit at 0.502 and 15.2% at 943 —
+    //   as good as or better than at 609 — so what the user actually rejected
+    //   (drift-wire sprawl) stays locked out. 18,000 still fails the pre-fix
+    //   botched pack (21,912) and the rejected chart (26,000) decisively; for
+    //   scale, the desktop's independent layout needs 21,912px for this same
+    //   roster. If the roster grows materially again, recalibrate against a
+    //   fresh per-layer breadth profile — do not just bump the number to
+    //   whatever makes the suite green.
     const g = buildLineage(DATA);
     const { vnodes, vedges } = buildVisible(g, 'all');
     const res = computeLayout(vnodes, vedges);
-    assert.ok(res.width < 14000, `world width ${Math.round(res.width)}px — must stay under 14,000`);
+    assert.ok(res.width < 18000, `world width ${Math.round(res.width)}px — must stay under 18,000 (943-roster calibration; see comment above before changing)`);
     assert.ok(res.height > res.width / 2.5, 'the chart is a scroll, not a pancake');
     let horiz = 0;
     for (const e of vedges) {

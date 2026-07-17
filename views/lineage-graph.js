@@ -1,5 +1,5 @@
 // views/lineage-graph.js
-// The Zen lineage chart — a hanging scroll of 609 masters.
+// The Zen lineage chart — a hanging scroll of 965 masters.
 // Route: #/lineage  or  #/lineage?focus=Linji_Yixuan
 //
 // Design: runs/.../RUN-20260713-1030-lineage-harvest/design/DESIGN_PLAN.md
@@ -26,7 +26,7 @@ const ATT_STYLES = {
 // style — never a solid confident line. This inverts the original sin.
 const styleFor = (att) => ATT_STYLES[att] ?? ATT_STYLES.D;
 
-const ZOOM_MIN = 0.05, ZOOM_MAX = 2.5;   // low floor: the full 609 must fit on a laptop
+const ZOOM_MIN = 0.05, ZOOM_MAX = 2.5;   // low floor: the full 965 must fit on a laptop
 const DIM = 0.12;                 // focus-dim alpha multiplier
 
 // ── Route ──
@@ -852,7 +852,7 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName, opt
         if (!toggle) return;
         toggle.textContent = state.mode === 'all'
             ? 'Show key masters only'
-            : 'Show all 609 masters';
+            : 'Show all 965 masters';
     }
     const btnRow = container.querySelector('.lin-btnrow');
     if (btnRow) btnRow.addEventListener('click', (e) => {
