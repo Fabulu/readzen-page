@@ -122,13 +122,21 @@ test('intersectU16: disjoint lists produce empty result', async () => {
 // 2. Query bigram extraction (observed via searchFulltext behavior)
 // =====================================================================
 
-test('searchFulltext: non-CJK query short-circuits to empty (no fetch)', async () => {
+test('searchFulltext: non-CJK query on a non-word-capable index returns [] (manifest probe only, no shards)', async () => {
+    // Router unification: searchFulltext now consults the manifest to learn
+    // word-capability even for a pure-latin query. On a non-word-capable index
+    // (no `wordTerms`) a pure-latin query has no CJK runs and no word leg, so
+    // it degrades to [] after ONLY the manifest fetch — no shard/text fetches.
+    // (Pure-latin is routed to english.jsonl upstream; this is the defensive
+    // in-engine behavior.)
     const { searchFulltext } = await freshSearchModule();
-    const fetchMock = installFetchMock({});
+    const manifest = { version: 3, shardCount: 4096, docCount: 1, shards: {} };
+    const fetchMock = installFetchMock({ manifest });
     try {
         const results = await searchFulltext('hello world');
         assert.deepEqual(results, []);
-        assert.equal(fetchMock.calls.length, 0, 'no network calls for non-CJK query');
+        const nonManifest = fetchMock.calls.filter((u) => !u.endsWith('/manifest.json'));
+        assert.deepEqual(nonManifest, [], `only the manifest may be fetched, got: ${nonManifest.join(', ')}`);
     } finally {
         fetchMock.restore();
     }
@@ -1395,6 +1403,7 @@ test('getManifestInfo: returns {version, builtAt, docCount, hasUnigrams} and cac
             builtAt: '2026-07-01T00:00:00.000Z',
             docCount: 42,
             hasUnigrams: true,
+            wordTerms: false,
         });
         // Second call must be served from the cached manifest (lib/cache.js).
         const info2 = await getManifestInfo();
@@ -1417,6 +1426,7 @@ test('getManifestInfo: v2-era manifest (no version/builtAt/unigramShards) degrad
             builtAt: null,
             docCount: 5014,
             hasUnigrams: false,
+            wordTerms: false,
         });
     } finally {
         fetchMock.restore();
@@ -1430,4 +1440,192 @@ test('module exports the v3 API surface: verifyDocPhrase, getManifestInfo, metaF
     assert.equal(typeof mod.metaForDocId, 'function');
     assert.equal(typeof mod._resetForTests, 'function');
     assert.equal(typeof mod._setVerificationCapForTests, 'function');
+});
+
+// =====================================================================
+// 19. Word-capable path (manifest v4 `wordTerms`): English word terms in the
+//     bigram shard set, work-level AND for mixed queries, density ranking.
+//     Capability gate proven BOTH ways.
+// =====================================================================
+
+/**
+ * Build a small BILINGUAL v4 fixture:
+ *   docId 0: T48n2005 source (zh)   — CJK 無門
+ *   docId 1: T48n2005 en            — word "gateless"
+ *   docId 2: T48n2003 source (zh)   — CJK 碧巖
+ *   docId 3: T48n2003 en            — word "gateless"
+ * Word terms share the bigram shard set. docLengths drives density.
+ */
+function buildBilingualV4({ wordTerms = true, docLengths } = {}) {
+    const docCount = 4;
+    const bigramEntries = [
+        { term: '無門', docIds: [0], tfs: [3] },
+        { term: '碧巖', docIds: [2], tfs: [4] },
+    ];
+    const wordEntries = [
+        { term: 'gateless', docIds: [1, 3], tfs: [2, 5] },
+    ];
+    const layout = shardLayoutForV3([...bigramEntries, ...wordEntries], docCount);
+    const manifest = buildManifest(layout, docCount, {
+        version: 4,
+        wordTerms,
+        docLengths: docLengths || [500, 1000, 500, 100000],
+    });
+    const docsTxt = [
+        '/T48n2005',
+        '/T48n2005?side=en',
+        '/T48n2003',
+        '/T48n2003?side=en',
+    ].join('\n');
+    return { manifest, layout, docsTxt, docCount };
+}
+
+test('word-capable: pure-English query matches EN docs, ranked by density (raw hitCounts preserved)', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    // doc 1 (len 1000, tf 2) density = 2; doc 3 (len 100000, tf 5) density = 0.05.
+    // Density ranking floats the shorter doc ABOVE the raw-count winner.
+    const { manifest, layout, docsTxt } = buildBilingualV4();
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, docsTxt });
+    try {
+        const results = await searchFulltext('gateless');
+        assert.deepEqual(
+            results.map((r) => ({ docId: r.docId, hitCount: r.hitCount })),
+            [
+                { docId: 1, hitCount: 2 }, // higher density
+                { docId: 3, hitCount: 5 }, // more raw hits but far longer doc
+            ],
+            'density ranking, not raw count'
+        );
+        assert.ok(results.every((r) => typeof r.density === 'number'), 'rows carry density');
+        assert.ok(results[0].density > results[1].density, 'sorted density desc');
+        const textFetches = fetchMock.calls.filter((u) => u.includes('/text/'));
+        assert.equal(textFetches.length, 0, 'word-capable path is index-only (no text fetches)');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('word-capable: mixed query 無門+gateless → WORK-LEVEL AND (works(CJK) ∩ works(word))', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const { manifest, layout, docsTxt } = buildBilingualV4();
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, docsTxt });
+    try {
+        // CJK leg: 無門 → doc 0 (work T48n2005).
+        // Word leg: gateless → doc 1 (T48n2005), doc 3 (T48n2003).
+        // works(CJK)={T48n2005} ∩ works(word)={T48n2005,T48n2003} = {T48n2005}.
+        // Result = docs of either leg in T48n2005 → doc 0 + doc 1. doc 3 dropped.
+        const results = await searchFulltext('無門 gateless');
+        const ids = results.map((r) => r.docId).sort((a, b) => a - b);
+        assert.deepEqual(ids, [0, 1], 'only the work matched on BOTH scripts survives (doc 3 excluded)');
+        const textFetches = fetchMock.calls.filter((u) => u.includes('/text/'));
+        assert.equal(textFetches.length, 0);
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('word-capable: mixed query with NO shared work → empty (work-level AND is strict)', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    // 碧巖 is in T48n2003 (doc 2); pair it with a word only present in
+    // T48n2005's EN. Actually 'gateless' is in BOTH ENs, so use 無門+... no —
+    // choose CJK 無門 (T48n2005) with a word absent from T48n2005: none here,
+    // so instead query CJK 碧巖 (T48n2003 source) AND a word only in a DIFFERENT
+    // work's EN. Add such a fixture inline.
+    const docCount = 3;
+    const layout = shardLayoutForV3([
+        { term: '碧巖', docIds: [0], tfs: [1] },   // doc0 = WorkA source
+        { term: 'gateless', docIds: [2], tfs: [1] }, // doc2 = WorkB en
+    ], docCount);
+    const manifest = buildManifest(layout, docCount, { version: 4, wordTerms: true, docLengths: [100, 100, 100] });
+    const docsTxt = ['/WorkA', '/WorkA?side=en', '/WorkB?side=en'].join('\n');
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, docsTxt });
+    try {
+        const results = await searchFulltext('碧巖 gateless');
+        assert.deepEqual(results, [], 'works(CJK)={WorkA} ∩ works(word)={WorkB} = ∅');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('capability gate OFF: same fixture WITHOUT wordTerms — English query returns [] in the engine (english.jsonl handles it upstream)', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const { manifest, layout, docsTxt } = buildBilingualV4({ wordTerms: false });
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, docsTxt });
+    try {
+        const results = await searchFulltext('gateless');
+        assert.deepEqual(results, [], 'no wordTerms ⇒ engine does not word-search (fallback owns latin)');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('capability gate OFF: mixed query falls back to CJK-only, reports latinIgnored (historical behavior intact)', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const { manifest, layout, docsTxt } = buildBilingualV4({ wordTerms: false });
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, docsTxt });
+    try {
+        let stats = null;
+        const results = await searchFulltext('無門 gateless', { onStats: (s) => { stats = s; } });
+        assert.deepEqual(results.map((r) => r.docId), [0], 'matched the CJK run only');
+        assert.equal(stats.latinIgnored, 'gateless', 'fallback reports the ignored English remainder');
+        assert.ok(results.every((r) => typeof r.density === 'undefined'), 'fallback rows carry no density');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('word-capable: single-script CJK query still works and is density-ranked', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const { manifest, layout, docsTxt } = buildBilingualV4();
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, docsTxt });
+    try {
+        const results = await searchFulltext('無門');
+        assert.deepEqual(results.map((r) => r.docId), [0], '無門 → doc 0 only');
+        assert.equal(results[0].hitCount, 3, 'raw tf preserved');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('word-capable: onStats reports indexVersion 4, latinIgnored null, no truncation', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    const { manifest, layout, docsTxt } = buildBilingualV4();
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, docsTxt });
+    try {
+        let stats = null;
+        await searchFulltext('無門 gateless', { onStats: (s) => { stats = s; } });
+        assert.equal(stats.indexVersion, 4);
+        assert.equal(stats.latinIgnored, null, 'word-capable ignores nothing');
+        assert.equal(stats.truncated, false);
+        assert.deepEqual(
+            Object.keys(stats).sort(),
+            ['builtAt', 'candidateCount', 'cap', 'indexVersion', 'latinIgnored', 'returnedCount', 'truncated']
+        );
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('verifyDocPhrase: EN-side doc verifies WORD terms; source doc verifies CJK runs (per-side dispatch)', async () => {
+    const { verifyDocPhrase } = await freshSearchModule();
+    // doc 0 = source (CJK text), doc 1 = en (english-normalized text).
+    const docsTxt = ['/T48n2005', '/T48n2005?side=en'].join('\n');
+    const textShards = textShardsForDocs([
+        { docId: 0, text: '無門關無門' },              // CJK source form
+        { docId: 1, text: 'the gateless gate gateless' }, // english-normalized form
+    ]);
+    const fetchMock = installFetchMock({ docsTxt, textShards });
+    try {
+        // EN side → word verification: 'gateless' appears twice in doc 1.
+        assert.equal(await verifyDocPhrase(1, 'gateless'), 2, 'en-side counts word occurrences');
+        // EN side, absent word → 0.
+        assert.equal(await verifyDocPhrase(1, 'dharma'), 0, 'en-side missing word → 0');
+        // Source side → CJK verification unaffected.
+        assert.equal(await verifyDocPhrase(0, '無門'), 2, 'source-side counts CJK run occurrences');
+        // Source side never word-verifies: a pure-English needle has no CJK
+        // runs → null (could-not-verify), not a spurious count.
+        assert.equal(await verifyDocPhrase(0, 'gateless'), null, 'source-side + no CJK runs → null');
+    } finally {
+        fetchMock.restore();
+    }
 });

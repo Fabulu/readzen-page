@@ -107,18 +107,37 @@ function paletteAssign(shardLayout) {
  * content hash.
  * @param {Map<hex4, Uint8Array>} shardLayout - bigram shard layout.
  * @param {number} docCount
- * @param {{version?: number, unigramLayout?: Map<string, Uint8Array>, builtAt?: string}} [opts]
+ * @param {{version?: number, unigramLayout?: Map<string, Uint8Array>, builtAt?: string, wordTerms?: boolean, docLengths?: number[]}} [opts]
  *        version: manifest version field (omitted when not given — matches
  *        the deployed v1/v2 manifests); unigramLayout: adds a parallel
  *        `unigramShards` map (the v3 unigram capability gate); builtAt:
- *        ISO timestamp surfaced by getManifestInfo.
+ *        ISO timestamp surfaced by getManifestInfo; wordTerms: the v4 English-
+ *        word-term capability gate; docLengths: per-docId searchText char
+ *        counts (index-order) — sole input to density ranking.
  */
 export function buildManifest(shardLayout, docCount, opts = {}) {
     const manifest = { shardCount: 4096, docCount, shards: paletteAssign(shardLayout) };
     if (opts.version != null) manifest.version = opts.version;
     if (opts.builtAt != null) manifest.builtAt = opts.builtAt;
     if (opts.unigramLayout) manifest.unigramShards = paletteAssign(opts.unigramLayout);
+    if (opts.wordTerms != null) manifest.wordTerms = opts.wordTerms;
+    if (opts.docLengths != null) manifest.docLengths = opts.docLengths;
     return manifest;
+}
+
+/**
+ * Merge extra v3 term entries ({term, docIds, tfs}[]) — e.g. English word
+ * terms — into an existing bigram shard layout in place, returning it. Word
+ * terms share the bigram shard set (an ASCII token can't collide with a
+ * 2-CJK-char bigram), so this just re-buckets the union.
+ * @param {Map<hex4, Uint8Array>} bigramLayout - built from bigram entries.
+ * @param {Array<{term:string, docIds:number[], tfs:number[]}>} bigramEntries
+ * @param {Array<{term:string, docIds:number[], tfs:number[]}>} wordEntries
+ * @param {number} docCount
+ * @returns {Map<hex4, Uint8Array>} a fresh combined layout.
+ */
+export function shardLayoutForV3Combined(bigramEntries, wordEntries, docCount) {
+    return shardLayoutForV3([...bigramEntries, ...wordEntries], docCount);
 }
 
 /** NDJSON-encode docs into a text-shard string. */

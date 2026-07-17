@@ -137,9 +137,11 @@ test('federatedSearch: Latin query routes to english.jsonl, NOT bigram backend',
         const { fulltext } = await federatedSearch('Bodhidharma', { titles: titleData });
         const results = await fulltext;
         assert.equal(results.length, 2, `expected 2 latin hits, got ${results.length}`);
-        // Verify routing: bigram manifest must NOT have been fetched for a Latin query.
-        const manifestCalls = fetchMock.calls.filter(u => u.includes('/manifest.json'));
-        assert.equal(manifestCalls.length, 0, 'Latin query must not fetch bigram manifest');
+        // Router unification: the manifest is PROBED for word-capability. With
+        // no index here (404) the query falls back to the english.jsonl scan;
+        // the probe must not touch bigram SHARDS.
+        const shardCalls = fetchMock.calls.filter(u => u.includes('/shards/') || u.includes('/unigram/'));
+        assert.equal(shardCalls.length, 0, 'no-capability latin fallback must not fetch bigram shards');
         // Verify english.jsonl was fetched exactly once.
         const ejCalls = fetchMock.calls.filter(u => u.includes('/english.jsonl'));
         assert.equal(ejCalls.length, 1);
@@ -147,6 +149,74 @@ test('federatedSearch: Latin query routes to english.jsonl, NOT bigram backend',
         for (const r of results) {
             assert.ok(r.hitCount >= 1);
         }
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('federatedSearch: WORD-CAPABLE index — one engine answers a mixed query, english.jsonl NOT scanned', async () => {
+    // With manifest.wordTerms the XOR router is gone: a mixed query goes to the
+    // bigram engine, which does work-level AND across scripts. english.jsonl
+    // must not be scanned.
+    const { federatedSearch } = await freshSearchModule();
+    const docCount = 4;
+    // doc0 T48n2005 source 無門; doc1 T48n2005 en "gateless";
+    // doc2 T48n2003 source 碧巖; doc3 T48n2003 en "gateless".
+    const layout = shardLayoutForV3([
+        { term: '無門', docIds: [0], tfs: [3] },
+        { term: '碧巖', docIds: [2], tfs: [4] },
+        { term: 'gateless', docIds: [1, 3], tfs: [2, 5] },
+    ], docCount);
+    const manifest = buildManifest(layout, docCount, {
+        version: 4, wordTerms: true, docLengths: [500, 1000, 500, 100000],
+    });
+    const docsTxt = ['/T48n2005', '/T48n2005?side=en', '/T48n2003', '/T48n2003?side=en'].join('\n');
+    const titleData = [
+        { fileId: 'T48n2005', zh: '無門關', en: 'Gateless Gate', path: 'T48n2005.xml' },
+        { fileId: 'T48n2003', zh: '碧巖錄', en: 'Blue Cliff', path: 'T48n2003.xml' },
+    ];
+    const englishJsonl = JSON.stringify({ fileId: 'zzz', titleEn: 'z', text: 'gateless everywhere' });
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, docsTxt, englishJsonl });
+    try {
+        const { fulltext } = await federatedSearch('無門 gateless', { titles: titleData });
+        const results = await fulltext;
+        // works(CJK 無門)={T48n2005} ∩ works(word gateless)={T48n2005,T48n2003}
+        //   = {T48n2005} → rows for doc 0 (source) + doc 1 (en). doc 3 dropped.
+        const fileIds = results.map((r) => r.meta.file_id).sort();
+        assert.deepEqual(fileIds, ['T48n2005', 'T48n2005'], 'only the both-scripts work survives');
+        const sides = results.map((r) => r.meta.side).sort();
+        assert.deepEqual(sides, ['', 'en'], 'both the CN source row and its EN row are returned');
+        const englishCalls = fetchMock.calls.filter((u) => u.includes('/english.jsonl'));
+        assert.equal(englishCalls.length, 0, 'word-capable index must not scan english.jsonl');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('federatedSearch: WORD-CAPABLE index — pure-English query routes to the engine (not english.jsonl)', async () => {
+    const { federatedSearch } = await freshSearchModule();
+    const docCount = 2;
+    const layout = shardLayoutForV3([
+        { term: 'gateless', docIds: [0, 1], tfs: [2, 5] },
+    ], docCount);
+    const manifest = buildManifest(layout, docCount, {
+        version: 4, wordTerms: true, docLengths: [1000, 100000],
+    });
+    const docsTxt = ['/T48n2005?side=en', '/T48n2003?side=en'].join('\n');
+    const titleData = [
+        { fileId: 'T48n2005', en: 'Gateless Gate' },
+        { fileId: 'T48n2003', en: 'Blue Cliff' },
+    ];
+    const englishJsonl = JSON.stringify({ fileId: 'zzz', titleEn: 'z', text: 'gateless' });
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, docsTxt, englishJsonl });
+    try {
+        const { fulltext } = await federatedSearch('gateless', { titles: titleData });
+        const results = await fulltext;
+        // Density ranking: doc0 (len 1000, tf2) density 2 > doc1 (len 100000, tf5).
+        assert.deepEqual(results.map((r) => r.meta.file_id), ['T48n2005', 'T48n2003'],
+            'engine density order preserved (shorter doc first)');
+        const englishCalls = fetchMock.calls.filter((u) => u.includes('/english.jsonl'));
+        assert.equal(englishCalls.length, 0, 'word-capable index must not scan english.jsonl for English');
     } finally {
         fetchMock.restore();
     }

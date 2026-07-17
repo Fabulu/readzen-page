@@ -335,7 +335,7 @@ export async function render(route, mount, shell) {
             ftHtml += buildSearchGroup(groupArr[g], query);
         }
         ftContainer.innerHTML = ftHtml;
-        appendLatinIgnoredNotice(ftContainer);
+        appendCoverageNote(ftContainer, query);
 
         // Re-apply open state to the same groups (matched by data-group-key,
         // not position — streaming reorder may have shuffled the top result).
@@ -352,16 +352,28 @@ export async function render(route, mount, shell) {
         verifyDisplayedGroups(ftContainer, query);
     }
 
-    /** Audit #3 surface: when the query mixed latin with CJK, the backend
-     *  matched on the CJK runs and reports the ignored remainder via
-     *  onFulltextStats.latinIgnored. Show a one-line muted notice after the
-     *  group list so the zero/partial results aren't silently confusing. */
-    function appendLatinIgnoredNotice(ftContainer) {
-        if (!_ftStats || !_ftStats.latinIgnored) return;
+    /** Honest coverage note (§4.4). Two states, driven entirely by the
+     *  full-text stats:
+     *   - Word-capable index (indexVersion >= 4): English IS searched, but only
+     *     where a translation exists — say so plainly rather than implying
+     *     corpus-wide English completeness.
+     *   - Pre-v4 fallback with a mixed query (latinIgnored set): the CJK-only
+     *     leg matched the Chinese runs and the English remainder was not
+     *     searched on this index. State the limitation without scolding.
+     *  Replaces the former "Non-Chinese text … was ignored" banner. */
+    function appendCoverageNote(ftContainer, query) {
+        if (!_ftStats) return;
+        var note = null;
+        if (_ftStats.latinIgnored) {
+            note = 'Matched the Chinese terms; English text isn’t searched on this index yet.';
+        } else if (typeof _ftStats.indexVersion === 'number' && _ftStats.indexVersion >= 4 &&
+                   /[a-z]/i.test(query || '')) {
+            note = 'English searched where translated.';
+        }
+        if (!note) return;
         var notice = document.createElement('p');
         notice.className = 'search-ft-notice muted';
-        notice.textContent = 'Non-Chinese text “' + _ftStats.latinIgnored +
-            '” was ignored; matched on the Chinese terms.';
+        notice.textContent = note;
         ftContainer.appendChild(notice);
     }
 
@@ -792,7 +804,7 @@ export async function render(route, mount, shell) {
                 ftHtml += buildSearchGroup(groupArr[g], query);
             }
             ftContainer.innerHTML = ftHtml;
-            appendLatinIgnoredNotice(ftContainer);
+            appendCoverageNote(ftContainer, query);
 
             // Wire expand handlers on all groups
             wireGroupExpanders(ftContainer, query);
