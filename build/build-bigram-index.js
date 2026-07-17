@@ -5,16 +5,25 @@
 // the CBETA + OpenZen (+ translations + community) corpus.
 //
 // Output layout:
-//   data/search/bigram/manifest.json                     (version 3)
+//   data/search/bigram/manifest.json                     (version 4)
 //   data/search/bigram/docs.txt                          (line N = url for docId N)
-//   data/search/bigram/shards/XX/YY-<hash6>.bin          (4096 hashed bigram shards, v3)
-//   data/search/bigram/unigram/XX/YY-<hash6>.bin         (4096 hashed unigram shards, v3)
-//   data/search/text/{XXX}.bin                           (4096 NDJSON text shards
-//                                                         for phrase verification)
+//   data/search/bigram/shards/XX/YY-<hash6>.bin          (SHARD_COUNT bigram shards, v3)
+//   data/search/bigram/unigram/XX/YY-<hash6>.bin         (SHARD_COUNT unigram shards, v3)
+//   data/search/text/{XXX}.bin                           (TEXT_SHARD_COUNT NDJSON text
+//                                                         shards; omitted under SKIP_TEXT_SHARDS)
 //
 // v3 shards (see lib/bigram-codec.js encodeShardV3) carry a per-doc term
 // frequency after each docId gap, so ranking is index-only at runtime — text
 // shards are only fetched to phrase-verify the rows actually displayed.
+//
+// Bilingual + scope (manifest v4, RUN-20260717-1507): English docs emit
+// word terms ([a-z0-9'] tokens, tf-counted) into the SAME bigram shard set, so
+// one engine answers both scripts. Per-doc searchText is CJK-normalized for zh
+// and englishNormalize'd for en. SHARD_COUNT/TEXT_SHARD_COUNT are env-parametric
+// (default 4096 — full SPA build unchanged); SCOPE_FILE gates discovery to an
+// allowlist; SKIP_TEXT_SHARDS drops text/ for the Devvit publish. New v4
+// manifest fields: wordTerms (capability gate), docLengths (density ranking),
+// textShards may be null.
 //
 // Determinism: every directory listing is sorted before traversal, so docId
 // assignment (and therefore every posting list and shard hash) is a pure
@@ -42,6 +51,7 @@ import { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
 
 import { normalizeString, isCjk } from '../lib/cjk-normalize.js';
+import { englishNormalize, englishWordTerms } from '../lib/english-normalize.js';
 import { fnv1a32 } from '../lib/fnv.js';
 import { encodeShardV3, readShardHeader, decodePostingListV3 } from '../lib/bigram-codec.js';
 import { extractText } from '../lib/build/extract-text.js';
@@ -55,6 +65,16 @@ const CBETA_TRANSLATED_DIR = process.env.CBETA_TRANSLATED_DIR || 'C:/Programmier
 const OPENZEN_TRANSLATED_DIR = process.env.OPENZEN_TRANSLATED_DIR || 'C:/Programmieren/OpenZenTranslations/xml-open-t';
 const ZEN_TEXTS_PATH = process.env.ZEN_TEXTS_PATH || 'C:/Programmieren/CbetaZenTranslations/zen_texts.json';
 const COMMUNITY_DIR = process.env.COMMUNITY_DIR || 'C:/Programmieren/CbetaZenTranslations/community/translations';
+// OpenZen community translations (per-translator subdirs). The Devvit reader
+// already fetches these (paths.ts OPEN_COMMUNITY) but the builder never scanned
+// them before — so the app's front-door Wumenguan / Gateless-Barrier community
+// translations were readable-but-unindexed. Step 5b closes that gap.
+const OPENZEN_COMMUNITY_DIR = process.env.OPENZEN_COMMUNITY_DIR || 'C:/Programmieren/OpenZenTranslations/community/translations';
+// Optional scope allowlist (RUN-20260717-1507). When set to a scope file with a
+// non-empty `works` array, discovery is gated to those works (the scoped Devvit
+// bilingual index). Empty/absent => full corpus, so the SPA website build is
+// untouched. See loadScope() for the consumed shape.
+const SCOPE_FILE = process.env.SCOPE_FILE || '';
 
 const __filename = fileURLToPath(import.meta.url);
 const REPO_ROOT = dirname(dirname(__filename)); // .../ZenLinkPage
@@ -66,8 +86,20 @@ const SHARDS_DIR = join(BIGRAM_DIR, 'shards');
 const UNIGRAM_DIR = join(BIGRAM_DIR, 'unigram');
 const TEXT_DIR = join(OUTPUT_ROOT, 'text');
 
-const SHARD_COUNT = 4096;          // bigram AND unigram shards (FNV-1a32 mod 4096)
-const TEXT_SHARD_COUNT = 4096;     // text shards (docId mod 4096) — smaller per-shard fetches
+// Shard counts are env-parametric. Default stays 4096 so the SPA's full-corpus
+// website build (`npm run build:search`, no SHARD_COUNT env) is byte-for-byte
+// unchanged. The scoped Devvit bilingual build passes SHARD_COUNT=1024 — the
+// Phase-0-measured central choice (~73 KB/shard, in the 50-200 KB band). Every
+// runtime client reads manifest.shardCount, never a hardcoded 4096, so the
+// constant is not load-bearing at query time (CONTRACT manifest v4 §1).
+const SHARD_COUNT = intFromEnv('SHARD_COUNT', 4096);        // bigram AND unigram shards (FNV-1a32 mod SHARD_COUNT)
+const TEXT_SHARD_COUNT = intFromEnv('TEXT_SHARD_COUNT', 4096); // text shards (docId mod TEXT_SHARD_COUNT)
+// When set, skip writing text/ shards entirely and release each doc's
+// searchText right after its terms are flushed (deletes the largest heap
+// component). The Devvit scoped publish never ships text/ (~236 MB at scale,
+// two-thirds English) — it verifies against TEI instead (PLAN v4 §C). The
+// manifest records textShards: null so clients verify via the TEI path.
+const SKIP_TEXT_SHARDS = /^(1|true|yes)$/i.test(process.env.SKIP_TEXT_SHARDS || '');
 const MAX_DOC_COUNT = 65535;       // uint16 docId limit
 const HASH_HEX_LEN = 6;            // first 6 hex of sha-256 of shard bytes
 const VALIDATION_SAMPLE = 16;      // min shards read back per set for round-trip check
@@ -77,6 +109,49 @@ const VALIDATION_SAMPLE = 16;      // min shards read back per set for round-tri
 let skippedFiles = 0;
 
 // === Helpers ===
+
+// Parse a positive integer env var, falling back to `def`. Function
+// declarations hoist, so this is callable from the module-level SHARD_COUNT /
+// TEXT_SHARD_COUNT initializers above.
+function intFromEnv(name, def) {
+    const raw = process.env[name];
+    if (raw == null || raw === '') return def;
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n) || n <= 0) {
+        throw new Error(`env ${name}="${raw}" is not a positive integer`);
+    }
+    return n;
+}
+
+/**
+ * Load the scope allowlist (RUN-20260717-1507). Returns null when no scope is
+ * configured (full-corpus build) so the SPA website build is untouched.
+ * Consumed shape (a superset is tolerated; only these keys are read):
+ *   { works: string[], excluded_en_docs?: string[], en_doc_min_share?: number }
+ * `works` are full workIds (CBETA `T48n2005`, OpenZen `pd.wumenguan-1632`) —
+ * matched against doc.fileId. `excluded_en_docs` drops the EN side of a work
+ * whose translation is below the English-share gate (its ZH side stays indexed;
+ * the exclusion list is authoritative — the builder does not recompute the
+ * share). `en_doc_min_share` is carried for observability only.
+ */
+function loadScope(path) {
+    if (!path) return null;
+    if (!existsSync(path)) {
+        console.warn(`  [scope] SCOPE_FILE=${path} not found — building FULL corpus (no scope filter).`);
+        return null;
+    }
+    const data = JSON.parse(readFileSync(path, 'utf-8'));
+    const works = Array.isArray(data.works) ? data.works : [];
+    if (works.length === 0) {
+        console.warn(`  [scope] SCOPE_FILE=${path} has empty "works" — building FULL corpus (no scope filter).`);
+        return null;
+    }
+    return {
+        works: new Set(works),
+        excludedEnDocs: new Set(Array.isArray(data.excluded_en_docs) ? data.excluded_en_docs : []),
+        enDocMinShare: typeof data.en_doc_min_share === 'number' ? data.en_doc_min_share : null,
+    };
+}
 
 function logMem(stage) {
     const mem = process.memoryUsage();
@@ -190,9 +265,20 @@ function walkAndIngest(docs, sourceDir, mapper) {
         const meta = mapper(absPath, relPath);
         if (!meta) continue;
 
-        // Normalize the extracted text once; all downstream consumers use the
-        // normalized form (term emission, verification step at runtime).
-        const normalized = normalizeString(text);
+        // Normalize the extracted text once, per language. All downstream
+        // consumers (term emission, runtime verification) use this searchText.
+        //   zh (source) : normalizeString  — byte-identical to the pre-bilingual
+        //                 build; strips whitespace + editorial punctuation so
+        //                 CJK bigrams bridge across them.
+        //   en          : englishNormalize — lowercase + collapse whitespace,
+        //                 PRESERVING word boundaries (English's only
+        //                 tokenization signal). Inline CJK survives and is still
+        //                 bigram-indexed by the same walk.
+        // Emission and runtime verification MUST agree per side (CONTRACT §2);
+        // both dispatch on this same choice.
+        const normalized = meta.lang === 'en'
+            ? englishNormalize(text)
+            : normalizeString(text);
 
         docs.push({
             // docId assigned later (after collection complete).
@@ -213,7 +299,7 @@ function walkAndIngest(docs, sourceDir, mapper) {
     return appended;
 }
 
-function collectDocuments(cbetaTitles, openzenTitles, zenIds) {
+function collectDocuments(cbetaTitles, openzenTitles, zenIds, scope) {
     const docs = [];
 
     // 1) CBETA source corpus (zh)
@@ -317,19 +403,55 @@ function collectDocuments(cbetaTitles, openzenTitles, zenIds) {
         console.log('  (community dir not present, skipping)');
     }
 
-    // Assign uint16 docIds in collection order. Hard-fail above the limit.
-    if (docs.length > MAX_DOC_COUNT) {
-        throw new Error(
-            `docCount ${docs.length} exceeds uint16 limit (${MAX_DOC_COUNT}). ` +
-            `Bump posting-list element type before continuing.`
-        );
+    // 5b) OpenZen community translations (en) — per translator subdirectory.
+    // Mirrors step 5 but with the OpenZen `<publisher>.<slug>` fileId mapping
+    // from step 2, so community Wumenguan / Gateless-Barrier files join the
+    // exact work identity the Devvit reader already fetches (paths.ts
+    // OPEN_COMMUNITY). Layout: <user>/<publisher>/<slug>/<file>.xml.
+    console.log(`\nOpenZen community: ${OPENZEN_COMMUNITY_DIR}`);
+    if (existsSync(OPENZEN_COMMUNITY_DIR)) {
+        // Sorted for deterministic docId assignment (audit #7).
+        const users = readdirSync(OPENZEN_COMMUNITY_DIR, { withFileTypes: true })
+            .filter(d => d.isDirectory())
+            .map(d => d.name)
+            .sort();
+        console.log(`  translators: ${users.join(', ') || '(none)'}`);
+        for (const user of users) {
+            const userDir = join(OPENZEN_COMMUNITY_DIR, user);
+            const before = docs.length;
+            walkAndIngest(docs, userDir, (absPath, relPath) => {
+                // Canonical OpenZen fileId `<topDir>.<basename>` — see step 2.
+                // relPath is `<publisher>/<slug>/<file>.xml` under the user dir.
+                const relParts = relPath.split('/').filter(Boolean);
+                const topDir = relParts[0];
+                const fileId = topDir + '.' + basename(absPath, '.xml');
+                const titleEntry = openzenTitles.get(relPath) || {};
+                return {
+                    url: '/' + fileId + '?side=community&translator=' + user,
+                    fileId,
+                    lang: 'en',
+                    title: titleEntry.en || titleEntry.zh || fileId,
+                    titleEn: titleEntry.en || '',
+                    side: 'community',
+                    translator: user,
+                };
+            });
+            console.log(`  +${docs.length - before} from ${user}`);
+        }
+    } else {
+        console.log('  (OpenZen community dir not present, skipping)');
     }
-    for (let i = 0; i < docs.length; i++) docs[i].docId = i;
 
-    // Annotate zen flag for completeness (consumed by future filter logic).
-    // currently unused; kept for parity with desktop schema.
-    // OpenZen fileIds use `<publisher>.<slug>` shape; strip the publisher
-    // prefix for zen-id lookup since zen_texts.json keys by slug only.
+    // === Annotate → filter → assign ===
+    // Order matters: annotate zen/scope membership and DROP out-of-scope docs
+    // BEFORE assigning docIds, so the surviving docIds are dense 0..N-1 over the
+    // retained set (a gap-free uint16 space is what the posting codec and
+    // docs.txt assume). Doing this after assignment would leave holes.
+
+    // Annotate the zen flag. OpenZen fileIds use `<publisher>.<slug>` shape;
+    // strip the publisher prefix for zen-id lookup since zen_texts.json keys by
+    // slug only. Now consumed by the scope filter below (and kept on the doc for
+    // downstream observability / parity with the desktop schema).
     for (const d of docs) {
         const slug = d.fileId.includes('.')
             ? d.fileId.substring(d.fileId.indexOf('.') + 1)
@@ -337,7 +459,50 @@ function collectDocuments(cbetaTitles, openzenTitles, zenIds) {
         d.isZen = zenIds.has(slug) || zenIds.has(d.fileId);
     }
 
-    return docs;
+    // Scope filter. When no scope is configured, `scope` is null and the full
+    // corpus passes through unchanged (SPA website build). When configured,
+    // discovery is gated to `scope.works`; the EN side of an excluded work is
+    // additionally dropped (its ZH side stays). Every dropped doc is logged and
+    // counted in manifest.skippedFiles (the existing logSkip discipline).
+    let retained = docs;
+    if (scope) {
+        console.log(
+            `\n--- scope filter (SCOPE_FILE) --- ${scope.works.size} works, ` +
+            `${scope.excludedEnDocs.size} excluded EN doc(s)` +
+            (scope.enDocMinShare != null ? `, en_doc_min_share=${scope.enDocMinShare}` : '')
+        );
+        retained = [];
+        let droppedScope = 0, droppedEn = 0;
+        for (const d of docs) {
+            if (!scope.works.has(d.fileId)) {
+                logSkip(`${d.fileId} (${d.url})`, `out of scope (work not in SCOPE_FILE)`);
+                droppedScope++;
+                continue;
+            }
+            if (d.lang === 'en' && scope.excludedEnDocs.has(d.fileId)) {
+                logSkip(`${d.fileId} (${d.url})`, `EN doc excluded by scope (excluded_en_docs — below en_doc_min_share)`);
+                droppedEn++;
+                continue;
+            }
+            retained.push(d);
+        }
+        console.log(
+            `  scope: retained ${retained.length}/${docs.length} docs ` +
+            `(dropped ${droppedScope} out-of-scope, ${droppedEn} excluded EN)`
+        );
+    }
+
+    // Assign dense uint16 docIds in collection order over the retained set.
+    // Hard-fail above the limit.
+    if (retained.length > MAX_DOC_COUNT) {
+        throw new Error(
+            `docCount ${retained.length} exceeds uint16 limit (${MAX_DOC_COUNT}). ` +
+            `Bump posting-list element type before continuing.`
+        );
+    }
+    for (let i = 0; i < retained.length; i++) retained[i].docId = i;
+
+    return retained;
 }
 
 // === Term index build (bigram + unigram, with term frequency) ===
@@ -376,11 +541,16 @@ function flushDocTerms(globalIndex, docTfs, docId) {
 function buildTermIndexes(docs) {
     const bigramIndex = new Map();
     const unigramIndex = new Map();
+    // Per-docId searchText char count — the sole input to density ranking
+    // (CONTRACT §4). Ships in the manifest so ranking stays index-only. Index
+    // order: docs carry dense docIds 0..N-1, so a plain array is exact.
+    const docLengths = new Array(docs.length).fill(0);
 
     let docCounter = 0;
     for (const doc of docs) {
         const text = doc.normalized;
         if (!text) { docCounter++; continue; }
+        docLengths[doc.docId] = text.length;
 
         // Per-doc tf accumulators (audit #1: count occurrences, not a dedupe
         // Set; audit #4: unigrams captured in the same char walk).
@@ -425,9 +595,28 @@ function buildTermIndexes(docs) {
             prevIsCjk = cuIsCjk;
         }
 
+        // English word terms (en docs only; a no-op on zh source docs).
+        // Maximal [a-z0-9'] runs from the already-lowercased englishNormalize
+        // searchText, tf = occurrence count. They go into the SAME bigram
+        // accumulator (and thus the bigram shard set) — an ASCII word can never
+        // collide with a 2-CJK-char bigram, so no namespace prefix is needed
+        // (CONTRACT §2). CJK bigrams/unigrams from inline CJK in the EN text are
+        // still emitted by the walk above; the two term kinds coexist.
+        if (doc.lang === 'en') {
+            for (const tok of englishWordTerms(text)) {
+                bigramTfs.set(tok, (bigramTfs.get(tok) || 0) + 1);
+            }
+        }
+
         // Flush once per doc: appends (docId, tf) pairs in ascending doc order.
         flushDocTerms(bigramIndex, bigramTfs, doc.docId);
         flushDocTerms(unigramIndex, unigramTfs, doc.docId);
+
+        // Under SKIP_TEXT_SHARDS the searchText is never written to disk again
+        // (no text/ shards), so release it now that its terms and length are
+        // captured — this is the single largest heap component at scale (PLAN
+        // v4 §C/§D). Harmless when text shards ARE written: this branch is off.
+        if (SKIP_TEXT_SHARDS) doc.normalized = null;
 
         docCounter++;
         if (docCounter % 500 === 0) {
@@ -436,7 +625,7 @@ function buildTermIndexes(docs) {
         }
     }
 
-    return { bigramIndex, unigramIndex };
+    return { bigramIndex, unigramIndex, docLengths };
 }
 
 /** Total postings (docId,tf pairs) across an interleaved index. */
@@ -634,18 +823,35 @@ function validateShardSample(records, label) {
 
 function writeManifest(meta) {
     const manifest = {
-        version: 3,
+        // v4 (RUN-20260717-1507): additive over v3. `wordTerms` + `docLengths`
+        // are new; `textShards` may be null; `shardCount` is authoritative
+        // (clients must read it, never hardcode 4096). Term wire format is
+        // UNCHANGED — per-shard headers stay v3 (CONTRACT manifest v4 §1).
+        version: 4,
         builtAt: new Date().toISOString(),
         docCount: meta.docCount,
         shardCount: SHARD_COUNT,
         hashAlgo: 'fnv1a32',
+        // bigramCount now includes EN word terms (they share the bigram set).
         bigramCount: meta.bigramCount,
         nonEmptyShardCount: meta.nonEmptyShardCount,
-        textShards: { count: TEXT_SHARD_COUNT, path: 'data/search/text/{XX}.bin' },
+        // null when the publish ships no text/ (SKIP_TEXT_SHARDS): clients then
+        // phrase-verify via the TEI path instead of a text shard fetch.
+        textShards: SKIP_TEXT_SHARDS
+            ? null
+            : { count: TEXT_SHARD_COUNT, path: 'data/search/text/{XX}.bin' },
         shards: meta.manifestShards,
         // v3 additions: parallel unigram shard set + build observability.
         unigramShards: meta.unigramShards,
         unigramCount: meta.unigramCount,
+        // v4 capability gate: EN word terms are in the bigram set and the
+        // English-via-index path is live. Clients gate on this exactly like the
+        // existing unigramShards capability; false/absent => fall back to
+        // english.jsonl.
+        wordTerms: true,
+        // v4: per-docId searchText char count (index order) — sole input to
+        // density ranking, keeps ranking index-only (no text fetch).
+        docLengths: meta.docLengths,
         skippedFiles: meta.skippedFiles,
     };
     const path = join(BIGRAM_DIR, 'manifest.json');
@@ -730,23 +936,27 @@ async function main() {
     console.log('=== build-bigram-index (v3) ===');
     console.log(`output root: ${OUTPUT_ROOT}`);
 
-    // Prepare output dirs.
+    console.log(`shardCount: ${SHARD_COUNT}, textShardCount: ${TEXT_SHARD_COUNT}, ` +
+        `skipTextShards: ${SKIP_TEXT_SHARDS}, scopeFile: ${SCOPE_FILE || '(none — full corpus)'}`);
+
+    // Prepare output dirs. Skip the text dir entirely under SKIP_TEXT_SHARDS.
     ensureDir(BIGRAM_DIR);
     ensureDir(SHARDS_DIR);
-    ensureDir(TEXT_DIR);
+    if (!SKIP_TEXT_SHARDS) ensureDir(TEXT_DIR);
 
     // ---- 1. Load titles ----
     const cbetaTitles = loadTitles(CBETA_TITLES);
     const openzenTitles = loadTitles(OPENZEN_TITLES);
     console.log(`titles: ${cbetaTitles.size} CBETA, ${openzenTitles.size} OpenZen`);
 
-    // ---- 2. Load zen ids ----
+    // ---- 2. Load zen ids + optional scope ----
     const zenIds = loadZenIds(ZEN_TEXTS_PATH);
     console.log(`zen ids: ${zenIds.size}`);
+    const scope = loadScope(SCOPE_FILE);
 
     // ---- 3. Collect documents ----
     console.log('\n--- collectDocuments ---');
-    const docs = collectDocuments(cbetaTitles, openzenTitles, zenIds);
+    const docs = collectDocuments(cbetaTitles, openzenTitles, zenIds, scope);
     const docCount = docs.length;
     const zhDocs = docs.filter(d => d.lang === 'zh');
     console.log(`\nTotal: ${docCount} docs (${zhDocs.length} zh, ${docCount - zhDocs.length} en)`);
@@ -759,7 +969,7 @@ async function main() {
     // inline names) is correctly indexed. This unifies the docId space so
     // translations and community docs participate in CJK fulltext queries.
     console.log('\n--- buildTermIndexes ---');
-    const { bigramIndex, unigramIndex } = buildTermIndexes(docs);
+    const { bigramIndex, unigramIndex, docLengths } = buildTermIndexes(docs);
     const bigramCount = bigramIndex.size;
     const unigramCount = unigramIndex.size;
     const expectedBigramPostings = countPostings(bigramIndex);
@@ -823,6 +1033,7 @@ async function main() {
         manifestShards: bigramResult.manifestShards,
         unigramShards: unigramResult.manifestShards,
         unigramCount,
+        docLengths,
         skippedFiles,
     });
     const docsPath = writeDocList(docs);
@@ -830,11 +1041,18 @@ async function main() {
     console.log(`manifest: ${manifestPath}`);
     console.log(`docs.txt: ${docsPath}`);
 
-    // ---- 7. Per-doc text shards ----
-    console.log('\n--- writeTextShards ---');
-    const textBytes = await writeTextShards(docs);
-    console.log(`wrote ${TEXT_SHARD_COUNT} text shards, ${textBytes} bytes total`);
-    logMem('after writeTextShards');
+    // ---- 7. Per-doc text shards (skipped for the Devvit scoped publish) ----
+    let textBytes = 0;
+    if (SKIP_TEXT_SHARDS) {
+        console.log('\n--- writeTextShards SKIPPED (SKIP_TEXT_SHARDS) ---');
+        console.log('  text/ not built; manifest.textShards = null; searchText released after term flush.');
+        console.log('  (displayed-row phrase verification runs against TEI at the consumer.)');
+    } else {
+        console.log('\n--- writeTextShards ---');
+        textBytes = await writeTextShards(docs);
+        console.log(`wrote ${TEXT_SHARD_COUNT} text shards, ${textBytes} bytes total`);
+        logMem('after writeTextShards');
+    }
 
     // ---- 8. Summary ----
     const t1 = Date.now();

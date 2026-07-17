@@ -30,6 +30,7 @@ import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, statSy
 import { join, relative, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { extractText } from '../lib/build/extract-text.js';
+import { englishNormalize } from '../lib/english-normalize.js';
 
 // === Configuration (env-overridable, mirrors build-pagefind-index.js) ===
 const CBETA_TRANSLATED_DIR = process.env.CBETA_TRANSLATED_DIR || 'C:/Programmieren/CbetaZenTranslations/xml-p5t';
@@ -95,10 +96,10 @@ function findXmlFiles(dir) {
 
 // === Normalize body text for substring scan ===
 // Lowercase, then collapse all whitespace runs to single spaces, then trim.
-function normalizeForSearch(raw) {
-    if (!raw) return '';
-    return raw.toLowerCase().replace(/\s+/g, ' ').trim();
-}
+// Promoted to the shared lib/english-normalize.js module so the bigram index
+// build emits English terms from the byte-identical normalization (one skew
+// surface — see that module's header).
+const normalizeForSearch = englishNormalize;
 
 // === Per-record builder ===
 function buildRecord(absPath, opts) {
