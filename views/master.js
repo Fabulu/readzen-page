@@ -176,10 +176,7 @@ function renderMasterProfile(m, appearances, translatedIds) {
     const primary = names[0] || '';
     const chinese = names.filter(n => /[\u4e00-\u9fff]/.test(n));
     const otherNames = names.slice(1).filter(Boolean);
-    const floruit = m.floruit || 0;
-    const death = m.death || 0;
-
-    const datesText = formatDates(floruit, death);
+    const datesText = formatDates(m);
     const schoolBadge = m.school
         ? `<span class="master-school-badge">${escapeHtml(m.school)}</span>`
         : '';
@@ -524,10 +521,26 @@ function buildMasterLink(name) {
     return `<a href="${href}" class="master-lineage-link">${escapeHtml(name)}</a>`;
 }
 
-function formatDates(floruit, death) {
-    if (floruit && death) return `${floruit}–${death}`;
-    if (floruit) return `fl. ${floruit}`;
-    if (death) return `d. ${death}`;
+// Kept byte-for-byte in step with lineage-data.js#formatDates and the desktop's
+// LineageGraphBuilder.FormatDates. It is NOT imported from lineage-data.js on
+// purpose: that module bundles the whole 943-record roster, which this view has
+// no reason to pull in just to format four numbers.
+//
+// The version this replaces took (floruit, death) and never saw `birth`, which
+// was wrong twice over. It hid a birth year we hold on 252 masters (Songshan Puji
+// showed "d. 739" while his record says 651). Worse, `floruit && death` rendered
+// a floruit as the left side of a range on 286 masters: Daoan (fl. 312, b. 314,
+// d. 385) displayed "312–385", which reads as a birth year and is off by two.
+// A floruit is "active around", never a birth. It only renders alone, as "fl.".
+function formatDates(m) {
+    const b = m.birth || 0;
+    const d = m.death || 0;
+    const f = m.floruit || 0;
+    const c = m.dates_conjectural ? 'c. ' : '';
+    if (b && d) return `${c}${b}–${d}`;
+    if (d) return `${c}d. ${d}`;
+    if (b) return `${c}b. ${b}`;
+    if (f) return `${c}fl. ${f}`;
     return '';
 }
 

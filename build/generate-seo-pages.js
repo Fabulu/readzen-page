@@ -150,6 +150,23 @@ function slugify(name) {
     return name.replace(/'/g, '').replace(/\s+/g, '_');
 }
 
+// Same rules as views/master.js#formatDates, lib/lineage-data.js#formatDates and
+// the desktop's LineageGraphBuilder.FormatDates. Birth–death only: a floruit means
+// "active around" and never opens a range. This used to read `floruit-death`, which
+// printed Daoan (fl. 312, b. 314, d. 385) as "312-385" -- a birth year he didn't
+// have -- and hid the real birth year on 252 masters.
+function formatDates(m) {
+    const b = m.birth || 0;
+    const d = m.death || 0;
+    const f = m.floruit || 0;
+    const c = m.dates_conjectural ? 'c. ' : '';
+    if (b && d) return `${c}${b}–${d}`;
+    if (d) return `${c}d. ${d}`;
+    if (b) return `${c}b. ${b}`;
+    if (f) return `${c}fl. ${f}`;
+    return '';
+}
+
 function buildMasterNoscript(m) {
     const names = m.names || [];
     const canonical = names[0] || '';
@@ -158,8 +175,6 @@ function buildMasterNoscript(m) {
     const teacher = m.teacher || '';
     const students = m.students || [];
     const notes = m.notes || '';
-    const death = m.death || '';
-    const floruit = m.floruit || '';
     const links = m.links || [];
 
     let html = `<h1>${esc(canonical)}${zh ? ' ' + esc(zh) : ''}</h1>\n`;
@@ -167,8 +182,8 @@ function buildMasterNoscript(m) {
     // Key facts
     const facts = [];
     if (school) facts.push(`School: ${esc(school)}`);
-    if (floruit && death) facts.push(`${floruit}-${death}`);
-    else if (death) facts.push(`d. ${death}`);
+    const dates = formatDates(m);
+    if (dates) facts.push(dates);
     if (teacher) facts.push(`Teacher: ${esc(teacher)}`);
     if (students.length) facts.push(`Students: ${esc(students.join(', '))}`);
     if (facts.length) html += `<p class="meta">${facts.join(' | ')}</p>\n`;
