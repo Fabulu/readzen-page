@@ -1384,6 +1384,127 @@ test('verifyDocPhrase: aborted signal resolves null (matches could-not-verify co
 });
 
 // =====================================================================
+// 17b. verifyDocPhrase — mixed-query en/community union (finding #2)
+// =====================================================================
+
+test('verifyDocPhrase (finding #2): mixed query — an en/community doc matching ONLY via inline CJK survives with an honest count, not a dropped 0', async () => {
+    const { verifyDocPhrase } = await freshSearchModule();
+    // docId 0 (en) and docId 1 (community): their englishNormalize'd text
+    // carries the CJK phrase INLINE but NOT the English word "gate". The old
+    // word-only en-side verification scored these 0 → the group was removed and
+    // the docId marked dead, even though the doc genuinely matched on Chinese.
+    const docsTxt =
+        'https://readzen.example/works/T2003?side=en\n' +
+        'https://readzen.example/works/T2004?side=community&translator=foo\n';
+    const textShards = textShardsForDocs([
+        { docId: 0, text: 'the master asked about 祖師西來意 today' },
+        { docId: 1, text: '祖師西來意 appears twice: 祖師西來意' },
+    ]);
+    const manifest = buildManifest(new Map(), 2, { version: 4, wordTerms: true });
+    const fetchMock = installFetchMock({ manifest, docsTxt, textShards });
+    try {
+        assert.equal(await verifyDocPhrase(0, '祖師西來意 gate'), 1,
+            'en: inline-CJK match counted (1), NOT dropped for lacking the word "gate"');
+        assert.equal(await verifyDocPhrase(1, '祖師西來意 gate'), 2,
+            'community: both inline-CJK occurrences counted, still not dropped');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('verifyDocPhrase (finding #2): mixed query — an en doc with BOTH the word and inline CJK counts BOTH, not the word substring alone', async () => {
+    const { verifyDocPhrase } = await freshSearchModule();
+    const docsTxt = 'https://readzen.example/works/T2003?side=en\n';
+    const textShards = textShardsForDocs([{ docId: 0, text: 'the gate of 祖師西來意 is subtle' }]);
+    const manifest = buildManifest(new Map(), 1, { version: 4, wordTerms: true });
+    const fetchMock = installFetchMock({ manifest, docsTxt, textShards });
+    try {
+        // Union count = 1 (gate) + 1 (祖師西來意). The old code returned only the
+        // word substring count (1), discarding the doc's CJK hits.
+        assert.equal(await verifyDocPhrase(0, '祖師西來意 gate'), 2,
+            'union of word + CJK needles; CJK hits are no longer discarded');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('verifyDocPhrase (finding #2): mixed query — an en doc with NEITHER script present is still a genuine 0 (droppable)', async () => {
+    const { verifyDocPhrase } = await freshSearchModule();
+    const docsTxt = 'https://readzen.example/works/T2003?side=en\n';
+    const textShards = textShardsForDocs([{ docId: 0, text: 'wholly unrelated english prose' }]);
+    const manifest = buildManifest(new Map(), 1, { version: 4, wordTerms: true });
+    const fetchMock = installFetchMock({ manifest, docsTxt, textShards });
+    try {
+        assert.equal(await verifyDocPhrase(0, '祖師西來意 gate'), 0,
+            'no word AND no inline CJK → genuine non-match, may be dropped');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// =====================================================================
+// 17c. verifyDocPhrase + searchFulltext — manifest-driven text-shard
+//      count, skip on textShards:null (finding #3)
+// =====================================================================
+
+test('verifyDocPhrase (finding #3): textShards:null publish → skip verification (null), issuing NO doomed per-bucket text-shard fetch', async () => {
+    const { verifyDocPhrase } = await freshSearchModule();
+    const manifest = buildManifest(new Map(), 1, { version: 4, wordTerms: true });
+    manifest.textShards = null; // scoped Devvit build ships no text/ dir
+    const fetchMock = installFetchMock({ manifest, textShards: new Map() });
+    try {
+        // Multi-bigram query would normally trigger a text-shard verification.
+        const count = await verifyDocPhrase(0, '趙州無門佛');
+        assert.equal(count, null, 'no text shards → could-not-verify (caller keeps index estimate)');
+        const textFetches = fetchMock.calls.filter((u) => /\/text\/[0-9a-f]{3}\.bin$/.test(u));
+        assert.equal(textFetches.length, 0, 'no doomed per-bucket 404 fetches issued');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('verifyDocPhrase (finding #3): text-shard bucket count is read from the manifest, not a hardcoded 4096', async () => {
+    const { verifyDocPhrase } = await freshSearchModule();
+    // Publish declares 10 text shards. docId 25 buckets to 25 % 10 = 5 ('005'),
+    // whereas the old hardcoded 4096 gives 25 % 4096 = 25 ('019') → wrong shard.
+    const manifest = buildManifest(new Map(), 26, { version: 4, wordTerms: true });
+    manifest.textShards = { count: 10, path: 'data/search/text/{XX}.bin' };
+    const textShards = new Map([['005', buildTextShardNdjson([{ docId: 25, text: '趙州趙州' }])]]);
+    const fetchMock = installFetchMock({ manifest, textShards });
+    try {
+        assert.equal(await verifyDocPhrase(25, '趙州'), 2,
+            'bucket computed with manifest count (10) → correct shard 005, 2 hits');
+        const buckets = fetchMock.calls
+            .map((u) => (u.match(/\/text\/([0-9a-f]{3})\.bin$/) || [])[1])
+            .filter(Boolean);
+        assert.deepEqual(buckets, ['005'], 'fetched bucket 005 (25 % 10), never 019 (25 % 4096)');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+test('searchFulltext v2 (finding #3): textShards:null → surface index candidates unverified, no doomed text-shard fetch', async () => {
+    const { searchFulltext } = await freshSearchModule();
+    // A 1-char CJK run with no unigram index forces the v2 verification path
+    // (droppedUnigramRun); shardLayoutFor emits v2 shards (sawV2) too. With
+    // textShards:null the path must skip text verification, not 404 per bucket.
+    const docCount = 1;
+    const layout = shardLayoutFor([{ term: '無門', docIds: [0] }], docCount);
+    const manifest = buildManifest(layout, docCount, { version: 3 });
+    manifest.textShards = null;
+    const fetchMock = installFetchMock({ manifest, shardLayout: layout, textShards: new Map() });
+    try {
+        const results = await searchFulltext('無門x佛');
+        assert.deepEqual(results, [{ docId: 0, hitCount: 1 }],
+            'index candidate surfaced unverified (hitCount 1)');
+        const textFetches = fetchMock.calls.filter((u) => /\/text\/[0-9a-f]{3}\.bin$/.test(u));
+        assert.equal(textFetches.length, 0, 'no doomed per-bucket text-shard fetch');
+    } finally {
+        fetchMock.restore();
+    }
+});
+
+// =====================================================================
 // 18. getManifestInfo (audit #6: staleness surface)
 // =====================================================================
 
