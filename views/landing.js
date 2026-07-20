@@ -199,15 +199,15 @@ export function render(_route, mount, shell) {
                     <h3 class="dict-pitch-title">Every term defined only from how Zen Masters use it.</h3>
                     <p class="dict-pitch-text">
                         Not a Buddhist dictionary and not a Chinese one. Each entry is built from the
-                        Zen record itself &mdash; described, never interpreted &mdash; and every meaning is
+                        Zen record itself (described, never interpreted) and every meaning is
                         backed by verbatim passages anchored to the text and line they came from. It shows
                         you where Zen <em>bends</em> a word: <span class="dict-pitch-zh">拂子</span> is a
                         fly-whisk in any dictionary; in the Zen records it is the emblem of the teaching
-                        seat. <span class="dict-pitch-zh">和尚</span> is a master &mdash; and also the
+                        seat. <span class="dict-pitch-zh">和尚</span> is a master, and also the
                         preceptor who confers the precepts.
                     </p>
                     <p class="dict-pitch-stats" id="dict-pitch-stats">
-                        <span class="dict-pitch-stat"><strong id="dict-pitch-count">&mdash;</strong> terms</span>
+                        <span class="dict-pitch-stat"><strong id="dict-pitch-count">&hellip;</strong> terms</span>
                         <span class="dict-pitch-stat">quoted from the <strong>Chan corpus</strong></span>
                         <span class="dict-pitch-stat">free &amp; open</span>
                     </p>
@@ -217,7 +217,7 @@ export function render(_route, mount, shell) {
 
             <div class="community-research" id="community-research">
                 <h3 class="community-research-heading">Community Research</h3>
-                <p class="community-research-desc">Browse knowledge graphs and passage collections shared by scholars. Sync your own collections, translations, termbases, and translation memory with the community &mdash; all your local data is preserved during sync.</p>
+                <p class="community-research-desc">Browse knowledge graphs and passage collections shared by scholars. Sync your own collections, translations, termbases, and translation memory with the community. All your local data is preserved during sync.</p>
                 <div class="community-research-scroll" id="community-research-scroll">
                     <div class="community-card community-card--skeleton"></div>
                     <div class="community-card community-card--skeleton"></div>
@@ -332,8 +332,8 @@ export function render(_route, mount, shell) {
             <div class="graph-showcase">
                 <h3 class="graph-showcase-heading">Interactive Knowledge Graphs</h3>
                 <p class="graph-showcase-desc">
-                    Every collection can be visualized as a force-directed graph. Seven node types &mdash;
-                    passages, concepts, Zen masters, terms, collections, books, and web links &mdash;
+                    Every collection can be visualized as a force-directed graph. Seven node types
+                    (passages, concepts, Zen masters, terms, collections, books, and web links)
                     connected by typed, labeled edges.
                 </p>
                 <div class="graph-showcase-features">
@@ -362,7 +362,7 @@ export function render(_route, mount, shell) {
                         <span class="graph-showcase-icon" style="font-size:1.3rem;color:var(--accent)">&#x5B57;</span>
                         <div>
                             <strong>Hover dictionary</strong>
-                            <p>CC-CEDICT lookup on any Chinese character &mdash; in the reader, graph popups, and collection views.</p>
+                            <p>CC-CEDICT lookup on any Chinese character (in the reader, graph popups, and collection views).</p>
                         </div>
                     </div>
                 </div>
