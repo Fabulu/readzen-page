@@ -5544,10 +5544,8 @@ a.master-appearance-title:hover {
     cursor: pointer;
 }
 .header-nav-articles-menu {
-    position: absolute;
-    top: calc(100% + 0.4rem);
-    right: 0;
-    z-index: 60;
+    position: fixed;
+    z-index: 200;
     min-width: 12rem;
     display: flex;
     flex-direction: column;

@@ -535,6 +535,14 @@ export function mountShell(root, route) {
         articlesTrigger.addEventListener('click', (e) => {
             e.stopPropagation();
             const open = articlesMenu.hidden;
+            if (open) {
+                // The nav is an overflow-x:auto scroll container, which clips an
+                // absolutely-positioned child; anchor the fixed menu to the trigger.
+                const r = articlesTrigger.getBoundingClientRect();
+                articlesMenu.style.top = (r.bottom + 6) + 'px';
+                articlesMenu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+                articlesMenu.style.left = 'auto';
+            }
             articlesMenu.hidden = !open;
             articlesTrigger.setAttribute('aria-expanded', String(open));
         });
