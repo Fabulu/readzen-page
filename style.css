@@ -6598,6 +6598,13 @@ a.master-appearance-title:hover {
     border: 1px solid var(--border);
     border-radius: 0.4rem;
 }
+/* Native dropdown popup: without explicit option colors the OS renders the list
+   light while the text stays theme-light -> white-on-white in dark mode (same
+   fix as .align-mode-ctl select). */
+.canon-version-select { color-scheme: dark; }
+:root[data-theme="light"] .canon-version-select { color-scheme: light; }
+.canon-version-select option,
+.canon-version-select optgroup { background: #1c1812; color: #e8ddc8; }
 .canon-version-note { margin: 0.1rem 0 0; font-size: 0.85rem; color: var(--text-soft); }
 .canon-version-note--muted { color: var(--muted); }
 .canon-version-note code {
