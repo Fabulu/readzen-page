@@ -1390,7 +1390,7 @@ code, .mono { font-family: var(--mono); }
     color: var(--text);
 }
 .dict-compact-row:hover { background: var(--paper); }
-.dict-compact-term { font-size: 1.05rem; min-width: 6.5rem; }
+.dict-compact-term { font-size: 1.05rem; flex: 0 0 8rem; overflow-wrap: anywhere; }
 .dict-compact-gloss { color: var(--text-soft); flex: 1; }
 .dict-compact-senses { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
 
