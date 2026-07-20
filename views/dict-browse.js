@@ -5,7 +5,7 @@
 // views/masters-browse.js.
 // Route: #/dict  (with no term; #/dict/{term} stays a CC-CEDICT lookup)
 
-import { loadZenDict, buildZenCard } from '../lib/zen-dict.js';
+import { loadZenDict, buildZenCard, bindZenEvidenceLinks } from '../lib/zen-dict.js';
 import { renderLookupCard } from '../lib/lookup-card.js';
 import { escapeHtml } from '../lib/format.js';
 
@@ -53,22 +53,7 @@ export async function render(route, mount, shell) {
         return;
     }
 
-    // Precompute a lowercase search blob per entry (covers ZH SourceTerm +
-    // occurrence KWIC and EN PreferredTarget / AlternateTargets / Explanation
-    // / Note across all senses).
-    for (const e of entries) {
-        if (e._search != null) continue;
-        const bits = [e.sourceTerm];
-        for (const s of e.senses || []) {
-            bits.push(s.preferredTarget, s.explanation, s.note, s.status);
-            if (s.alternateTargets) bits.push(s.alternateTargets.join(' '));
-            for (const occ of s.occurrences || []) {
-                if (!occ) continue;
-                bits.push(occ.Kwic || occ.kwic || occ.Snippet || occ.snippet || occ.Text || occ.text || '');
-            }
-        }
-        e._search = bits.filter(Boolean).join('  ').toLowerCase();
-    }
+    for (const e of entries) prepareDictionarySearchEntry(e);
 
     renderBrowse(mount, entries, route.q || '');
 }
@@ -137,10 +122,8 @@ function renderBrowse(mount, entries, activeQ) {
     let page = 0;
 
     function update() {
-        const q = input.value.trim().toLowerCase();
-        const filtered = q
-            ? entries.filter((e) => e._search.includes(q))
-            : entries;
+        const q = input.value.trim();
+        const filtered = q ? searchDictionaryEntries(entries, q) : entries;
 
         // This is a browser, not a search box: every term is reachable by paging.
         // Compact rows are cheap, so they page in larger chunks than full cards.
@@ -185,6 +168,71 @@ function renderBrowse(mount, entries, activeQ) {
     if (activeQ) input.focus();
 }
 
+/** Normalize reader queries without turning unrelated English words into synonyms. */
+export function normalizeDictionaryQuery(value) {
+    return String(value || '')
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/[\p{P}\p{S}]+/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+/** Build ranked, field-aware lookup data. SearchAliases are intentionally non-display. */
+export function prepareDictionarySearchEntry(entry) {
+    if (!entry || entry._dictSearch) return entry;
+    const preferred = [];
+    const alternates = [];
+    const aliases = [];
+    const prose = [];
+    for (const sense of entry.senses || []) {
+        if (sense.preferredTarget) preferred.push(sense.preferredTarget);
+        alternates.push(...(sense.alternateTargets || []));
+        aliases.push(...(sense.searchAliases || []));
+        prose.push(sense.explanation, sense.note, sense.status);
+        for (const occ of sense.occurrences || []) {
+            if (!occ) continue;
+            prose.push(occ.Kwic || occ.kwic || occ.Snippet || occ.snippet || occ.Text || occ.text || '');
+        }
+    }
+    const normList = (items) => items.filter(Boolean).map(normalizeDictionaryQuery).filter(Boolean);
+    entry._dictSearch = {
+        source: normalizeDictionaryQuery(entry.sourceTerm),
+        preferred: normList(preferred),
+        alternates: normList(alternates),
+        aliases: normList(aliases),
+        prose: normalizeDictionaryQuery(prose.filter(Boolean).join(' \u0001 ')),
+    };
+    return entry;
+}
+
+/** Return -1 for no match; larger values rank stronger lexical evidence first. */
+export function rankDictionaryEntry(entry, query) {
+    const q = normalizeDictionaryQuery(query);
+    if (!q) return 0;
+    prepareDictionarySearchEntry(entry);
+    const s = entry._dictSearch;
+    if (s.source === q) return 1000;
+    if (s.source.includes(q)) return 950;
+    if (s.preferred.includes(q)) return 900;
+    if (s.preferred.some((value) => value.includes(q))) return 850;
+    if (s.alternates.includes(q)) return 800;
+    if (s.alternates.some((value) => value.includes(q))) return 750;
+    if (s.aliases.includes(q)) return 700;
+    if (s.aliases.some((value) => value.includes(q))) return 650;
+    if (s.prose.includes(q)) return 100;
+    return -1;
+}
+
+/** Stable ranked dictionary search used by the browse view and regression tests. */
+export function searchDictionaryEntries(entries, query) {
+    return (entries || [])
+        .map((entry, index) => ({ entry, index, score: rankDictionaryEntry(entry, query) }))
+        .filter((row) => row.score >= 0)
+        .sort((a, b) => b.score - a.score || a.index - b.index)
+        .map((row) => row.entry);
+}
+
 /** Prev / page numbers / Next. Hidden entirely when everything fits on one page. */
 function renderPager(mount, page, pages, go) {
     mount.innerHTML = '';
@@ -226,6 +274,7 @@ function fullCell(entry) {
     const cell = document.createElement('div');
     cell.className = 'dict-cell';
     renderLookupCard(buildZenCard(entry), cell);
+    bindZenEvidenceLinks(cell);
     cell.appendChild(permalink(entry.sourceTerm));
     return cell;
 }

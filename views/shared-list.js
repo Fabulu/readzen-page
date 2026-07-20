@@ -22,7 +22,7 @@ export async function render(route, mount, shell) {
         shell.setTitle('Shared Reading List');
         shell.setContext(
             list.length > 0
-                ? `Shared list — ${list.length} text${list.length === 1 ? '' : 's'}`
+                ? `Shared list: ${list.length} text${list.length === 1 ? '' : 's'}`
                 : 'Shared list',
             'Click any text to read.'
         );
@@ -52,7 +52,7 @@ export async function render(route, mount, shell) {
     mount.innerHTML = `
         <section class="shared-list">
             <div class="shared-list-banner">
-                <p class="shared-list-banner-title">Shared list — click any text to read</p>
+                <p class="shared-list-banner-title">Shared list: click any text to read</p>
                 <p class="shared-list-banner-sub">Read-only. Save to your reading list to keep these items locally.</p>
             </div>
 

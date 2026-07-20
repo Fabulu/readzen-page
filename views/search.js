@@ -311,7 +311,7 @@ export async function render(route, mount, shell) {
                 (groupArr.length === 1 ? '' : 's') + ')';
             // Audit #2: surface silent truncation (VERIFICATION_CAP) in the label.
             if (_ftStats && _ftStats.truncated) {
-                label += ' — showing top ' + _ftStats.cap + ' of ' +
+                label += ', showing top ' + _ftStats.cap + ' of ' +
                     _ftStats.candidateCount + ' matching texts';
             }
             if (!finalized) {

@@ -1124,7 +1124,7 @@ function buildLegend(el, embed) {
             <div class="lin-leg-sec lin-leg-glyphs">
                 <span>○ posthumous</span><span>◇ by proxy</span><span>▤ from a book</span><span>⊣… teacher off-chart</span>
             </div>
-            <div class="lin-leg-sec lin-leg-seal"><span class="lin-leg-sealmark"></span> contested — an earlier source disagrees. Click it.</div>
+            <div class="lin-leg-sec lin-leg-seal"><span class="lin-leg-sealmark"></span> contested: an earlier source disagrees. Click it.</div>
             <div class="lin-leg-sec lin-leg-schools">
                 ${hueChip('linji', 'Linji')}${hueChip('caodong', 'Caodong')}${hueChip('yunmen', 'Yunmen')}${hueChip('fayan', 'Fayan')}${hueChip('guiyang', 'Guiyang')}${hueChip('hongzhou', 'Hongzhou')}${hueChip('shitou', 'Shitou')}${hueChip('niutou', 'Niutou')}${hueChip('heze', 'Heze')}${hueChip('korean-seon', 'Korean Seon')}${hueChip('early-chan', 'Early Chan')}${hueChip('pre-chan', 'Pre-Chan')}
             </div>

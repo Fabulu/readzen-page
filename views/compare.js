@@ -196,7 +196,7 @@ function fillTranslationPane(key, workResult, sourceLabel, hasRange, startLine, 
                 <p>Install Read Zen to compare your edits against other translations in this tab.</p>
             </div>
         `;
-        meta.textContent = '— local only —';
+        meta.textContent = '(local only)';
         title.textContent = '';
         return;
     }

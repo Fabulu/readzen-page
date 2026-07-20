@@ -23,13 +23,14 @@ import * as scholarGraph from './views/scholar-graph.js';
 import * as search from './views/search.js';
 import * as compare from './views/compare.js';
 import * as sharedList from './views/shared-list.js';
+import * as canon from './views/canon.js';
 import { dismissInlineDict } from './lib/inline-dict.js';
 import { initKeyboard, dismissAllPopups } from './lib/keyboard.js';
 import { detachAllMirrors } from './lib/selection-sync.js';
 
 // Lookup views share a common contract: instant render, no app-first race.
 // They're dispatched before the placeholder path in `init` below.
-const LOOKUP_VIEWS = [dictionary, dictBrowse, termbase, master, mastersBrowse, lineageGraph, tags, scholarGraph, scholar, search, sharedList];
+const LOOKUP_VIEWS = [dictionary, dictBrowse, termbase, master, mastersBrowse, lineageGraph, tags, scholarGraph, scholar, search, sharedList, canon];
 
 const RELEASES_URL = 'https://github.com/Fabulu/ReadZen/releases';
 

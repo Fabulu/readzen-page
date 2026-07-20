@@ -211,21 +211,21 @@ function transmissionSentence(n) {
             const label = [s.sourceTitleEn, s.sourceTitle].filter(Boolean).join(' ');
             return `<a href="#" data-focus="${escapeHtml(s.id)}" class="lin-em">${escapeHtml(label)}</a>`;
         }).join(', ');
-        return `No living teacher — awakened through ${books}. His record says so.`;
+        return `No living teacher: awakened through ${books}. His record says so.`;
     }
     if (n.transmission === 'book' && n.parentEdge && n.parentEdge.from.isSource) {
         const s = n.parentEdge.from;
         const label = [s.sourceTitleEn, s.sourceTitle].filter(Boolean).join(' ');
-        return `No living teacher — awakened through <span class="lin-em">${escapeHtml(label)}</span>. His record says so.`;
+        return `No living teacher: awakened through <span class="lin-em">${escapeHtml(label)}</span>. His record says so.`;
     }
-    if (n.stub) return `Dharma heir of <span class="lin-stub-name">${escapeHtml(n.stubLabel || '')}</span> — named in the record, not yet in this corpus.`;
-    if (!n.parentEdge) return 'A root of the tradition — nothing stands above him on this chart.';
+    if (n.stub) return `Dharma heir of <span class="lin-stub-name">${escapeHtml(n.stubLabel || '')}</span>, named in the record, not yet in this corpus.`;
+    if (!n.parentEdge) return 'A root of the tradition: nothing stands above him on this chart.';
     const t = n.parentEdge.from;
     const who = `<a href="#" data-focus="${escapeHtml(t.id)}">${escapeHtml(t.cjk || t.primary)}</a>`;
-    if (n.transmission === '遙嗣') return `Posthumous (遙嗣) heir of ${who} — a transmission acknowledged across a gap.`;
-    if (n.transmission === '代囑') return `Heir of ${who} by proxy (代囑) — an intermediary hand.`;
+    if (n.transmission === '遙嗣') return `Posthumous (遙嗣) heir of ${who}, a transmission acknowledged across a gap.`;
+    if (n.transmission === '代囑') return `Heir of ${who} by proxy (代囑), an intermediary hand.`;
     if (n.transmission === 'disputed') return `Disputed heir of ${who}.`;
-    if (n.transmission === 'book') return `Awakened through the writings of ${who} — a transmission by book, not by meeting.`;
+    if (n.transmission === 'book') return `Awakened through the writings of ${who}, a transmission by book, not by meeting.`;
     return `Dharma heir of ${who}.`;
 }
 

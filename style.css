@@ -5534,6 +5534,45 @@ a.master-appearance-title:hover {
     background: var(--accent-soft);
 }
 
+/* Articles dropdown (ReadZen network): one compact nav pill that reveals the
+   external article sites. Toggle popup styled like the other panels. */
+.header-nav-articles { position: relative; display: inline-flex; align-items: center; }
+.header-nav-articles-trigger {
+    background: none;
+    font-family: inherit;
+    line-height: normal;
+    cursor: pointer;
+}
+.header-nav-articles-menu {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    z-index: 60;
+    min-width: 12rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.35rem;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.header-nav-articles-menu[hidden] { display: none; }
+.header-nav-articles-item {
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    color: var(--text-soft);
+    text-decoration: none;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    transition: color 120ms, background 120ms;
+}
+.header-nav-articles-item:hover {
+    color: var(--accent);
+    background: var(--accent-soft);
+}
+
 /* ━━ Graph Canvas Sizing ━━ */
 .lineage-container--scholar { height: min(800px, 85vh); }
 
@@ -6541,4 +6580,75 @@ a.master-appearance-title:hover {
     }
     .lin-panel--open { transform: translateY(0); }
     .lin-dispute-cols { grid-template-columns: 1fr; }
+}
+
+/* ── Canon list inspector (views/canon.js) ──────────────────────────────
+   Discreet, footer-linked index of the curated Zen-text canon with a
+   time-travel version picker. Leans on the shared .lookup-card shell; these
+   rules only style the canon-specific list, groups, and picker. */
+.canon-version { display: flex; flex-direction: column; gap: 0.4rem; }
+.canon-version-label {
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+.canon-version-select {
+    max-width: 32rem;
+    padding: 0.4rem 0.5rem;
+    font: inherit;
+    color: var(--text);
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+}
+.canon-version-note { margin: 0.1rem 0 0; font-size: 0.85rem; color: var(--text-soft); }
+.canon-version-note--muted { color: var(--muted); }
+.canon-version-note code {
+    font-family: var(--mono);
+    padding: 0.05rem 0.3rem;
+    background: var(--bg-soft);
+    border-radius: 0.25rem;
+}
+.canon-group { margin-bottom: 1.1rem; }
+.canon-group-head {
+    margin: 0 0 0.35rem;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border-soft);
+    padding-bottom: 0.25rem;
+}
+.canon-group-count { color: var(--text-soft); }
+.canon-list { list-style: none; margin: 0; padding: 0; }
+.canon-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.28rem 0;
+    border-bottom: 1px solid var(--border-soft);
+}
+.canon-row:last-child { border-bottom: none; }
+.canon-link { flex: 1 1 auto; }
+.canon-id {
+    flex: 0 0 auto;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--muted);
+}
+.canon-changelog-summary { cursor: pointer; }
+.canon-changelog-body {
+    margin: 0.6rem 0 0;
+    max-height: 22rem;
+    overflow: auto;
+    padding: 0.75rem;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    color: var(--text-soft);
+    background: var(--bg-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: 0.4rem;
 }

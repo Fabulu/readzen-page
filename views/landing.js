@@ -443,7 +443,7 @@ export function render(_route, mount, shell) {
                         </ol>
                         <p class="install-tip">
                             <strong>Tip:</strong> For the simplest experience, download the
-                            self-contained zip — no .NET runtime needed, just extract and run.
+                            self-contained zip: no .NET runtime needed, just extract and run.
                         </p>
                         <p class="install-why">
                             Linux gets first-class treatment. No signing required, no

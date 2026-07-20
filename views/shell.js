@@ -32,7 +32,7 @@ const PALETTE_OPTIONS = [
     { id: 'paper', name: 'Paper', desc: 'The existing light theme. Warm off-white, ochre accent.' },
     { id: 'woodblock', name: 'Woodblock', desc: 'Aged block-print parchment, rust-red accent, deep brown text. Reads like a printed book.' },
     { id: 'matcha', name: 'Matcha', desc: 'Soft tea-green paper, deep green accent. Playful without being loud, and easy for long reads.' },
-    { id: 'plum', name: 'Plum', desc: 'Blossom-tinted paper with a plum accent. The most playful of the lot — and it still reads.' },
+    { id: 'plum', name: 'Plum', desc: 'Blossom-tinted paper with a plum accent. The most playful of the lot, and it still reads.' },
 ];
 
 // Candidate header layouts, offered live so they can be compared on real pages
@@ -196,6 +196,14 @@ export function mountShell(root, route) {
                     ${NAV_LINKS.map((l) => `
                         <a class="header-nav-link${isNavActive(l, route) ? ' header-nav-link--active' : ''}"
                            href="${l.href}"${isNavActive(l, route) ? ' aria-current="page"' : ''}>${l.label}</a>`).join('')}
+                    <span class="header-nav-articles" id="articles-nav">
+                        <button type="button" class="header-nav-link header-nav-articles-trigger"
+                                id="articles-nav-trigger" aria-haspopup="true" aria-expanded="false">Articles &#x25BE;</button>
+                        <span class="header-nav-articles-menu" id="articles-nav-menu" hidden>
+                            <a class="header-nav-articles-item" href="https://empty-robe.pages.dev">The Empty Robe</a>
+                            <a class="header-nav-articles-item" href="https://suzuki-vs-zen.pages.dev">Suzuki vs. Zen</a>
+                        </span>
+                    </span>
                 </nav>
                 <div class="shell-route" id="shell-route-box">
                     <span class="route-chip" id="route-chip" hidden></span>
@@ -264,7 +272,7 @@ export function mountShell(root, route) {
             </aside>
 
             <footer class="shell-foot">
-                <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA + OpenZenTexts · <a href="/credits">Credits &amp; licenses</a> · <a href="https://ko-fi.com/readzen" target="_blank" rel="noreferrer">Support this project</a> · <a href="#" id="contact-link" class="shell-foot-contact">Contact</a></p>
+                <p>Open source on <a href="https://github.com/Fabulu/ReadZen">GitHub</a> · Source: CBETA + OpenZenTexts · <a href="/credits">Credits &amp; licenses</a> · <a href="https://ko-fi.com/readzen" target="_blank" rel="noreferrer">Support this project</a> · <a href="#/canon">Canon</a> · <a href="#" id="contact-link" class="shell-foot-contact">Contact</a></p>
                 <p class="shell-foot-pref">
                     Auto-open in desktop app:
                     <a href="#" id="auto-open-toggle" class="shell-foot-toggle"></a>
@@ -510,6 +518,33 @@ export function mountShell(root, route) {
     if (window._researchMenuCloseHandler) {
         document.removeEventListener('click', window._researchMenuCloseHandler);
         window._researchMenuCloseHandler = null;
+    }
+
+    // Articles dropdown: groups the external "ReadZen network" article sites
+    // under one compact nav affordance. Toggle mirrors the chrome-switch panel;
+    // the outside-click closer is stored on window so a stale one from a prior
+    // mount is removed above before a fresh one is attached (no accumulation).
+    if (window._articlesMenuCloseHandler) {
+        document.removeEventListener('click', window._articlesMenuCloseHandler);
+        window._articlesMenuCloseHandler = null;
+    }
+    const articlesNav = root.querySelector('#articles-nav');
+    const articlesTrigger = root.querySelector('#articles-nav-trigger');
+    const articlesMenu = root.querySelector('#articles-nav-menu');
+    if (articlesNav && articlesTrigger && articlesMenu) {
+        articlesTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const open = articlesMenu.hidden;
+            articlesMenu.hidden = !open;
+            articlesTrigger.setAttribute('aria-expanded', String(open));
+        });
+        window._articlesMenuCloseHandler = (e) => {
+            if (!articlesNav.contains(e.target)) {
+                articlesMenu.hidden = true;
+                articlesTrigger.setAttribute('aria-expanded', 'false');
+            }
+        };
+        document.addEventListener('click', window._articlesMenuCloseHandler);
     }
 
     // Header-layout switcher. Applying a layout only swaps a class on .shell --
