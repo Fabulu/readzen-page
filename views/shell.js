@@ -202,6 +202,7 @@ export function mountShell(root, route) {
                         <span class="header-nav-articles-menu" id="articles-nav-menu" hidden>
                             <a class="header-nav-articles-item" href="https://empty-robe.pages.dev">The Empty Robe</a>
                             <a class="header-nav-articles-item" href="https://suzuki-vs-zen.pages.dev">Suzuki vs. Zen</a>
+                            <a class="header-nav-articles-item" href="https://blyth-vs-zen.pages.dev">Blyth vs. Zen</a>
                         </span>
                     </span>
                 </nav>
