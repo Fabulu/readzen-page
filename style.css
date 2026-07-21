@@ -1315,6 +1315,45 @@ code, .mono { font-family: var(--mono); }
 .dict-grid { margin-top: 1rem; }
 .dict-more-hint { grid-column: 1 / -1; opacity: 0.6; text-align: center; padding: 1rem; }
 
+/* The grid is a focusable region (keyboard paging); the global :focus-visible
+   ring on a full-width block reads as a broken layout, so offset it outward
+   and drop it for mouse focus entirely. */
+.dict-grid:focus { outline: none; }
+.dict-grid:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 6px;
+    border-radius: 6px;
+}
+
+/* Thumb index — the cut tabs of a paper dictionary. One tab per page, labeled
+   with the headword range that page covers, in radical-stroke (code point)
+   order. Only shown for the unfiltered browse. */
+.dict-thumb-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 1rem;
+}
+.dict-thumb {
+    background: var(--paper);
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    color: var(--text-soft);
+    font-size: 0.85rem;
+    line-height: 1.2;
+    padding: 0.3rem 0.65rem;
+    cursor: pointer;
+    font-variant-east-asian: traditional;
+    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+.dict-thumb:hover { color: var(--accent); border-color: var(--accent); }
+.dict-thumb--current {
+    color: var(--accent-ink);
+    background: var(--accent);
+    border-color: var(--accent);
+    font-weight: 600;
+}
+
 /* Pager — every term is reachable by paging; nothing is hidden behind a search. */
 .dict-pager {
     display: flex;
@@ -1341,7 +1380,49 @@ code, .mono { font-family: var(--mono); }
     border-color: var(--accent);
     background: var(--accent-soft);
 }
+/* Chevron endpoints (first/prev/next/last) — same footprint, quieter width. */
+.dict-page-btn--nav { padding: 0.3rem 0.45rem; font-size: 0.9rem; line-height: 1; }
 .dict-page-gap { color: var(--muted); padding: 0 0.15rem; }
+
+/* "Page [ 5 ] of 19" — the number is the direct-jump input. */
+.dict-page-jump {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: 0.55rem;
+    padding-left: 0.8rem;
+    border-left: 1px solid var(--border-soft);
+    color: var(--muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+.dict-page-jump input {
+    width: 3.2em;
+    text-align: center;
+    background: var(--paper);
+    color: var(--text);
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    font: inherit;
+    padding: 0.22rem 0.2rem;
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+.dict-page-jump input::-webkit-outer-spin-button,
+.dict-page-jump input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.dict-page-jump input:focus { outline: none; border-color: var(--accent); }
+
+/* Keyboard hint — informational garnish; hidden on touch-sized screens. */
+.dict-pager-hint {
+    flex-basis: 100%;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.72rem;
+    margin-top: 0.3rem;
+}
+@media (max-width: 640px) {
+    .dict-pager-hint { display: none; }
+}
 
 /* Cards — the original responsive grid. Equal-height cells, so a short entry
    beside a long one leaves whitespace; fast to scan, cramped to read. */

@@ -91,6 +91,13 @@ function setLayout(v) {
 function renderBrowse(mount, entries, activeQ) {
     let layout = getLayout();
 
+    // Browse order: sort by headword code point. For CJK that is KangXi
+    // radical-then-stroke order — the traditional dictionary ordering — which
+    // is what makes the thumb-index ranges below monotonic and meaningful.
+    // The ORIGINAL array is kept for search so ranked tie-breaks stay stable.
+    const browseEntries = [...entries].sort((a, b) =>
+        a.sourceTerm < b.sourceTerm ? -1 : a.sourceTerm > b.sourceTerm ? 1 : 0);
+
     mount.innerHTML = `
         <div class="masters-browse dict-browse">
             <header class="masters-browse-header">
@@ -106,29 +113,36 @@ function renderBrowse(mount, entries, activeQ) {
                             <button type="button" class="dict-layout-btn" data-layout="${l.id}"
                                     aria-pressed="${l.id === layout}">${l.label}</button>`).join('')}
                     </div>
-                    <span class="masters-count"></span>
+                    <span class="masters-count" aria-live="polite"></span>
                 </div>
             </header>
-            <div class="dict-grid" id="dict-grid"></div>
+            <nav class="dict-thumb-strip" id="dict-thumbs" aria-label="Jump to a headword range"></nav>
+            <div class="dict-grid" id="dict-grid" tabindex="0" role="region"
+                 aria-label="Dictionary entries. With this list focused, use Left and Right arrows to change page, Home for the first page, End for the last."
+                 aria-keyshortcuts="ArrowLeft ArrowRight Home End"></div>
             <nav class="dict-pager" id="dict-pager" aria-label="Dictionary pages"></nav>
         </div>
     `;
 
+    const root = mount.querySelector('.dict-browse');
     const grid = mount.querySelector('#dict-grid');
     const input = mount.querySelector('.dict-search-input');
     const countEl = mount.querySelector('.masters-count');
+    const thumbs = mount.querySelector('#dict-thumbs');
     const pager = mount.querySelector('#dict-pager');
 
     let page = 0;
+    let pageCount = 1;
 
     function update() {
         const q = input.value.trim();
-        const filtered = q ? searchDictionaryEntries(entries, q) : entries;
+        const filtered = q ? searchDictionaryEntries(entries, q) : browseEntries;
 
         // This is a browser, not a search box: every term is reachable by paging.
         // Compact rows are cheap, so they page in larger chunks than full cards.
         const perPage = layout === 'compact' ? 200 : 60;
         const pages = Math.max(1, Math.ceil(filtered.length / perPage));
+        pageCount = pages;
         if (page > pages - 1) page = pages - 1;
         if (page < 0) page = 0;
         const start = page * perPage;
@@ -144,12 +158,38 @@ function renderBrowse(mount, entries, activeQ) {
             grid.appendChild(layout === 'compact' ? compactRow(entry) : fullCell(entry));
         }
 
-        renderPager(pager, page, pages, (p) => {
-            page = p;
-            update();
-            grid.scrollIntoView({ block: 'start', behavior: 'smooth' });
-        });
+        // Thumb index only for the unfiltered browse: search results are
+        // ranked, not alphabetical, so headword ranges there would mislead.
+        renderThumbStrip(thumbs, q ? [] : pageRangeLabels(filtered, perPage), page, goTo);
+        renderPager(pager, page, pages, goTo);
     }
+
+    /** Single navigation entry point used by the pager, thumbs, and keyboard. */
+    function goTo(target, opts = {}) {
+        const next = Math.max(0, Math.min(pageCount - 1, target));
+        if (next === page) return;
+        page = next;
+        update();
+        grid.scrollIntoView({ block: 'start', behavior: opts.instant ? 'auto' : 'smooth' });
+        if (opts.focusGrid) grid.focus({ preventScroll: true });
+    }
+
+    // Keyboard paging anywhere in the view except while typing in a field.
+    // Focus returns to the grid after a keyboard jump so a re-rendered pager
+    // button losing focus never strands the shortcut chain on <body>.
+    root.addEventListener('keydown', (e) => {
+        if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        const tag = e.target && e.target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        let target = null;
+        if (e.key === 'ArrowLeft') target = page - 1;
+        else if (e.key === 'ArrowRight') target = page + 1;
+        else if (e.key === 'Home') target = 0;
+        else if (e.key === 'End') target = pageCount - 1;
+        if (target === null) return;
+        e.preventDefault();
+        goTo(target, { instant: true, focusGrid: true });
+    });
 
     mount.querySelectorAll('.dict-layout-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -233,7 +273,43 @@ export function searchDictionaryEntries(entries, query) {
         .map((row) => row.entry);
 }
 
-/** Prev / page numbers / Next. Hidden entirely when everything fits on one page. */
+/**
+ * The thumb index — the cut tabs of a paper dictionary. One tab per page,
+ * labeled with the headword range that page covers (first characters of its
+ * first and last entries), so a reader leaps to a REGION of the dictionary
+ * instead of clicking through page numbers. Rendered only for the sorted,
+ * unfiltered browse; hidden (with the strip collapsed) otherwise.
+ */
+function pageRangeLabels(list, perPage) {
+    const labels = [];
+    for (let start = 0; start < list.length; start += perPage) {
+        const first = [...list[start].sourceTerm][0];
+        const last = [...list[Math.min(start + perPage, list.length) - 1].sourceTerm][0];
+        labels.push(first === last ? first : `${first}–${last}`);
+    }
+    return labels;
+}
+
+function renderThumbStrip(mount, labels, page, go) {
+    mount.innerHTML = '';
+    mount.hidden = labels.length <= 1;
+    if (mount.hidden) return;
+    labels.forEach((label, p) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'dict-thumb' + (p === page ? ' dict-thumb--current' : '');
+        b.textContent = label;
+        b.setAttribute('aria-label', `Page ${p + 1}, entries ${label}`);
+        if (p === page) b.setAttribute('aria-current', 'page');
+        b.addEventListener('click', () => go(p));
+        mount.appendChild(b);
+    });
+}
+
+/**
+ * First / prev / numbered window / next / last, plus an editable "Page N of M"
+ * jump field. Hidden entirely when everything fits on one page.
+ */
 function renderPager(mount, page, pages, go) {
     mount.innerHTML = '';
     if (pages <= 1) return;
@@ -241,15 +317,19 @@ function renderPager(mount, page, pages, go) {
     const btn = (label, targetPage, opts = {}) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'dict-page-btn' + (opts.current ? ' dict-page-btn--current' : '');
+        b.className = 'dict-page-btn'
+            + (opts.current ? ' dict-page-btn--current' : '')
+            + (opts.nav ? ' dict-page-btn--nav' : '');
         b.textContent = label;
+        if (opts.aria) b.setAttribute('aria-label', opts.aria);
         if (opts.current) b.setAttribute('aria-current', 'page');
         if (opts.disabled) b.disabled = true;
         else b.addEventListener('click', () => go(targetPage));
         mount.appendChild(b);
     };
 
-    btn('‹ Prev', page - 1, { disabled: page === 0 });
+    btn('«', 0, { disabled: page === 0, nav: true, aria: 'First page' });
+    btn('‹', page - 1, { disabled: page === 0, nav: true, aria: 'Previous page' });
 
     // First, last, and a window around the current page; gaps become an ellipsis.
     const want = new Set([0, pages - 1, page - 1, page, page + 1]);
@@ -260,13 +340,47 @@ function renderPager(mount, page, pages, go) {
             const gap = document.createElement('span');
             gap.className = 'dict-page-gap';
             gap.textContent = '…';
+            gap.setAttribute('aria-hidden', 'true');
             mount.appendChild(gap);
         }
-        btn(String(p + 1), p, { current: p === page });
+        btn(String(p + 1), p, { current: p === page, aria: `Page ${p + 1}` });
         prev = p;
     }
 
-    btn('Next ›', page + 1, { disabled: page === pages - 1 });
+    btn('›', page + 1, { disabled: page === pages - 1, nav: true, aria: 'Next page' });
+    btn('»', pages - 1, { disabled: page === pages - 1, nav: true, aria: 'Last page' });
+
+    // Direct jump: the page number in "Page N of M" IS the input.
+    const jump = document.createElement('label');
+    jump.className = 'dict-page-jump';
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.inputMode = 'numeric';
+    inp.min = '1';
+    inp.max = String(pages);
+    inp.value = String(page + 1);
+    inp.setAttribute('aria-label', `Go to page, 1 to ${pages}`);
+    const commit = () => {
+        const v = Math.round(Number(inp.value));
+        if (Number.isFinite(v) && v >= 1 && v <= pages && v - 1 !== page) go(v - 1);
+        else inp.value = String(page + 1);
+    };
+    inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    });
+    inp.addEventListener('change', commit);
+    const pre = document.createElement('span');
+    pre.textContent = 'Page';
+    const post = document.createElement('span');
+    post.textContent = `of ${pages}`;
+    jump.append(pre, inp, post);
+    mount.appendChild(jump);
+
+    const hint = document.createElement('span');
+    hint.className = 'dict-pager-hint';
+    hint.setAttribute('aria-hidden', 'true');
+    hint.textContent = '← → page · Home/End first/last (with the list focused)';
+    mount.appendChild(hint);
 }
 
 /** A full entry card, with a permalink to #/dict/{term}. */
