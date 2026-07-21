@@ -88,15 +88,91 @@ function setLayout(v) {
     try { localStorage.setItem(LAYOUT_KEY, v); } catch { /* private mode */ }
 }
 
+/**
+ * Browse-order modes. English readers navigate by MEANING, so the default
+ * sorts entries A–Z by their primary English gloss and labels the thumb
+ * tabs with gloss ranges (abbot – Buddha, …). The 字 mode keeps the
+ * traditional radical-then-stroke (code point) headword order with Chinese
+ * headword-range tabs, for readers who arrive with a character in mind.
+ */
+const ORDERS = [
+    { id: 'en', label: 'English', aria: 'Order by English gloss, A to Z' },
+    { id: 'zh', label: '字', aria: 'Order by Chinese headword, radical and stroke' },
+];
+const ORDER_KEY = 'zl:dict-order';
+const DEFAULT_ORDER = 'en';
+
+function getOrder() {
+    try {
+        const v = localStorage.getItem(ORDER_KEY);
+        return ORDERS.some((o) => o.id === v) ? v : DEFAULT_ORDER;
+    } catch { return DEFAULT_ORDER; }
+}
+function setOrder(v) {
+    try { localStorage.setItem(ORDER_KEY, v); } catch { /* private mode */ }
+}
+
+/** The entry's primary English gloss — the first sense carrying a preferredTarget. */
+function primaryGloss(entry) {
+    for (const sense of (entry && entry.senses) || []) {
+        if (sense && sense.preferredTarget) return sense.preferredTarget;
+    }
+    return '';
+}
+
+/**
+ * Strip leading punctuation/quotes and a trivial leading article, preserving
+ * case. Punctuation is swept BOTH sides of the article: glosses like
+ * `the "cutting off…" phrase` hide a quote behind the article.
+ */
+function trimGloss(gloss) {
+    return String(gloss || '')
+        .normalize('NFKC')
+        .replace(/^[^\p{L}\p{N}]+/u, '')
+        .replace(/^(?:the|an?)\s+/i, '')
+        .replace(/^[^\p{L}\p{N}]+/u, '');
+}
+
+/**
+ * Lowercased alphabetization key for the English browse order. Empty when the
+ * entry has no English gloss anywhere — such entries sort LAST, under a '—' tab.
+ */
+export function dictionaryGlossSortKey(entry) {
+    return trimGloss(primaryGloss(entry)).toLowerCase();
+}
+
+/**
+ * First word of the trimmed gloss (hyphens/apostrophes kept, so
+ * "one-cut-two-pieces" stays whole) for a thumb-tab label; '—' when the
+ * entry has no English gloss, so a tab label is never empty.
+ */
+export function dictionaryGlossLabel(entry) {
+    const m = trimGloss(primaryGloss(entry)).match(/^[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*/u);
+    return m ? m[0] : '—';
+}
+
 function renderBrowse(mount, entries, activeQ) {
     let layout = getLayout();
+    let order = getOrder();
 
-    // Browse order: sort by headword code point. For CJK that is KangXi
-    // radical-then-stroke order — the traditional dictionary ordering — which
-    // is what makes the thumb-index ranges below monotonic and meaningful.
+    // Two browse orders, both monotonic so the thumb-index ranges read true.
     // The ORIGINAL array is kept for search so ranked tie-breaks stay stable.
-    const browseEntries = [...entries].sort((a, b) =>
+    //   zh — headword code point order; for CJK that is KangXi radical-then-
+    //        stroke, the traditional dictionary ordering.
+    //   en — A–Z by primary English gloss (article-stripped, lowercased);
+    //        entries with no gloss sort last, tie-broken by headword.
+    const byHeadword = [...entries].sort((a, b) =>
         a.sourceTerm < b.sourceTerm ? -1 : a.sourceTerm > b.sourceTerm ? 1 : 0);
+    // localeCompare('en') files diacritics under their base letter, so
+    // Śākyamuni sits with the S's instead of after z (code-point order would
+    // exile every accented gloss past the end of the alphabet).
+    const byGloss = [...entries].sort((a, b) => {
+        const ka = dictionaryGlossSortKey(a);
+        const kb = dictionaryGlossSortKey(b);
+        if (!ka !== !kb) return ka ? -1 : 1;
+        return ka.localeCompare(kb, 'en')
+            || (a.sourceTerm < b.sourceTerm ? -1 : a.sourceTerm > b.sourceTerm ? 1 : 0);
+    });
 
     mount.innerHTML = `
         <div class="masters-browse dict-browse">
@@ -108,6 +184,12 @@ function renderBrowse(mount, entries, activeQ) {
                     <input type="text" class="masters-search-input dict-search-input"
                            placeholder="Search Chinese or English…"
                            value="${escapeHtml(activeQ)}" aria-label="Search dictionary" />
+                    <div class="dict-order-switch" role="group" aria-label="Browse order">
+                        ${ORDERS.map((o) => `
+                            <button type="button" class="dict-order-btn" data-order="${o.id}"
+                                    aria-pressed="${o.id === order}" aria-label="${o.aria}"
+                                    title="${o.aria}">${o.label}</button>`).join('')}
+                    </div>
                     <div class="dict-layout-switch" role="group" aria-label="Layout">
                         ${LAYOUTS.map((l) => `
                             <button type="button" class="dict-layout-btn" data-layout="${l.id}"
@@ -116,7 +198,7 @@ function renderBrowse(mount, entries, activeQ) {
                     <span class="masters-count" aria-live="polite"></span>
                 </div>
             </header>
-            <nav class="dict-thumb-strip" id="dict-thumbs" aria-label="Jump to a headword range"></nav>
+            <nav class="dict-thumb-strip" id="dict-thumbs" aria-label="Jump to a range of entries"></nav>
             <div class="dict-grid" id="dict-grid" tabindex="0" role="region"
                  aria-label="Dictionary entries. With this list focused, use Left and Right arrows to change page, Home for the first page, End for the last."
                  aria-keyshortcuts="ArrowLeft ArrowRight Home End"></div>
@@ -136,7 +218,8 @@ function renderBrowse(mount, entries, activeQ) {
 
     function update() {
         const q = input.value.trim();
-        const filtered = q ? searchDictionaryEntries(entries, q) : browseEntries;
+        const filtered = q ? searchDictionaryEntries(entries, q)
+            : (order === 'zh' ? byHeadword : byGloss);
 
         // This is a browser, not a search box: every term is reachable by paging.
         // Compact rows are cheap, so they page in larger chunks than full cards.
@@ -159,8 +242,10 @@ function renderBrowse(mount, entries, activeQ) {
         }
 
         // Thumb index only for the unfiltered browse: search results are
-        // ranked, not alphabetical, so headword ranges there would mislead.
-        renderThumbStrip(thumbs, q ? [] : pageRangeLabels(filtered, perPage), page, goTo);
+        // ranked, not alphabetical, so range tabs there would mislead.
+        thumbs.setAttribute('aria-label', order === 'zh'
+            ? 'Jump to a headword range' : 'Jump to an English gloss range');
+        renderThumbStrip(thumbs, q ? [] : pageRangeLabels(filtered, perPage, order), page, goTo);
         renderPager(pager, page, pages, goTo);
     }
 
@@ -189,6 +274,19 @@ function renderBrowse(mount, entries, activeQ) {
         if (target === null) return;
         e.preventDefault();
         goTo(target, { instant: true, focusGrid: true });
+    });
+
+    mount.querySelectorAll('.dict-order-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.order === order) return;
+            order = btn.dataset.order;
+            setOrder(order);
+            mount.querySelectorAll('.dict-order-btn').forEach((b) => {
+                b.setAttribute('aria-pressed', String(b.dataset.order === order));
+            });
+            page = 0; // a new ordering is a new book — start at its first page
+            update();
+        });
     });
 
     mount.querySelectorAll('.dict-layout-btn').forEach((btn) => {
@@ -275,17 +373,22 @@ export function searchDictionaryEntries(entries, query) {
 
 /**
  * The thumb index — the cut tabs of a paper dictionary. One tab per page,
- * labeled with the headword range that page covers (first characters of its
- * first and last entries), so a reader leaps to a REGION of the dictionary
- * instead of clicking through page numbers. Rendered only for the sorted,
- * unfiltered browse; hidden (with the strip collapsed) otherwise.
+ * labeled with the range that page covers (from its first and last entries),
+ * so a reader leaps to a REGION of the dictionary instead of clicking through
+ * page numbers. In English order the tab shows a gloss range (abbot – Buddha);
+ * in 字 order the first characters of the headwords (㘞–上). Rendered only for
+ * the sorted, unfiltered browse; hidden (with the strip collapsed) otherwise.
  */
-function pageRangeLabels(list, perPage) {
+export function pageRangeLabels(list, perPage, order) {
+    const tab = order === 'zh'
+        ? (e) => [...e.sourceTerm][0]
+        : (e) => dictionaryGlossLabel(e);
+    const sep = order === 'zh' ? '–' : ' – ';
     const labels = [];
     for (let start = 0; start < list.length; start += perPage) {
-        const first = [...list[start].sourceTerm][0];
-        const last = [...list[Math.min(start + perPage, list.length) - 1].sourceTerm][0];
-        labels.push(first === last ? first : `${first}–${last}`);
+        const first = tab(list[start]);
+        const last = tab(list[Math.min(start + perPage, list.length) - 1]);
+        labels.push(first === last ? first : `${first}${sep}${last}`);
     }
     return labels;
 }
