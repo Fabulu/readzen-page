@@ -2,7 +2,7 @@
 // Rendered when no route is present. Landing page with hero, corpus
 // explainer, feature showcase, masters, curated texts, and install help.
 
-import { getLastRead, clearLastRead, getLists, removeFromList } from '../lib/reading-lists.js';
+import { getLists, removeFromList } from '../lib/reading-lists.js';
 import { loadAllTitlesAsArray } from '../lib/titles.js';
 import { loadMasters } from './master.js';
 import { initGraph } from './lineage-graph.js';
@@ -115,16 +115,7 @@ export function render(_route, mount, shell) {
         shell.hideStatus();
     }
 
-    // ── Continue reading banner ──
-    const lastRead = getLastRead();
-    const continueHtml = lastRead
-        ? `<div class="continue-reading" id="continue-reading">
-               <a class="continue-reading-link" href="#/${escapeHtml(lastRead.route || lastRead.fileId)}${lastRead.lineId ? (String(lastRead.route || lastRead.fileId).includes('?') ? '&' : '?') + 'pos=' + encodeURIComponent(lastRead.lineId) : ''}">
-                   Continue reading: ${escapeHtml(lastRead.title)} (${lastRead.scrollPercent}%)
-               </a>
-               <button class="continue-reading-dismiss" id="dismiss-continue" title="Dismiss">\u00d7</button>
-           </div>`
-        : '';
+    const continueHtml = '';
 
     // ── Reading list section ──
     const lists = getLists();
@@ -484,15 +475,6 @@ export function render(_route, mount, shell) {
             .catch(() => { dictCount.closest('.dict-pitch-stats')?.remove(); });
     }
 
-    const dismissBtn = mount.querySelector('#dismiss-continue');
-    if (dismissBtn) {
-        dismissBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            clearLastRead();
-            const banner = mount.querySelector('#continue-reading');
-            if (banner) banner.remove();
-        });
-    }
 
     // ── Landing search form ──
     const landingSearchForm = mount.querySelector('#landing-search-form');
