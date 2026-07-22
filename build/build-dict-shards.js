@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 // build/build-dict-shards.js
 //
-// Reads the CC-CEDICT source file and writes one JSON shard per first
-// traditional character into `../dict/{char}.json`, plus an index listing
-// every shard character at `../dict/_index.json`.
+// Reads the CC-CEDICT source file and writes ~256 bucket shards into
+// `../dict/{bucketId}.json` (each an object `{ char: entry[] }` holding every
+// character that hashes to that bucket), plus `../dict/_manifest.json` mapping
+// each character to its bucket. Bucketing instead of one file per character
+// keeps the shard count near 256 (not ~12k), so the SPA stays well under
+// Cloudflare Pages' 20k-file deploy cap. views/dictionary.js reads exactly this
+// shape: manifest[char] -> bucketId, then dict/{bucketId}.json[char].
 //
 // CC-CEDICT line format:
 //   traditional simplified [pinyin] /definition 1/definition 2/.../
@@ -119,34 +123,40 @@ function clearShardDir() {
     }
 }
 
-/** Writes one JSON shard per bucket and the `_index.json` manifest. */
+// ~256 bucket shards keeps the file count near the old scheme and far under
+// Cloudflare Pages' 20k-file cap (one file per character was ~12k).
+const BUCKET_COUNT = 256;
+
+/** Stable bucket for a character. The manifest records this mapping, so the
+ *  front end never recomputes it — the scheme can change freely between builds. */
+function bucketFor(char) {
+    return (char.codePointAt(0) || 0) % BUCKET_COUNT;
+}
+
+/**
+ * Writes ~256 bucket shards `dict/{bucketId}.json` (each `{ char: entry[] }`)
+ * and `dict/_manifest.json` mapping every character to its bucket — the exact
+ * shape views/dictionary.js#loadShard already expects.
+ */
 function writeShards(shards) {
     mkdirSync(OUT_DIR, { recursive: true });
 
-    const indexChars = [];
+    const manifest = {};        // char -> bucketId
+    const buckets = new Map();  // bucketId -> { char: entry[] }
     for (const [char, entries] of shards) {
-        // Filename uses the raw character — all major filesystems support
-        // Unicode filenames, and the front-end fetches `dict/{char}.json`.
-        const filename = char + '.json';
-        writeFileSync(
-            join(OUT_DIR, filename),
-            JSON.stringify(entries),
-            'utf8'
-        );
-        indexChars.push(char);
+        const b = bucketFor(char);
+        manifest[char] = b;
+        let obj = buckets.get(b);
+        if (!obj) { obj = {}; buckets.set(b, obj); }
+        obj[char] = entries;
     }
 
-    indexChars.sort();
-    writeFileSync(
-        join(OUT_DIR, '_index.json'),
-        JSON.stringify({
-            source: 'CC-CEDICT',
-            generatedAt: new Date().toISOString(),
-            shardCount: indexChars.length,
-            chars: indexChars
-        }, null, 2),
-        'utf8'
-    );
+    for (const [b, obj] of buckets) {
+        writeFileSync(join(OUT_DIR, b + '.json'), JSON.stringify(obj), 'utf8');
+    }
+    writeFileSync(join(OUT_DIR, '_manifest.json'), JSON.stringify(manifest), 'utf8');
+
+    return { bucketCount: buckets.size, charCount: Object.keys(manifest).length };
 }
 
 async function main() {
@@ -154,11 +164,12 @@ async function main() {
     clearShardDir();
 
     const { shards, totalLines, totalEntries } = await buildShards(SOURCE_PATH);
-    writeShards(shards);
+    const { bucketCount, charCount } = writeShards(shards);
 
     console.log(`Lines read       : ${totalLines}`);
     console.log(`Entries parsed   : ${totalEntries}`);
-    console.log(`Shard files      : ${shards.size}`);
+    console.log(`Characters       : ${charCount}`);
+    console.log(`Bucket files     : ${bucketCount} (+ _manifest.json)`);
     console.log(`Output directory : ${OUT_DIR}`);
 }
 
