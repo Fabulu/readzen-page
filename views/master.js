@@ -136,6 +136,7 @@ async function loadMasterCorpus(canonicalName) {
 function slugify(name) {
     return name.toLowerCase()
         .replace(/[\u2019']/g, '')
+        .replace(/[/\\]/g, '')
         .replace(/ /g, '_');
 }
 

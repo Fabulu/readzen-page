@@ -1520,6 +1520,9 @@ code, .mono { font-family: var(--mono); }
     color: var(--accent);
     border-color: var(--accent);
     background: var(--accent-soft);
+    /* Adjacent buttons drop their left border for the segmented look; restore it on the
+       active button so its accent outline closes on the left instead of staying open. */
+    border-left: 1px solid var(--accent);
 }
 
 .scroll-target {

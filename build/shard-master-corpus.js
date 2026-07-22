@@ -8,6 +8,7 @@ function slugify(name) {
   return name
     .toLowerCase()
     .replace(/['ʼ']/g, "")
+    .replace(/[/\\]/g, "")
     .replace(/ /g, "_");
 }
 

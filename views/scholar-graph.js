@@ -8,7 +8,7 @@
 // ego-on-hover highlighting, popup cards, and animated entry.
 
 import { escapeHtml } from '../lib/format.js';
-import { attachInlineDict } from '../lib/inline-dict.js';
+import { attachInlineDict, showZenTerm, dismissZenPanel } from '../lib/inline-dict.js';
 
 import { DATA_REPO_BASE } from '../lib/github.js';
 import { streamJsonl } from '../lib/jsonl.js';
@@ -516,6 +516,22 @@ export async function render(route, mount, shell) {
                     <input type="checkbox" id="scholar-clusters-toggle" />
                     Clusters
                 </label>
+                <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:#B8B8C8;cursor:pointer">
+                    <input type="checkbox" id="scholar-legend-toggle" checked />
+                    Key
+                </label>
+            </div>
+            <div class="scholar-legend" id="scholar-legend" style="position:absolute;top:10px;right:10px;background:rgba(30,30,35,0.92);border:1px solid #3A3A42;border-radius:6px;font-size:11px;color:#C8C8D0;z-index:6;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.35);max-width:46vw">
+                <div id="scholar-legend-head" style="font-weight:600;color:#fff;padding:7px 11px;cursor:pointer;pointer-events:auto;display:flex;align-items:center;justify-content:space-between;gap:12px;user-select:none" title="Collapse / expand"><span>Node key</span><span id="scholar-legend-caret" style="opacity:0.7">&#9662;</span></div>
+                <div id="scholar-legend-body" style="padding:0 11px 9px">
+                <div style="display:flex;align-items:center;gap:7px;margin-top:3px"><svg width="15" height="15" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#6EAFF8"/></svg>Passage</div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:3px"><svg width="15" height="15" viewBox="0 0 16 16"><polygon points="8,1 15,8 8,15 1,8" fill="#FF8A65"/></svg>Concept</div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:3px"><svg width="15" height="15" viewBox="0 0 16 16"><polygon points="8,1 14,4.5 14,11.5 8,15 2,11.5 2,4.5" fill="#FFB74D"/></svg>Master</div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:3px"><svg width="15" height="15" viewBox="0 0 16 16"><rect x="1" y="5" width="14" height="6" rx="3" fill="#81C784"/></svg>Dictionary</div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:3px"><svg width="15" height="15" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="1" fill="#AB47BC"/></svg>Collection</div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:3px"><svg width="15" height="15" viewBox="0 0 16 16"><rect x="4.5" y="1.5" width="7" height="13" rx="1" fill="#D4A574"/></svg>Text</div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:3px"><svg width="15" height="15" viewBox="0 0 16 16"><ellipse cx="8" cy="8" rx="7" ry="4.5" fill="#78909C"/></svg>Link</div>
+                </div>
             </div>
             <a class="lineage-browse-link" id="scholar-graph-back-link" href="#/scholar/${encodeURIComponent(user)}/${encodeURIComponent(collectionId)}">&larr; Back to Collection</a>
         </div>
@@ -732,6 +748,25 @@ export async function render(route, mount, shell) {
             id: nodeId, type: 4,
             label: ref.collectionName || ref.CollectionName || 'Collection',
             ownerUser: ref.ownerUsername || ref.OwnerUsername || user,
+            x: 0, y: 0, vx: 0, vy: 0, degree: 0,
+        });
+    }
+
+    // Dictionary-entry refs → Termbase (type 3) nodes. Manual-add only for v1;
+    // stores only the ref snapshot (SourceTerm + PreferredTarget) — the full
+    // entry is resolved read-only at display time (never serialized here).
+    const dictEntries = collection.dictionaryEntries || collection.DictionaryEntries || [];
+    for (const t of dictEntries) {
+        const src = t.sourceTerm || t.SourceTerm || '';
+        if (!src) continue;
+        const termId = 'term:' + src;
+        if (nodeMap.has(termId) || suppressedNodes.has(termId)) continue;
+        nodeMap.set(termId, {
+            id: termId,
+            type: 3,
+            label: src,
+            sourceTerm: src,
+            definition: t.preferredTarget || t.PreferredTarget || '',
             x: 0, y: 0, vx: 0, vy: 0, degree: 0,
         });
     }
@@ -1845,6 +1880,26 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
         });
     }
 
+    // ── Key/legend: show/hide via the controls checkbox + collapse via its own header ──
+    const legendToggle = canvas.parentElement.querySelector('#scholar-legend-toggle');
+    const legendPanel = canvas.parentElement.querySelector('#scholar-legend');
+    if (legendToggle && legendPanel) {
+        legendPanel.style.display = legendToggle.checked ? '' : 'none';
+        legendToggle.addEventListener('change', () => {
+            legendPanel.style.display = legendToggle.checked ? '' : 'none';
+        });
+    }
+    const legendHead = canvas.parentElement.querySelector('#scholar-legend-head');
+    const legendBody = canvas.parentElement.querySelector('#scholar-legend-body');
+    const legendCaret = canvas.parentElement.querySelector('#scholar-legend-caret');
+    if (legendHead && legendBody) {
+        legendHead.addEventListener('click', () => {
+            const collapsed = legendBody.style.display === 'none';
+            legendBody.style.display = collapsed ? '' : 'none';
+            if (legendCaret) legendCaret.innerHTML = collapsed ? '&#9662;' : '&#9656;';
+        });
+    }
+
     // ── Popup Card ──
     function showNodeCard(node) {
         removeNodeCard();
@@ -1856,7 +1911,7 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
         const card = document.createElement('div');
         card.className = 'graph-card';
 
-        const typeNames = ['Passage', 'Concept', 'Master', 'Term', 'Collection', 'Text', 'Link'];
+        const typeNames = ['Passage', 'Concept', 'Master', 'Dictionary', 'Collection', 'Text', 'Link'];
         const typeName = typeNames[node.type || 0];
 
         let content = `<button class="graph-card-close">\u2715</button>`;
@@ -2132,11 +2187,22 @@ function initGraph(canvas, nodes, edges, collectionId, user, savedLayout, nodeAn
 
         // Attach hover dictionary to Chinese text in the popup
         attachInlineDict(card);
+
+        // Term node: open the docked inline-dict side panel with the full entry,
+        // resolved lazily + read-only inside inline-dict. The card already shows
+        // the header + PreferredTarget snapshot + edge count as an immediate
+        // fallback; the panel carries the rich entry (or handles the empty state).
+        // Guard against the panel opening for a card that was dismissed mid-resolve.
+        if (node.type === 3) {
+            const term = node.sourceTerm || node.label;
+            showZenTerm(term, 0, 0, () => document.body.contains(card)).catch(() => {});
+        }
     }
 
     function removeNodeCard() {
         document.querySelector('.graph-card-backdrop')?.remove();
         document.querySelector('.graph-card')?.remove();
+        dismissZenPanel();
     }
 
     // ── Escape key ──

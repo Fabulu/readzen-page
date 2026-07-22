@@ -147,7 +147,7 @@ async function readJsonl(path) {
 }
 
 function slugify(name) {
-    return name.replace(/'/g, '').replace(/\s+/g, '_');
+    return name.replace(/'/g, '').replace(/[/\\]/g, '').replace(/\s+/g, '_');
 }
 
 // Same rules as views/master.js#formatDates, lib/lineage-data.js#formatDates and
