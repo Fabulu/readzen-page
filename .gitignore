@@ -26,3 +26,6 @@ data/seo-cache/
 /termbase.v2.json
 /termbase.index.json
 /termbase/
+
+# Cloudflare wrangler local cache
+.wrangler/
