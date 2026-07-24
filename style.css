@@ -6590,7 +6590,7 @@ a.master-appearance-title:hover {
 .lin-ev-att--D { color: var(--muted); }
 .lin-ev-warn { color: var(--accent); font-style: italic; font-size: 0.82rem; }
 .lin-transmit { margin: 0.2rem 0 0.6rem; font-size: 0.85rem; color: var(--text-soft); line-height: 1.5; }
-.lin-transmit a, .lin-foot a, .lin-heir { color: var(--accent); text-decoration: none; cursor: pointer; }
+.lin-transmit a, .lin-foot a:not(.lin-btn), .lin-heir { color: var(--accent); text-decoration: none; cursor: pointer; }
 .lin-transmit a:hover, .lin-foot a:hover { text-decoration: underline; }
 .lin-em { font-family: var(--serif); color: var(--text); }
 .lin-stub-name { font-family: var(--serif); color: var(--text-soft); }

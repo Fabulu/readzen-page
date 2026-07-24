@@ -803,6 +803,38 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName, opt
     // ── search ──
     if (searchInput) wireSearch();
     function wireSearch() {
+        // Enter cycles through matches ONE at a time. A name like "Yuanwu"
+        // matches several masters (Keqin, Miyun); each Enter focuses the next
+        // one (wrapping), so the same working single-node path that "Nanquan"
+        // uses is reused for every match. cycleKey pins the query the cycle
+        // belongs to — a new/changed query restarts at index 0.
+        let cycleKey = null, cycleIdx = -1;
+
+        // Position/count indicator ("Yuanwu — 1 of 2"), shown only for
+        // multi-match queries. Created once, kept next to the input (survives
+        // the fullscreen input relocation via re-insert on each update). Inline
+        // theme tokens keep it one-file + dark/light aware; no display in the
+        // base style so the `hidden` attribute can hide it via the UA rule.
+        const indicator = document.createElement('div');
+        indicator.className = 'lin-search-count';
+        indicator.hidden = true;
+        indicator.style.cssText =
+            'font-size:0.72rem;color:var(--muted);margin-top:4px;padding:0 2px;white-space:nowrap;';
+        searchInput.insertAdjacentElement('afterend', indicator);
+
+        function showCount(name, idx, total) {
+            if (total > 1) {
+                indicator.textContent = `${name} — ${idx + 1} of ${total}`;
+                indicator.hidden = false;
+            } else {
+                indicator.hidden = true;
+                indicator.textContent = '';
+            }
+            // Keep the indicator adjacent to the input even after a fullscreen
+            // relocation (insertAdjacentElement moves it if already in the DOM).
+            searchInput.insertAdjacentElement('afterend', indicator);
+        }
+
         // Resolve the dropdown LIVE on each keystroke (not captured once): in
         // fullscreen the embed's input is relocated into a floating overlay
         // that carries its own .lin-search-drop, and the full page's drop lives
@@ -810,6 +842,9 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName, opt
         searchInput.addEventListener('input', () => {
             const drop = container.querySelector('.lin-search-drop');
             const q = searchInput.value.trim().toLowerCase();
+            // Typing edits the query: retire a stale cycle indicator until the
+            // next Enter recomputes it.
+            if (q !== cycleKey) { cycleKey = null; cycleIdx = -1; indicator.hidden = true; }
             if (!q) { state.searchHits = null; if (drop) { drop.hidden = true; drop.innerHTML = ''; } requestDraw(); return; }
             // books (source nodes) are searchable by English title and hanja
             const hits = nodes.filter(n => n.names.some(nm => nm.toLowerCase().includes(q))).slice(0, 8);
@@ -824,6 +859,8 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName, opt
                     </button>`).join('');
                 drop.hidden = hits.length === 0;
                 drop.querySelectorAll('.lin-drop-item').forEach(b => b.addEventListener('click', () => {
+                    // A mouse click picks THAT specific master (unchanged) — only
+                    // the Enter key cycles.
                     const id = b.getAttribute('data-id');
                     revealTo(id);
                     focusNode(id, { openPanel: !embed, pushState: !embed });
@@ -834,10 +871,27 @@ export function initGraph(canvas, legendEl, searchInput, masters, focusName, opt
             requestDraw();
         });
         searchInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                const first = container.querySelector('.lin-drop-item');
-                if (first) first.click();
-            }
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            const q = searchInput.value.trim().toLowerCase();
+            if (!q) { cycleKey = null; cycleIdx = -1; indicator.hidden = true; return; }
+            // EVERY matching node (not just the top hit).
+            const matches = nodes.filter(n => n.names.some(nm => nm.toLowerCase().includes(q)));
+            if (matches.length === 0) { indicator.hidden = true; return; }
+            // Same query as last Enter → advance (wrap); new query → start at 0.
+            if (q === cycleKey) cycleIdx = (cycleIdx + 1) % matches.length;
+            else { cycleKey = q; cycleIdx = 0; }
+            const node = matches[cycleIdx];
+            // Close the dropdown if one is open (full page / fullscreen).
+            const drop = container.querySelector('.lin-search-drop');
+            if (drop) drop.hidden = true;
+            // Reuse the working single-node path — focus + centre + zoom in.
+            revealTo(node.id);
+            focusNode(node.id, { openPanel: !embed, pushState: !embed });
+            // Highlight ONLY the current match so exactly one node lights up.
+            state.searchHits = new Set([node.id]);
+            requestDraw();
+            showCount(node.primary || (node.names && node.names[0]) || '', cycleIdx, matches.length);
         });
     }
 

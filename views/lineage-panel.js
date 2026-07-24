@@ -124,14 +124,14 @@ function renderPanel(n, ctx) {
     h.push('<footer class="lin-foot">');
     if (n.parentEdge && !n.parentEdge.from.isSource) {
         const t = n.parentEdge.from;
-        h.push(`<div class="lin-foot-row"><span class="lin-foot-k">Teacher</span> <a href="#" data-focus="${escapeHtml(t.id)}">${escapeHtml(t.cjk || t.primary)}</a></div>`);
+        h.push(`<div class="lin-foot-row"><span class="lin-foot-k">Teacher</span> <a href="#" data-focus="${escapeHtml(t.id)}">${escapeHtml(t.primary || t.cjk)}</a></div>`);
     } else if (n.stub) {
         h.push(`<div class="lin-foot-row"><span class="lin-foot-k">Teacher</span> <span class="lin-stub-name">${escapeHtml(n.stubLabel || '')}</span> <span class="lin-chip lin-chip--quiet">named, not in corpus</span></div>`);
     }
     if (n.childEdges && n.childEdges.length) {
         const heirs = n.childEdges.map(e => {
             const a = /^[ABCD]$/.test(e.to.attestation) ? e.to.attestation : 'D';
-            return `<a href="#" data-focus="${escapeHtml(e.to.id)}" class="lin-heir"><span class="lin-heir-dot lin-heir-dot--${a}"></span>${escapeHtml(e.to.cjk || e.to.primary)}</a>`;
+            return `<a href="#" data-focus="${escapeHtml(e.to.id)}" class="lin-heir"><span class="lin-heir-dot lin-heir-dot--${a}"></span>${escapeHtml(e.to.primary || e.to.cjk)}</a>`;
         }).join('');
         h.push(`<div class="lin-foot-row lin-foot-heirs"><span class="lin-foot-k">Heirs (${n.childEdges.length})</span> ${heirs}</div>`);
     }
@@ -167,7 +167,7 @@ function renderBookPanel(n) {
     h.push('<footer class="lin-foot">');
     if (n.childEdges && n.childEdges.length) {
         const heirs = n.childEdges.map(e =>
-            `<a href="#" data-focus="${escapeHtml(e.to.id)}" class="lin-heir">${escapeHtml(e.to.cjk || e.to.primary)}</a>`).join('');
+            `<a href="#" data-focus="${escapeHtml(e.to.id)}" class="lin-heir">${escapeHtml(e.to.primary || e.to.cjk)}</a>`).join('');
         h.push(`<div class="lin-foot-row lin-foot-heirs"><span class="lin-foot-k">Awakened</span> ${heirs}</div>`);
     }
     const link = bookLink(n);
@@ -221,7 +221,7 @@ function transmissionSentence(n) {
     if (n.stub) return `Dharma heir of <span class="lin-stub-name">${escapeHtml(n.stubLabel || '')}</span>, named in the record, not yet in this corpus.`;
     if (!n.parentEdge) return 'A root of the tradition: nothing stands above him on this chart.';
     const t = n.parentEdge.from;
-    const who = `<a href="#" data-focus="${escapeHtml(t.id)}">${escapeHtml(t.cjk || t.primary)}</a>`;
+    const who = `<a href="#" data-focus="${escapeHtml(t.id)}">${escapeHtml(t.primary || t.cjk)}</a>`;
     if (n.transmission === '遙嗣') return `Posthumous (遙嗣) heir of ${who}, a transmission acknowledged across a gap.`;
     if (n.transmission === '代囑') return `Heir of ${who} by proxy (代囑), an intermediary hand.`;
     if (n.transmission === 'disputed') return `Disputed heir of ${who}.`;
