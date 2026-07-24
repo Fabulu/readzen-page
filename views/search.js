@@ -410,29 +410,39 @@ export async function render(route, mount, shell) {
         var deadSet = _ftDeadDocs;
         var signal = _ftSignal;
         var groups = ftContainer.querySelectorAll('.search-group');
-        var top = Math.min(groups.length, 10);
-        for (var i = 0; i < top; i++) {
-            verifyOneGroup(groups[i], query, verifyMap, deadSet, signal);
+        // Verify EVERY rendered candidate, not just the top 10. An unverified
+        // tail keeps its bigram-estimate count and shows non-contiguous false
+        // positives (a phrase whose sub-bigrams co-occur apart, e.g. 無念…西堂).
+        // Text shards are LRU-cached and per-docId results memoized, so cost is
+        // bounded by the (already candidate-capped) result count.
+        var pending = [];
+        for (var i = 0; i < groups.length; i++) {
+            pending.push(verifyOneGroup(groups[i], query, verifyMap, deadSet, signal));
         }
+        // Once verification settles, refresh the count label so the header
+        // reflects the pruned (verified) matches, not the raw candidate count.
+        Promise.allSettled(pending).then(function () {
+            if (signal && signal.aborted) return;
+            refreshFtLabelCount(ftContainer);
+        });
     }
 
     function verifyOneGroup(details, query, verifyMap, deadSet, signal) {
         var docId = parseInt(details.getAttribute('data-doc-id') || '', 10);
-        if (isNaN(docId) || docId < 0) return;
+        if (isNaN(docId) || docId < 0) return Promise.resolve();
         var known = verifyMap.get(docId);
         if (typeof known === 'number') {
             applyVerifiedCount(details, docId, known, deadSet);
-            return;
+            return Promise.resolve();
         }
         if (known) {
             // Verification already in flight from an earlier render of this
             // query — re-apply to THIS render's element when it resolves.
-            known.then(function (count) {
+            return known.then(function (count) {
                 if (typeof count === 'number') {
                     applyVerifiedCount(details, docId, count, deadSet);
                 }
             }).catch(function () { /* abort/network: keep index estimate */ });
-            return;
         }
         var p = verifyDocPhrase(docId, query, { signal: signal }).then(function (count) {
             if (count == null) {
@@ -450,6 +460,17 @@ export async function render(route, mount, shell) {
         // trigger a second text-shard fetch for the same docId.
         verifyMap.set(docId, p);
         p.catch(function () { /* abort/network: swallow silently */ });
+        return p;
+    }
+
+    /** Recompute the Full-Text section count label from the live (non-pruned)
+     *  group rows — called after verification removes verified non-matches, so
+     *  the header count matches what's actually shown. */
+    function refreshFtLabelCount(ftContainer) {
+        var lbl = mount.querySelector('#ft-section-label');
+        if (!lbl) return;
+        var n = ftContainer.querySelectorAll('.search-group').length;
+        lbl.textContent = 'Full-Text Matches (' + n + ' text' + (n === 1 ? '' : 's') + ')';
     }
 
     /** Apply an exact verified count to a rendered group: 0 (a GENUINE
