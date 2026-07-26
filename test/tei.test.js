@@ -12,7 +12,7 @@ import { installDomShim } from './_dom-shim.js';
 installDomShim();
 
 // Import after the shim is installed.
-const { parseTei, extractHeadings } = await import('../lib/tei.js');
+const { parseTei, extractHeadings, dedupeAdjacentHeadings } = await import('../lib/tei.js');
 
 const TEI_NS = 'http://www.tei-c.org/ns/1.0';
 
@@ -83,6 +83,46 @@ test('extractHeadings: returns only headings array', () => {
     assert.equal(headings.length, 2);
     assert.equal(headings[0].text, 'H1');
     assert.equal(headings[1].text, 'H2');
+});
+
+// ---------- Adjacent-heading dedupe (T48n2005 duplicate preface heading) ----------
+
+test('parseTei: collapses two consecutive identical <head> divisions', () => {
+    // Mirrors T48n2005: two consecutive <cb:div type="xu"> prefaces, both headed 禪宗無門關.
+    const xml = wrapTei(`
+        <cb:div xmlns:cb="http://www.cbeta.org/ns/1.0" type="xu">
+            <lb n="0292a25"/><cb:mulu level="1" type="序">禪宗無門關</cb:mulu><head>禪宗無門關</head>
+            <lb n="0292a26"/>first preface
+        </cb:div>
+        <cb:div xmlns:cb="http://www.cbeta.org/ns/1.0" type="xu">
+            <lb n="0292b11"/><cb:mulu level="1" type="序">禪宗無門關</cb:mulu><head>禪宗無門關</head>
+            <lb n="0292b12"/>second preface
+        </cb:div>
+    `);
+    const parsed = parseTei(xml);
+    assert.equal(parsed.headings.length, 1, 'the redundant repeat is dropped');
+    assert.equal(parsed.headings[0].text, '禪宗無門關');
+    assert.equal(parsed.headings[0].lineId, '0292a25', 'the FIRST occurrence survives (its nav target)');
+});
+
+test('dedupeAdjacentHeadings: keeps first, drops adjacent identical, preserves distinct', () => {
+    const input = [
+        { lineId: 'a', text: '序', level: 1 },
+        { lineId: 'b', text: '序', level: 1 },   // adjacent identical -> dropped
+        { lineId: 'c', text: '正宗', level: 1 }, // distinct -> kept
+        { lineId: 'd', text: '序', level: 1 },   // same text as 'a' but NOT adjacent -> kept
+        { lineId: 'e', text: '序', level: 2 }    // same text, different level -> kept
+    ];
+    const out = dedupeAdjacentHeadings(input);
+    assert.deepEqual(out.map((h) => h.lineId), ['a', 'c', 'd', 'e']);
+});
+
+test('dedupeAdjacentHeadings: whitespace-insensitive equality', () => {
+    const out = dedupeAdjacentHeadings([
+        { lineId: 'a', text: '禪宗 無門關', level: 1 },
+        { lineId: 'b', text: '禪宗　無門關', level: 1 }
+    ]);
+    assert.equal(out.length, 1);
 });
 
 // ---------- Juan tracking ----------
