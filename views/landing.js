@@ -208,7 +208,7 @@ export function render(_route, mount, shell) {
 
             <div class="community-research" id="community-research">
                 <h3 class="community-research-heading">Community Research</h3>
-                <p class="community-research-desc">Browse knowledge graphs and passage collections shared by scholars. Sync your own collections, translations, termbases, and translation memory with the community. All your local data is preserved during sync.</p>
+                <p class="community-research-desc">Browse knowledge graphs and passage collections shared by scholars. Sync your own collections, translations, and translation memory with the community. All your local data is preserved during sync.</p>
                 <div class="community-research-scroll" id="community-research-scroll">
                     <div class="community-card community-card--skeleton"></div>
                     <div class="community-card community-card--skeleton"></div>

@@ -1,212 +1,35 @@
 // views/termbase.js
-// Renders a termbase entry from the CbetaZenTranslations repo.
+// Legacy #/term/{entry} route — now a thin alias for the canonical Zen entry.
 //
-// Storage shapes (mirrored from the desktop app):
-//   community/termbases/{user}.json    — per-user pretty JSON array (array of TermbaseEntry)
-//   termbase.json                      — project-wide shared termbase (array of TermbaseEntry)
-//
-// TermbaseEntry shape (see Models/TermbaseEntry.cs):
-//   { SourceTerm, PreferredTarget, AlternateTargets[], Status, Note,
-//     CreatedBy, WrittenUtc }
-//
-// Falls back to the dictionary view when the entry isn't found in the
-// requested user's termbase (or the shared one).
+// Personal termbases are local-only and are NEVER surfaced on the web. This
+// view no longer fetches or renders any per-user or shared termbase card (and
+// never exposes the internal CreatedBy line). A #/term/{entry} link resolves to
+// exactly what #/dict/{entry} does — the rich Zen dictionary entry, falling back
+// to CC-CEDICT when the term has no Zen entry. Any trailing per-user segment in
+// the old #/term/{entry}/{user} form is ignored.
 
-import { fetchJson, DATA_REPO_BASE } from '../lib/github.js';
-import * as cache from '../lib/cache.js';
-import { renderLookupCard, renderLookupEmpty } from '../lib/lookup-card.js';
-import { renderDictionaryInto } from './dictionary.js';
+import * as dictionary from './dictionary.js';
 
-const TERMBASE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-
-/** Route-kind matcher. */
+/** Route-kind matcher used by `app.js`. */
 export function match(route) {
     return route && route.kind === 'termbase';
 }
 
-/** Termbase lookups are instant — no app-first race. */
+/** Lookups are instant — no app-first race. */
 export function preferAppFirst(_route) {
     return false;
 }
 
 /**
- * Render the termbase card for `route.entry`. If no entry is found, fall
- * back to a dictionary lookup for the same term (with a banner explaining
- * the fallback).
+ * Render the canonical dictionary entry for `route.entry`, identical to the
+ * `#/dict/` route (rich Zen entry, else CC-CEDICT). The legacy `termbase` route
+ * kind is kept only so old `#/term/` links keep resolving.
  */
 export async function render(route, mount, shell) {
     const term = (route && route.entry) || '';
-    const user = (route && route.user) || '';
-
-    if (!term) {
-        applyChrome(shell, term, user);
-        renderLookupEmpty({
-            title: 'No term supplied',
-            detail: 'The termbase link is missing its term.',
-            hint: 'Expected shape: #/term/菩提/Fabulu'
-        }, mount);
-        return;
-    }
-
-    // Prefer the canonical rich Zen entry: a #/term/ link to a term we have
-    // defined in the Zen dictionary shows the full entry (evidence, masters,
-    // related), exactly like #/dict/. The sparse per-user/shared termbase card
-    // is only a fallback for terms the Zen dictionary has not defined — so a
-    // shared termbase's internal CreatedBy line can never mask a real entry.
-    try {
-        const { loadZenEntry, renderZenCard } = await import('../lib/zen-dict.js');
-        const zenEntry = await loadZenEntry(term);
-        if (zenEntry) {
-            if (shell) {
-                shell.setTitle('Zen Dictionary · ' + term);
-                shell.setContext(`Zen dictionary · ${term}`, 'Zen-to-Zen dictionary entry');
-                shell.hideStatus();
-            }
-            mount.replaceChildren();
-            renderZenCard(zenEntry, mount, { showOpenLink: false });
-            return;
-        }
-    } catch { /* Zen dictionary unavailable — fall through to termbase/CC-CEDICT */ }
-
-    applyChrome(shell, term, user);
-
-    // Any failure loading or searching the termbase — 404 or otherwise —
-    // falls through to the dictionary view. The banner explains why.
-    let match = null;
-    try {
-        const entries = await loadTermbase(user);
-        match = entries ? findEntry(entries, term) : null;
-    } catch {
-        match = null;
-    }
-
-    if (match) {
-        renderLookupCard(buildTermbaseCard(match, user), mount);
-        return;
-    }
-
-    // Fallback: dictionary lookup for the same term.
-    await renderDictionaryInto(term, mount);
-
-    // Inject a banner at the top of whatever the dictionary rendered.
-    injectFallbackBanner(mount, user, term);
-}
-
-/** Updates title, context strip, and open-in-app link. */
-function applyChrome(shell, term, user) {
-    if (!shell) return;
-    shell.setTitle(term ? 'Termbase · ' + term : 'Termbase');
-    shell.setContext(
-        term ? `Termbase · ${term}` : 'Termbase',
-        user ? `Curated by ${user}` : 'Shared project termbase'
+    await dictionary.render(
+        { kind: 'dictionary', term, rawRoute: route && route.rawRoute },
+        mount,
+        shell
     );
-    shell.setUpsell(
-        'This preview shows one termbase entry. The desktop app lets you ' +
-        '<strong>build and manage your own termbase</strong>, see it ' +
-        'highlighted live while you read or translate, sync it with the ' +
-        'community, and share entry links like this one.'
-    );
-    shell.hideStatus();
-}
-
-/**
- * Load the termbase for a given user. Per-user lookups fall back to the
- * shared project-wide termbase on 404. A missing `user` argument loads the
- * shared termbase directly.
- */
-async function loadTermbase(user) {
-    if (user) {
-        const userUrl = DATA_REPO_BASE
-            + 'community/termbases/'
-            + encodeURIComponent(user)
-            + '.json';
-        try {
-            return await fetchTermbaseJson(userUrl);
-        } catch (error) {
-            const msg = String(error && error.message || '');
-            if (!msg.includes('404')) throw error;
-            // Fall through to shared termbase.
-        }
-    }
-
-    const sharedUrl = DATA_REPO_BASE + 'termbase.json';
-    return fetchTermbaseJson(sharedUrl);
-}
-
-/** Fetch + cache a termbase JSON file. */
-async function fetchTermbaseJson(url) {
-    const cacheKey = 'termbase:' + url;
-    const cached = cache.get(cacheKey);
-    if (cached) return cached;
-
-    const data = await fetchJson(url);
-    cache.set(cacheKey, data, TERMBASE_CACHE_TTL_MS);
-    return data;
-}
-
-/**
- * Find an entry matching `term`. Termbase entries use PascalCase keys
- * (mirroring the C# model), but we accept the camelCase form too for
- * forward compatibility.
- */
-function findEntry(entries, term) {
-    if (!Array.isArray(entries)) return null;
-    for (const raw of entries) {
-        if (!raw) continue;
-        const source = raw.SourceTerm || raw.sourceTerm || '';
-        if (source === term) return raw;
-    }
-    return null;
-}
-
-/** Build the card payload for a termbase entry. */
-function buildTermbaseCard(entry, user) {
-    const source = entry.SourceTerm || entry.sourceTerm || '';
-    const preferred = entry.PreferredTarget || entry.preferredTarget || '';
-    const alternates = entry.AlternateTargets || entry.alternateTargets || [];
-    const status = entry.Status || entry.status || '';
-    const note = entry.Note || entry.note || '';
-    const createdBy = entry.CreatedBy || entry.createdBy || user || '';
-
-    const sections = [];
-    if (preferred) {
-        sections.push({ heading: 'Preferred translation', content: preferred });
-    }
-    if (Array.isArray(alternates) && alternates.length > 0) {
-        sections.push({ heading: 'Alternates', content: alternates });
-    }
-    if (note) {
-        sections.push({ heading: 'Notes', content: note });
-    }
-    if (status) {
-        sections.push({ heading: 'Status', content: status });
-    }
-
-    return {
-        title: source,
-        subtitle: preferred,
-        sections,
-        footer: createdBy ? `by ${createdBy}` : ''
-    };
-}
-
-/**
- * Prepend a banner to whatever the dictionary view rendered, explaining
- * that we're showing the dictionary card because the term isn't in the
- * requested termbase.
- */
-function injectFallbackBanner(mount, user, term) {
-    const banner = document.createElement('div');
-    banner.className = 'lookup-banner lookup-banner--fallback';
-    banner.textContent = user
-        ? `Not in ${user}'s termbase. Showing dictionary entry instead.`
-        : `Not in the shared termbase. Showing dictionary entry for "${term}" instead.`;
-
-    // Attach inside the card so it visually belongs to the result.
-    const card = mount.querySelector('.lookup-card');
-    if (card) {
-        card.insertBefore(banner, card.firstChild);
-    } else {
-        mount.insertBefore(banner, mount.firstChild);
-    }
 }

@@ -129,18 +129,17 @@ test('dictionary: URL-encoded term is decoded', () => {
 
 // ---------- Termbase routes ----------
 
-test('termbase: entry only', () => {
+test('termbase: entry only (legacy alias for the Zen entry)', () => {
     const r = parseRoute('term/菩提');
     assert.equal(r.kind, 'termbase');
     assert.equal(r.entry, '菩提');
-    assert.equal(r.user, '');
 });
 
-test('termbase: entry with user', () => {
+test('termbase: legacy per-user segment is ignored (personal termbases are local-only)', () => {
     const r = parseRoute('term/菩提/Fabulu');
     assert.equal(r.kind, 'termbase');
     assert.equal(r.entry, '菩提');
-    assert.equal(r.user, 'Fabulu');
+    assert.equal(r.user, undefined);
 });
 
 // ---------- Master routes ----------
