@@ -54,6 +54,28 @@ test('Zen card renders visible KWIC, linked speaker, attribution, and exact pass
     assert.equal(route.endLine, '0660b13');
 });
 
+test('related-term links target the rich Zen-entry route (#/dict), not the sparse termbase route (#/term)', () => {
+    const entry = {
+        id: 't_related', sourceTerm: '天上天下、唯我獨尊', senses: [{
+            preferredTarget: 'throughout heaven and earth, I alone am honored',
+            explanation: '', alternateTargets: [], validation: 'multi-source',
+            status: 'preferred', note: '', relatedMasters: [],
+            relatedTerms: ['天上天下', '指天指地獨稱尊'],
+            occurrences: [{ RelPath: 'T/T47/T47n1996.xml', FromLb: '0673c29', Kwic: '天上天下唯我獨尊', MasterName: 'Xuedou Chongxian' }],
+        }],
+    };
+    const html = buildZenCard(entry).sections[0].content.html;
+    // Each related term routes to the Zen-entry permalink...
+    assert.match(html, /href="#\/dict\/%E5%A4%A9%E4%B8%8A%E5%A4%A9%E4%B8%8B"/);
+    // ...and NONE route to the termbase view (which renders the sparse card + leaks CreatedBy).
+    assert.doesNotMatch(html, /href="#\/term\//);
+    // The lookup key stays the Chinese head term for the English-gloss rewrite.
+    assert.match(html, /data-zen-related-term="天上天下"/);
+    const route = parseRoute('dict/' + encodeURIComponent('天上天下'));
+    assert.equal(route.kind, 'dictionary');
+    assert.equal(route.term, '天上天下');
+});
+
 test('Zen card distinguishes reviewed unnamed actors from linked named context', () => {
     const entry = {
         id: 't_anon', sourceTerm: '僧問', senses: [{

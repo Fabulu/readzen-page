@@ -37,9 +37,9 @@ export function preferAppFirst(_route) {
 export async function render(route, mount, shell) {
     const term = (route && route.entry) || '';
     const user = (route && route.user) || '';
-    applyChrome(shell, term, user);
 
     if (!term) {
+        applyChrome(shell, term, user);
         renderLookupEmpty({
             title: 'No term supplied',
             detail: 'The termbase link is missing its term.',
@@ -47,6 +47,28 @@ export async function render(route, mount, shell) {
         }, mount);
         return;
     }
+
+    // Prefer the canonical rich Zen entry: a #/term/ link to a term we have
+    // defined in the Zen dictionary shows the full entry (evidence, masters,
+    // related), exactly like #/dict/. The sparse per-user/shared termbase card
+    // is only a fallback for terms the Zen dictionary has not defined — so a
+    // shared termbase's internal CreatedBy line can never mask a real entry.
+    try {
+        const { loadZenEntry, renderZenCard } = await import('../lib/zen-dict.js');
+        const zenEntry = await loadZenEntry(term);
+        if (zenEntry) {
+            if (shell) {
+                shell.setTitle('Zen Dictionary · ' + term);
+                shell.setContext(`Zen dictionary · ${term}`, 'Zen-to-Zen dictionary entry');
+                shell.hideStatus();
+            }
+            mount.replaceChildren();
+            renderZenCard(zenEntry, mount, { showOpenLink: false });
+            return;
+        }
+    } catch { /* Zen dictionary unavailable — fall through to termbase/CC-CEDICT */ }
+
+    applyChrome(shell, term, user);
 
     // Any failure loading or searching the termbase — 404 or otherwise —
     // falls through to the dictionary view. The banner explains why.
