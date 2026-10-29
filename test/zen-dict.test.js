@@ -95,6 +95,23 @@ test('Zen card distinguishes reviewed unnamed actors from linked named context',
     assert.doesNotMatch(html, /Attribution incomplete/);
 });
 
+test('Zen card names an identified master missing from the roster', () => {
+    const entry = {
+        id: 't_51b4bce57d7a', sourceTerm: '\u963f\u524c\u524c', senses: [{
+            preferredTarget: 'a-la-la!', explanation: '', alternateTargets: [],
+            validation: 'multi-source', status: 'preferred', note: '', relatedMasters: [], relatedTerms: [],
+            occurrences: [{
+                RelPath: 'D/D48/D48n8939.xml', FromLb: '0231b03', Kwic: '\u7b54\u4ed6\u9053\u963f\u524c\u524c',
+                MasterName: null,
+                ActorAttribution: { Status: 'identified-unlinked-master', ActorLabel: 'Shending Hongyin' },
+            }],
+        }],
+    };
+    const html = buildZenCard(entry).sections[0].content.html;
+    assert.match(html, />Exact actor:<\/span> <span[^>]*>Shending Hongyin<\/span> <span[^>]*>named · roster link unavailable<\/span>/);
+    assert.doesNotMatch(html, /Attribution incomplete|master\/Shending_Hongyin/);
+});
+
 test('Zen card names unlinked context actors without creating broken master links', () => {
     const entry = {
         id: 't_context_actor', sourceTerm: '舊案', senses: [{
