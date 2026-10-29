@@ -112,6 +112,23 @@ test('Zen card names an identified master missing from the roster', () => {
     assert.doesNotMatch(html, /Attribution incomplete|master\/Shending_Hongyin/);
 });
 
+test('Zen card preserves explicit actor labels from older status names', () => {
+    const entry = {
+        id: 't_legacy_actor', sourceTerm: '\u660e\u5fc3', senses: [{
+            preferredTarget: 'clarify mind', explanation: '', alternateTargets: [],
+            validation: 'multi-source', status: 'preferred', note: '', relatedMasters: [], relatedTerms: [],
+            occurrences: [{
+                RelPath: 'J/J39/J39nB447.xml', FromLb: '0001a01', Kwic: '\u660e\u5fc3',
+                MasterName: null,
+                ActorAttribution: { Status: 'linked-master', ActorLabel: 'Meixi Fudu' },
+            }],
+        }],
+    };
+    const html = buildZenCard(entry).sections[0].content.html;
+    assert.match(html, />Exact actor:<\/span> <span[^>]*>Meixi Fudu<\/span>/);
+    assert.doesNotMatch(html, /Attribution incomplete|master\/Meixi_Fudu/);
+});
+
 test('Zen card names unlinked context actors without creating broken master links', () => {
     const entry = {
         id: 't_context_actor', sourceTerm: '舊案', senses: [{
