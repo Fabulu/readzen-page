@@ -4,6 +4,33 @@ import assert from 'node:assert/strict';
 import { buildZenCard } from '../lib/zen-dict.js';
 import { parseRoute } from '../lib/route.js';
 
+test('retired dictionary spelling resolves through the published alias index', async () => {
+    const retired = '\u4ec1\u8005\u898b\u4e4b\u8b02\u4e4b\u4ec1\u3001\u667a\u8005\u898b\u4e4b\u8b02\u4e4b\u667a';
+    const canonical = '\u4ec1\u8005\u898b\u4e4b\u8b02\u4e4b\u4ec1\uff0c\u667a\u8005\u898b\u4e4b\u8b02\u4e4b\u667a';
+    const previousFetch = globalThis.fetch;
+    const requested = [];
+    globalThis.fetch = async url => {
+        requested.push(String(url));
+        let body;
+        if (String(url).endsWith('termbase.index.json')) {
+            body = { Terms: [[canonical, 'the humane and the wise']], Aliases: { [retired]: canonical } };
+        } else if (/termbase\/\d{3}\.json$/.test(String(url))) {
+            body = { Entries: [{ Id: 't_canonical', SourceTerm: canonical, Senses: [{ PreferredTarget: 'the humane and the wise', Occurrences: [] }] }] };
+        } else {
+            throw new Error('Unexpected dictionary fetch: ' + url);
+        }
+        return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+    };
+    try {
+        const { loadZenEntry } = await import('../lib/zen-dict.js?alias-resolution-test');
+        const entry = await loadZenEntry(retired);
+        assert.equal(entry?.sourceTerm, canonical);
+        assert.equal(requested.some(url => url.endsWith('termbase.v2.json')), false);
+    } finally {
+        globalThis.fetch = previousFetch;
+    }
+});
+
 function cardHtml() {
     const entry = {
         id: 't_demo',
