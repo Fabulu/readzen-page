@@ -1,11 +1,10 @@
 // views/dict-browse.js
 // Browse the whole Zen dictionary (the curated termbase) with a combined
-// EN + ZH search bar. Client-side: the termbase is small, so we load it
-// wholesale via loadZenDict() and filter in memory. Modeled on
-// views/masters-browse.js.
+// EN + ZH search bar. Headwords load first; full-text search uses a compact
+// sidecar and visible rich cards load their existing entry shards on demand.
 // Route: #/dict  (with no term; #/dict/{term} stays a CC-CEDICT lookup)
 
-import { loadZenDict, buildZenCard, bindZenEvidenceLinks } from '../lib/zen-dict.js';
+import { loadZenBrowseIndex, loadZenBrowseSearch, loadZenEntry, buildZenCard, bindZenEvidenceLinks } from '../lib/zen-dict.js';
 import { renderLookupCard } from '../lib/lookup-card.js';
 import { escapeHtml } from '../lib/format.js';
 
@@ -36,13 +35,13 @@ export async function render(route, mount, shell) {
 
     let index;
     try {
-        index = await loadZenDict();
+        index = await loadZenBrowseIndex();
     } catch (error) {
         mount.innerHTML = `<article class="panel lookup-card"><p>Failed to load dictionary: ${escapeHtml(String(error.message || error))}</p></article>`;
         return;
     }
 
-    const entries = (index && index.entries) || [];
+    const entries = index || [];
     if (entries.length === 0) {
         mount.innerHTML = `
             <article class="panel lookup-card">
@@ -216,9 +215,33 @@ function renderBrowse(mount, entries, activeQ) {
     let page = 0;
     let pageCount = 1;
 
-    function update() {
+    let updateVersion = 0;
+    const observer = typeof IntersectionObserver === 'function'
+        ? new IntersectionObserver(records => {
+            for (const record of records) {
+                if (!record.isIntersecting) continue;
+                observer.unobserve(record.target);
+                hydrateFullCell(record.target, record.target._dictionaryTerm);
+            }
+        }, { rootMargin: '200px' }) : null;
+
+    async function update() {
+        const version = ++updateVersion;
         const q = input.value.trim();
-        const filtered = q ? searchDictionaryEntries(entries, q)
+        let searchEntries = entries;
+        if (q) {
+            countEl.textContent = 'Searching?';
+            try { searchEntries = await loadZenBrowseSearch(); }
+            catch {
+                if (version !== updateVersion) return;
+                countEl.textContent = 'Search unavailable. Edit the query to retry.';
+                observer?.disconnect();
+                grid.replaceChildren();
+                return;
+            }
+            if (version !== updateVersion || !root.isConnected) return;
+        }
+        const filtered = q ? searchDictionaryEntries(searchEntries, q)
             : (order === 'zh' ? byHeadword : byGloss);
 
         // This is a browser, not a search box: every term is reachable by paging.
@@ -236,9 +259,10 @@ function renderBrowse(mount, entries, activeQ) {
             : 'no terms';
 
         grid.className = 'dict-grid dict-grid--' + layout;
+        observer?.disconnect();
         grid.innerHTML = '';
         for (const entry of shown) {
-            grid.appendChild(layout === 'compact' ? compactRow(entry) : fullCell(entry));
+            grid.appendChild(layout === 'compact' ? compactRow(entry) : fullCell(entry, observer));
         }
 
         // Thumb index only for the unfiltered browse: search results are
@@ -487,13 +511,33 @@ function renderPager(mount, page, pages, go) {
 }
 
 /** A full entry card, with a permalink to #/dict/{term}. */
-function fullCell(entry) {
+function fullCell(entry, observer) {
     const cell = document.createElement('div');
     cell.className = 'dict-cell';
-    renderLookupCard(buildZenCard(entry), cell);
-    bindZenEvidenceLinks(cell);
-    cell.appendChild(permalink(entry.sourceTerm));
+    cell._dictionaryTerm = entry.sourceTerm;
+    cell.appendChild(compactRow(entry));
+    cell.setAttribute('aria-busy', 'true');
+    if (observer) observer.observe(cell);
+    else queueMicrotask(() => hydrateFullCell(cell, entry.sourceTerm));
     return cell;
+}
+
+async function hydrateFullCell(cell, term) {
+    try {
+        const entry = await loadZenEntry(term, { allowFullFallback: false });
+        if (!entry) throw new Error('Entry unavailable');
+        if (!cell.isConnected) return;
+        renderLookupCard(buildZenCard(entry), cell);
+        bindZenEvidenceLinks(cell);
+        cell.appendChild(permalink(term));
+    } catch {
+        // Keep the headword permalink usable when a shard request fails.
+        if (cell.isConnected) {
+            const message = document.createElement('p');
+            message.textContent = 'Could not load this card. Open the entry to retry.';
+            cell.appendChild(message);
+        }
+    } finally { cell.removeAttribute('aria-busy'); }
 }
 
 /** Headword + first gloss, one dense row, the whole row linking to the entry. */
